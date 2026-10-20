@@ -5,7 +5,8 @@
   "scripts": {
     "build": "forge build",
     "test": "forge test -vv",
-    "fmt:check": "forge fmt --check"
+    "fmt:check": "forge fmt --check",
+    "slither": "slither ."
   },
   "dependencies": {
     "@openzeppelin/contracts": "5.6.1"

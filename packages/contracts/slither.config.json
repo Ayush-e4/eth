@@ -1,0 +1,7 @@
+{
+  "filter_paths": "node_modules|test|HederaProbe",
+  "exclude_dependencies": true,
+  "exclude_informational": true,
+  "exclude_optimization": true,
+  "detectors_to_exclude": "timestamp,uninitialized-local"
+}
