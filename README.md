@@ -13,9 +13,11 @@ apps/
 packages/
   shared/     Types and zod schemas shared by every app
   hedera/     Hedera SDK helpers: accounts, USDC payments, HCS logs, mirror reads
-  contracts/  Solidity (Foundry) — currently the Hedera feasibility probe
+  contracts/  Solidity (Foundry): MandateRegistry + Hedera feasibility probe
+  mandates/   TypeScript client for MandateRegistry (ABI, EIP-712 signing, MandateClient)
 docs/
   hedera.md   How we use Hedera + testnet feasibility results
+  mandates.md MandateRegistry design, rules, deployment, live demo results
 ```
 
 ## Getting started

@@ -18,9 +18,8 @@ contract HederaProbe is EIP712 {
         uint256 validBefore;
     }
 
-    bytes32 public constant PAYMENT_AUTH_TYPEHASH = keccak256(
-        "PaymentAuth(address payTo,uint256 amount,uint256 nonce,uint256 validBefore)"
-    );
+    bytes32 public constant PAYMENT_AUTH_TYPEHASH =
+        keccak256("PaymentAuth(address payTo,uint256 amount,uint256 nonce,uint256 validBefore)");
 
     address public immutable owner;
 

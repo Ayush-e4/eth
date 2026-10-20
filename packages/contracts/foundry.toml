@@ -18,3 +18,9 @@ hedera_testnet = "https://testnet.hashio.io/api"
 
 [fmt]
 line_length = 100
+
+[lint]
+# block-timestamp: Hedera timestamps come from network consensus, and expiries are minutes long.
+# require-revert-in-loop: intended — one bad entry rejects the whole call.
+# reentrancy-events: the only calls before our events are ERC-1271 signature checks (staticcall).
+exclude_lints = ["block-timestamp", "require-revert-in-loop", "reentrancy-events"]
