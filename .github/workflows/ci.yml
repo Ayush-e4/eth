@@ -46,6 +46,9 @@ jobs:
       - name: Lint & format
         run: pnpm lint
 
+      - name: Solidity format
+        run: pnpm --filter @eth/contracts fmt:check
+
       - name: Typecheck
         run: pnpm typecheck
 
