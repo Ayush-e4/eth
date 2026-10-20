@@ -26,5 +26,29 @@ jobs:
             echo "::error::.env file committed"; exit 1
           fi
 
+      - name: Files stay under 300 lines
+        run: ./scripts/check-file-length.sh
+
       - name: Lint workflows
         uses: raven-actions/actionlint@v2
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Lint & format
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
