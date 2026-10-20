@@ -11,12 +11,17 @@ apps/
   web/      Next.js — mobile-first app + dashboard
   api/      Hono — API (auth, tasks, mandates, wallets)
 packages/
-  shared/   Types and zod schemas shared by every app
+  shared/     Types and zod schemas shared by every app
+  hedera/     Hedera SDK helpers: accounts, USDC payments, HCS logs, mirror reads
+  contracts/  Solidity (Foundry) — currently the Hedera feasibility probe
+docs/
+  hedera.md   How we use Hedera + testnet feasibility results
 ```
 
 ## Getting started
 
-Requires Node 22+ and pnpm.
+Requires Node 22+, pnpm and [Foundry](https://getfoundry.sh) (`brew install foundry`).
+Copy `.env.example` to `.env` for scripts that talk to Hedera testnet.
 
 ```bash
 pnpm install
