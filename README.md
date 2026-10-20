@@ -29,9 +29,11 @@ pnpm build
 
 ## Development workflow
 
+- One pull request per complete feature; it is merged once the whole feature works.
 - `main` is protected: every change lands through a pull request.
 - CI must pass before a PR can be merged. PRs are squash-merged.
 - Branch names: `feat/…`, `fix/…`, `chore/…`, `docs/…`.
+- Every file stays at or under **300 lines** (CI enforces it via `scripts/check-file-length.sh`).
 - Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/).
 
 ## AI usage

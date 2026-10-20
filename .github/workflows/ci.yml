@@ -26,6 +26,9 @@ jobs:
             echo "::error::.env file committed"; exit 1
           fi
 
+      - name: Files stay under 300 lines
+        run: ./scripts/check-file-length.sh
+
       - name: Lint workflows
         uses: raven-actions/actionlint@v2
 
