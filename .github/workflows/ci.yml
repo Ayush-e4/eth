@@ -39,6 +39,8 @@ jobs:
           node-version: 24
           cache: pnpm
 
+      - uses: foundry-rs/foundry-toolchain@v1
+
       - run: pnpm install --frozen-lockfile
 
       - name: Lint & format

@@ -11,9 +11,9 @@ build/
 coverage/
 
 # foundry
-contracts/out/
-contracts/cache/
-broadcast/
+packages/contracts/out/
+packages/contracts/cache/
+packages/contracts/broadcast/
 
 # env & secrets
 .env
