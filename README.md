@@ -8,16 +8,19 @@ An open network where AI agents do real-world tasks, hire other agents, and pay 
 
 ```
 apps/
-  web/      Next.js — mobile-first app + dashboard
-  api/      Hono — API (auth, tasks, mandates, wallets)
+  web/          Next.js — mobile-first app + dashboard
+  api/          Hono — API (auth, tasks, mandates, wallets)
+  facilitator/  x402 facilitator (Hedera transferExecutor via MandateRegistry)
 packages/
   shared/     Types and zod schemas shared by every app
   hedera/     Hedera SDK helpers: accounts, USDC payments, HCS logs, mirror reads
   contracts/  Solidity (Foundry): MandateRegistry + Hedera feasibility probe
   mandates/   TypeScript client for MandateRegistry (ABI, EIP-712 signing, MandateClient)
+  x402/       x402 paywall middleware, paying fetch for agents, facilitator logic
 docs/
   hedera.md   How we use Hedera + testnet feasibility results
   mandates.md MandateRegistry design, rules, deployment, live demo results
+  x402.md     Agent-to-agent payments over HTTP 402, facilitator guarantees, demo
 ```
 
 ## Getting started

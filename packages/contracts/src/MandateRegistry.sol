@@ -131,6 +131,7 @@ contract MandateRegistry is MandateSignatures {
 
         // `from` is the mandate owner, who approved this contract; every rule above bounds it.
         // forge-lint: disable-next-line(arbitrary-send-erc20)
+        // slither-disable-next-line arbitrary-send-erc20
         IERC20(m.token).safeTransferFrom(m.owner, a.payTo, a.amount);
     }
 

@@ -13,7 +13,8 @@
     "associate-usdc": "tsx --env-file=../../.env scripts/associate-usdc.ts",
     "hcs-demo": "tsx --env-file=../../.env scripts/hcs-demo.ts",
     "pay-demo": "tsx --env-file=../../.env scripts/pay-demo.ts",
-    "probe-check": "tsx --env-file=../../.env scripts/probe-check.ts"
+    "probe-check": "tsx --env-file=../../.env scripts/probe-check.ts",
+    "create-topic": "tsx --env-file=../../.env scripts/create-topic.ts"
   },
   "dependencies": {
     "@hiero-ledger/sdk": "^2.90.1",
