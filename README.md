@@ -11,7 +11,7 @@ apps/
   web/          Next.js — mobile-first app + dashboard
   api/          Hono — API (auth, tasks, mandates, wallets)
   facilitator/  x402 facilitator (Hedera transferExecutor via MandateRegistry)
-  agents/       Orchestrator (Claude) + SkyHop/AirNest (competing flights) and StayWise (hotels)
+  agents/       Orchestrator agent (Claude Tool Runner) + SkyHop/AirNest (competing flights) and StayWise (hotels)
 packages/
   shared/     Types and zod schemas shared by every app
   hedera/     Hedera SDK helpers: accounts, USDC payments, HCS logs, mirror reads

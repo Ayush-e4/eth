@@ -2,7 +2,7 @@
 // agents compete on total cost, hires the winner and a hotels agent, pays each through
 // MandateRegistry over x402, they book in sandbox, and Claude explains every spend.
 // Needs ANTHROPIC_API_KEY, DUFFEL_ACCESS_TOKEN (duffel_test_…) and LITEAPI_KEY (sand_…) in .env.
-// Run: pnpm --filter @eth/agents demo ["your request"]
+// Run: pnpm --filter @eth/agents demo ["your request"] [--autopilot]
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { ARKIV_EXPLORER, arkivReader, arkivWriter } from "@eth/arkiv";
@@ -14,6 +14,8 @@ import { serve } from "@hono/node-server";
 import type { Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { loadIdentities, type SpecialistIdentity } from "../src/identities";
+import { runTripAgent } from "../src/orchestrator/agent";
+import type { HireDeps } from "../src/orchestrator/hire";
 import { fetchInrRates } from "../src/orchestrator/procure";
 import { runTrip } from "../src/orchestrator/run";
 import { airnest } from "../src/specialists/airnest";
@@ -24,8 +26,11 @@ import { staywise } from "../src/specialists/staywise";
 for (const k of ["ANTHROPIC_API_KEY", "DUFFEL_ACCESS_TOKEN", "LITEAPI_KEY"]) {
   if (!process.env[k]) throw new Error(`${k} is empty in .env`);
 }
+// demo ["request"] [--autopilot]   (autopilot = fixed flow, no agent loop)
+const args = process.argv.slice(2);
+const autopilot = args.includes("--autopilot");
 const request =
-  process.argv[2] ??
+  args.find((a) => !a.startsWith("--")) ??
   "Plan a weekend in Goa for 2 of us, flying from Mumbai next Friday and back on Sunday. Budget ₹40,000.";
 const liteKey = process.env.LITEAPI_KEY as string;
 const duffelToken = process.env.DUFFEL_ACCESS_TOKEN as string;
@@ -120,9 +125,9 @@ console.log(
 );
 
 // ── The orchestrator runs the trip ───────────────────────────────────
-console.log(`3. request: "${request}"`);
+console.log(`3. request: "${request}" (${autopilot ? "autopilot" : "Claude agent"})`);
 const orchestrator = privateKeyToAccount(ids.orchestrator.key);
-const run = await runTrip(request, {
+const deps: HireDeps = {
   arkiv: arkivReader(),
   buyerWriter: arkivWriter(ids.orchestrator.key),
   platformWriter: arkivWriter(operatorKey),
@@ -142,7 +147,10 @@ const run = await runTrip(request, {
   payer: config.operatorId,
   inrRates: await fetchInrRates(),
   log,
-});
+};
+const run = autopilot
+  ? await runTrip(request, deps)
+  : await runTripAgent(request, deps, { liteApiKey: liteKey });
 
 // ── Result ───────────────────────────────────────────────────────────
 const e = run.explanation;

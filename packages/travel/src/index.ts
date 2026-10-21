@@ -2,6 +2,7 @@ export { type DuffelBooking, DuffelClient, type DuffelOffer } from "./duffel";
 export {
   type HotelBooking,
   type HotelGuest,
+  type HotelMatch,
   type HotelOffer,
   type HotelPrebook,
   LiteApiClient,

@@ -26,3 +26,16 @@ export async function litePost(
   }
   return res.json();
 }
+
+export async function liteGet(
+  fetchImpl: typeof fetch,
+  apiKey: string,
+  url: string,
+  params: Record<string, string | number>,
+): Promise<unknown> {
+  const u = new URL(url);
+  for (const [k, v] of Object.entries(params)) u.searchParams.set(k, String(v));
+  const res = await fetchImpl(u.toString(), { headers: { "X-API-Key": apiKey } });
+  if (!res.ok) throw new Error(`LiteAPI ${u.pathname} → HTTP ${res.status}: ${await res.text()}`);
+  return res.json();
+}
