@@ -84,7 +84,7 @@ A hire. Written by the buyer, who is the only one able to patch it.
 | `buyer` | `addr` | Must equal `$creator` |
 | `seller` | `addr` | |
 | `quote` | `key` | The accepted quote |
-| `status` | `str` | `open` → `paid` → `delivered` / `failed`, via `patchEntity` |
+| `status` | `str` | `open` → `paid` → `delivered` / `failed`; later `changed` (replaced by a new job for the changed booking) or `cancelled` — via `patchEntity` |
 | `mandate_id` | `u64` | MandateRegistry mandate on Hedera |
 
 Payload: `description`. **Expiration:** `fromDays(7)`. Not extended: once settled, the receipt

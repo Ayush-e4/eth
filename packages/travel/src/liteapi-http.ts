@@ -9,21 +9,34 @@ export function assertSandboxKey(apiKey: string): void {
   }
 }
 
-export async function litePost(
+export function litePost(
   fetchImpl: typeof fetch,
   apiKey: string,
   url: string,
   body: unknown,
 ): Promise<unknown> {
+  return liteSend(fetchImpl, apiKey, "POST", url, body);
+}
+
+/** POST/PUT a JSON body; returns parsed JSON (and the HTTP status, since 202 can mean "queued"). */
+export async function liteSend(
+  fetchImpl: typeof fetch,
+  apiKey: string,
+  method: "POST" | "PUT",
+  url: string,
+  body?: unknown,
+  onStatus?: (status: number) => void,
+): Promise<unknown> {
   const res = await fetchImpl(url, {
-    method: "POST",
+    method,
     headers: { "Content-Type": "application/json", "X-API-Key": apiKey },
-    body: JSON.stringify(body),
+    body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!res.ok) {
     const path = new URL(url).pathname;
     throw new Error(`LiteAPI ${path} → HTTP ${res.status}: ${await res.text()}`);
   }
+  onStatus?.(res.status);
   return res.json();
 }
 

@@ -21,6 +21,8 @@ export interface HireDeps {
 export interface Hire {
   skill: string;
   agent: `0x${string}`;
+  agentTitle: string;
+  endpoint: string; // the agent's service, for follow-ups (e.g. managing the booking)
   quoteNote: string;
   feeUnits: bigint;
   itemTotal?: number;
@@ -103,6 +105,8 @@ export async function buy(
   return {
     skill,
     agent: pick.agent,
+    agentTitle: pick.title,
+    endpoint: pick.endpoint,
     quoteNote: pick.note,
     feeUnits: pick.feeUnits,
     itemTotal: pick.itemTotal,

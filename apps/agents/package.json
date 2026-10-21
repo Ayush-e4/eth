@@ -8,7 +8,8 @@
     "test": "vitest run",
     "identities": "tsx --env-file=../../.env scripts/identities.ts",
     "demo": "tsx --env-file=../../.env scripts/demo.ts",
-    "probe": "tsx --env-file=../../.env scripts/probe.ts"
+    "probe": "tsx --env-file=../../.env scripts/probe.ts",
+    "manage": "tsx --env-file=../../.env scripts/manage.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "1.0.0",

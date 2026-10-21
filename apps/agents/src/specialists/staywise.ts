@@ -8,6 +8,7 @@ import type {
 import type { Trip } from "../trip";
 import { demoTraveller } from "../trip";
 import type { SpecialistDef } from "./server";
+import { type ManageDeps, manageRoutes } from "./staywise-manage";
 
 /** A hotel quote that is already locked with the supplier, so what's paid for can be booked. */
 export interface FirmHotelQuote {
@@ -23,8 +24,13 @@ const GOOD = 0.55;
  * Which hotels to price. With wishes ("quiet, beachfront") LiteAPI's search-by-meaning picks them:
  * strong matches if any have rooms, else good ones. Without wishes: everything near the airport.
  */
-async function candidates(lite: LiteApiClient, trip: Trip) {
-  const stay = { checkin: trip.departDate, checkout: trip.returnDate, adults: trip.adults };
+async function candidates(lite: LiteApiClient, trip: Trip, refundableOnly: boolean) {
+  const stay = {
+    checkin: trip.departDate,
+    checkout: trip.returnDate,
+    adults: trip.adults,
+    refundableOnly,
+  };
   if (trip.hotelWishes) {
     const matches = await lite
       .semanticSearch(`${trip.hotelWishes} hotel in ${trip.destinationName}`, 12)
@@ -49,7 +55,10 @@ async function candidates(lite: LiteApiClient, trip: Trip) {
  * room if one can't be locked — so failures happen before the buyer pays, not after.
  * Fee: 0.04 USDC.
  */
-export function staywise(lite: LiteApiClient): SpecialistDef<FirmHotelQuote, HotelBooking> {
+export function staywise(
+  lite: LiteApiClient,
+  manage?: ManageDeps,
+): SpecialistDef<FirmHotelQuote, HotelBooking> {
   return {
     name: "StayWise",
     skill: "hotels",
@@ -57,7 +66,11 @@ export function staywise(lite: LiteApiClient): SpecialistDef<FirmHotelQuote, Hot
     description: "Searches hotels via LiteAPI, locks the price, books it (sandbox). Firm quotes.",
     priceUnits: 40_000n,
     async quote({ trip }) {
-      const { offers, matchOf } = await candidates(lite, trip);
+      // Refundable unless the traveller said price matters more: changes and refunds stay possible.
+      let found = await candidates(lite, trip, !trip.nonRefundableOk);
+      const noRefundable = !trip.nonRefundableOk && !found.offers.length;
+      if (noRefundable) found = await candidates(lite, trip, false);
+      const { offers, matchOf } = found;
       if (!offers.length) throw new Error(`No hotels near ${trip.destination} for those dates`);
       const failures: string[] = [];
       for (const offer of offers.slice(0, TRIES)) {
@@ -79,8 +92,9 @@ export function staywise(lite: LiteApiClient): SpecialistDef<FirmHotelQuote, Hot
             ? ` · matches "${trip.hotelWishes}" (${match.locationType ?? "match"}, ${match.score.toFixed(2)})`
             : ` · no hotel matching "${trip.hotelWishes}" had rooms; cheapest instead`
           : "";
+        const why = noRefundable ? " · no refundable rate was available" : "";
         return {
-          note: `${offer.hotelName} — ${offer.roomName}${board}${cancel}, ${prebook.total.toLocaleString("en-IN")} ${prebook.currency} total (price locked)${fit}`,
+          note: `${offer.hotelName} — ${offer.roomName}${board}${cancel}, ${prebook.total.toLocaleString("en-IN")} ${prebook.currency} total (price locked)${fit}${why}`,
           detail: { offer, prebook },
           itemTotal: prebook.total,
           itemCurrency: prebook.currency,
@@ -88,9 +102,9 @@ export function staywise(lite: LiteApiClient): SpecialistDef<FirmHotelQuote, Hot
       }
       throw new Error(`Couldn't lock any of the ${TRIES} cheapest rooms: ${failures.join("; ")}`);
     },
-    async work({ task }, { prebook }) {
+    async work({ task, quoteKey }, { prebook }) {
       const lead = demoTraveller(0);
-      return lite.book(
+      const booking = await lite.book(
         prebook.prebookId,
         {
           firstName: lead.givenName,
@@ -100,6 +114,14 @@ export function staywise(lite: LiteApiClient): SpecialistDef<FirmHotelQuote, Hot
         },
         task,
       );
+      // Remember who paid for what, so only that buyer can manage this booking later.
+      manage?.store.set(booking.bookingId, {
+        bookingId: booking.bookingId,
+        task,
+        quoteKey: quoteKey ?? "",
+      });
+      return booking;
     },
+    extend: manage ? manageRoutes(manage) : undefined,
   };
 }

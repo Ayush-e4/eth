@@ -14,6 +14,7 @@ const trip = (departDate: string, returnDate: string): Trip => ({
   departDate,
   returnDate,
   returnFlight: true,
+  nonRefundableOk: false,
   hotelWishes: "",
   adults: 2,
   budgetInr: 40000,
