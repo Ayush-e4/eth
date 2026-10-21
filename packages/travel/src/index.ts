@@ -3,6 +3,7 @@ export {
   type HotelBooking,
   type HotelGuest,
   type HotelOffer,
+  type HotelPrebook,
   LiteApiClient,
 } from "./liteapi";
 export {
@@ -10,4 +11,4 @@ export {
   type LiteFlightOffer,
   LiteFlightsClient,
 } from "./liteapi-flights";
-export type { Traveller } from "./types";
+export type { FlightLeg, Traveller } from "./types";

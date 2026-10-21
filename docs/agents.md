@@ -34,7 +34,8 @@ Orchestrator ── Claude: request → Trip {BOM→GOI, dates, 2 adults, budget
    │    4. procurement: read live quotes from Arkiv, convert to INR at ECB rates,
    │       pick the lowest TOTAL cost (item + fee) — not the cheapest agent
    │    5. POST /work → 402 → sign PaymentAuth → facilitator settles via MandateRegistry
-   │    6. agent books in its sandbox (Duffel order, or LiteAPI prebook → book)
+   │    6. agent books in its sandbox: round-trip flight (Duffel order / LiteAPI prebook → book),
+   │       hotel from the room it locked when quoting
    │    7. record job (buyer), receipt (platform), rating (buyer) on Arkiv
    │
    ▼
@@ -76,6 +77,10 @@ Two kinds of money move, and only one is crypto:
 - **One job per quote.** A quote is consumed when the job starts; paying twice for it gets `409`.
 - **Do exactly what was quoted.** The specialist keeps the quoted offer by quote key and books
   that one, not a fresh search.
+- **Firm hotel quotes.** StayWise locks the room with LiteAPI (prebook) *before* quoting, trying the
+  next-cheapest room if one can't be locked, so "sold out" happens before anyone pays.
+- **Dates are checked in code.** Claude looks weekdays up in a 3-week calendar (India time); the
+  plan is rejected if departure isn't after today or return isn't after departure (one retry).
 - **Fake travellers only.** Sandbox bookings use generated names (`Asha Traveller`, …) and
   `example.com` emails.
 - **Keys stay local.** `apps/agents/.agents.local.json` (agent keys) is gitignored and mode 600.
@@ -118,24 +123,23 @@ HashScan and Arkiv links and Claude's explanation, then shuts everything down.
 
 ## Live run (testnet + sandboxes, 2026-10-22)
 
-`pnpm --filter @eth/agents demo` with the default Goa request:
+`pnpm --filter @eth/agents demo` with the default request ("Plan a weekend in Goa for 2 of us,
+flying from Mumbai next Friday and back on Sunday. Budget ₹40,000."):
 
 | Step | Result |
 |---|---|
-| Plan (Claude Haiku) | BOM→GOI, 30 Oct → 1 Nov 2026, 2 adults, budget ₹40,000 |
-| Flights procurement | AirNest ₹6,260 total (Air India Express IX1051, ₹6,257 + ₹3 fee) beat SkyHop ₹11,346 (Duffel, priced in GBP) |
-| Flight booking | LiteAPI sandbox ref `FH-26A-96UUNTIY`, `PENDING_CONFIRMATION` |
-| Hotel | StayWise: Park Inn by Radisson Goa Candolim, ₹9,488, booking `7BX71v9sh` `CONFIRMED` |
-| Agent fees | 0.03 + 0.04 USDC through mandate #7 — [flights](https://hashscan.io/testnet/transaction/0.0.11045937@1792608415.504001618), [hotels](https://hashscan.io/testnet/transaction/0.0.11045937@1792608417.443920225) |
-| Arkiv | jobs [flights](https://tiramisu.explorer.arkiv.network/entity/0x60198716ffe06084749f192238cd565d77d4db3b901ab235cb2bc78f71997d36), [hotels](https://tiramisu.explorer.arkiv.network/entity/0xf4d371b2a4f24f99a5b20a76f2b46f77e954034c01281f9603957c24a2f90e0e), plus receipts and ratings |
+| Plan (Claude Haiku) | BOM→GOI, Fri 23 → Sun 25 Oct 2026, 2 adults, return flight |
+| Flights procurement | AirNest ₹14,282 total beat SkyHop ₹14,817 (Duffel, priced in GBP) by ₹535 |
+| Flights booked | Air India Express IX1163 out + IX1209 back, one round-trip booking `FH-26A-LRF3WIP6` (`PENDING_CONFIRMATION`) |
+| Hotel | StayWise locked the price when quoting: Fairfield by Marriott Goa Calangute, ₹14,761, booking `lMcUZrFtf` `CONFIRMED` |
+| Agent fees | 0.03 + 0.04 USDC through mandate #10 — [flights](https://hashscan.io/testnet/transaction/0.0.11045937@1792609339.465454468), [hotels](https://hashscan.io/testnet/transaction/0.0.11045937@1792609342.306679547) |
+| Arkiv | jobs [flights](https://tiramisu.explorer.arkiv.network/entity/0x00e3b77db7c3be8ab547da5b1125d4495a4b42a2f13a7f1bbe888b3615458bbd), [hotels](https://tiramisu.explorer.arkiv.network/entity/0x92fef58efd63fd3f77dd0e6a55b9394c2b01917bd4716f380a75671d8f2aee80), plus receipts and ratings |
 
-Found by the first live run and fixed: LiteAPI rejects placeholder-looking phone numbers; an
-agent that is paid and then fails now **refunds its fee** from its own account (until
-pay-on-delivery escrow exists); the orchestrator survives non-JSON error replies. Old listings
-from the Arkiv demo were correctly skipped (not payees in the mandate).
-
-Gaps seen: only the outbound flight is booked (no return leg yet), and LiteAPI flight bookings
-confirm asynchronously (`PENDING_CONFIRMATION`).
+What earlier live runs caught (all fixed): LiteAPI rejects placeholder-looking phone numbers;
+a paid agent that failed kept the fee (now it refunds — seen live:
+[StayWise refund](https://hashscan.io/testnet/transaction/0.0.11116427@1792609053.346192286));
+Claude once read "next Friday" as today (now a calendar + date check); hotel rooms sold out between
+quote and payment (now firm quotes). LiteAPI flight bookings confirm asynchronously.
 
 ## Code map
 

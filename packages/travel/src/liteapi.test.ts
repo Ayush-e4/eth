@@ -56,14 +56,29 @@ describe("LiteApiClient", () => {
 
   it("prebooks then books with the sandbox card", async () => {
     const { fetchImpl, calls } = stub({
-      "/rates/prebook": { data: { prebookId: "pb_1" } },
+      "/rates/prebook": {
+        data: {
+          prebookId: "pb_1",
+          price: 9488.39,
+          currency: "INR",
+          priceDifferencePercent: 0,
+          roomTypes: [{ rates: [{ cancellationPolicies: { refundableTag: "RFN" } }] }],
+        },
+      },
       "/rates/book": {
         data: { bookingId: "bk_1", status: "CONFIRMED", hotelConfirmationCode: "HC9" },
       },
     });
     const c = new LiteApiClient("sand_x", fetchImpl);
-    const prebookId = await c.prebook("o1");
-    const booking = await c.book(prebookId, {
+    const prebook = await c.prebook("o1");
+    expect(prebook).toEqual({
+      prebookId: "pb_1",
+      total: 9488.39,
+      currency: "INR",
+      priceChangedPercent: 0,
+      refundable: true,
+    });
+    const booking = await c.book(prebook.prebookId, {
       firstName: "Ayush",
       lastName: "K",
       email: "a@example.com",

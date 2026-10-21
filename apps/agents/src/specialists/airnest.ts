@@ -1,5 +1,6 @@
 import type { LiteFlightBooking, LiteFlightOffer, LiteFlightsClient } from "@eth/travel";
 import { demoTravellers } from "../trip";
+import { describeItinerary } from "./flight-note";
 import type { SpecialistDef } from "./server";
 
 /**
@@ -21,14 +22,13 @@ export function airnest(
         origin: trip.origin,
         destination: trip.destination,
         date: trip.departDate,
+        returnDate: trip.returnFlight ? trip.returnDate : undefined,
         adults: trip.adults,
       });
       if (!best)
         throw new Error(`No flights ${trip.origin}→${trip.destination} on ${trip.departDate}`);
-      const time = best.departAt.slice(11, 16);
-      const flight = best.flightNumber ? ` ${best.flightNumber}` : "";
       return {
-        note: `${best.carrier}${flight} ${best.origin}→${best.destination} ${trip.departDate} ${time}, ${best.stops ? `${best.stops} stop` : "nonstop"}, ${best.total.toLocaleString("en-IN")} ${best.currency}`,
+        note: describeItinerary(best, `${best.total.toLocaleString("en-IN")} ${best.currency}`),
         detail: best,
         itemTotal: best.total,
         itemCurrency: best.currency,

@@ -10,7 +10,8 @@ export const TripSchema = z.object({
   destination: iata,
   destinationName: z.string().min(1).max(60),
   departDate: date,
-  returnDate: date,
+  returnDate: date, // last night out: hotel checkout, and the return flight when returnFlight
+  returnFlight: z.boolean(), // false only when the traveller wants a one-way flight
   adults: z.number().int().min(1).max(6),
   budgetInr: z.number().int().positive().nullable(),
   notes: z.string().max(300),

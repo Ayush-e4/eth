@@ -1,9 +1,11 @@
 // Read-only check that the sandbox travel keys work: searches only, no bookings, no payments.
 // Run: pnpm --filter @eth/agents probe [ORIGIN DEST YYYY-MM-DD]
 import { DuffelClient, LiteApiClient, LiteFlightsClient } from "@eth/travel";
+import { describeItinerary } from "../src/specialists/flight-note";
 
 const [origin = "BOM", destination = "GOI", date = isoDaysFromNow(14)] = process.argv.slice(2);
-const checkout = isoDaysFromNow(16);
+const returnDate = isoDaysFromNow(16);
+const checkout = returnDate;
 
 function isoDaysFromNow(days: number) {
   return new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
@@ -26,13 +28,12 @@ await check("Duffel flights (test mode)", async () => {
     origin,
     destination,
     date,
+    returnDate,
     adults: 2,
   });
   return [
-    `${offers.length} offers`,
-    ...offers
-      .slice(0, 3)
-      .map((o) => `${o.carrier} ${o.departAt} ${o.stops} stop(s) ${o.total} ${o.currency}`),
+    `${offers.length} round-trip offers`,
+    ...offers.slice(0, 3).map((o) => describeItinerary(o, `${o.total} ${o.currency}`)),
   ];
 });
 await check("LiteAPI flights (sandbox)", async () => {
@@ -40,16 +41,12 @@ await check("LiteAPI flights (sandbox)", async () => {
     origin,
     destination,
     date,
+    returnDate,
     adults: 2,
   });
   return [
-    `${offers.length} offers`,
-    ...offers
-      .slice(0, 3)
-      .map(
-        (o) =>
-          `${o.carrier} ${o.flightNumber ?? ""} ${o.departAt} ${o.stops} stop(s) ${o.total} ${o.currency} [${o.provider}]`,
-      ),
+    `${offers.length} round-trip offers`,
+    ...offers.slice(0, 3).map((o) => describeItinerary(o, `${o.total} ${o.currency}`)),
   ];
 });
 await check("LiteAPI hotels (sandbox)", async () => {

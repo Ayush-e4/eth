@@ -34,8 +34,20 @@ const RatesResponse = z.object({
 const PrebookResponse = z.object({
   data: z.object({
     prebookId: z.string(),
-    price: z.number().optional(),
-    currency: z.string().optional(),
+    price: z.number(),
+    currency: z.string(),
+    priceDifferencePercent: z.number().optional(),
+    roomTypes: z
+      .array(
+        z.object({
+          rates: z.array(
+            z.object({
+              cancellationPolicies: z.object({ refundableTag: z.string().optional() }).optional(),
+            }),
+          ),
+        }),
+      )
+      .optional(),
   }),
 });
 
@@ -58,6 +70,14 @@ export interface HotelOffer {
   board?: string;
   total: number;
   currency: string;
+}
+
+export interface HotelPrebook {
+  prebookId: string;
+  total: number; // final price for the stay
+  currency: string;
+  priceChangedPercent: number; // 0 unless the rate sold out and a similar one was substituted
+  refundable?: boolean; // RFN vs NRFN, when the supplier says
 }
 
 export interface HotelGuest {
@@ -133,13 +153,24 @@ export class LiteApiClient {
       .sort((a, b) => a.total - b.total);
   }
 
-  /** Locks the rate and returns a prebook id (step 1 of 2). */
-  async prebook(offerId: string): Promise<string> {
+  /**
+   * Checks live availability and locks the final price (step 1 of 2). The prebook id is what
+   * gets booked, so a quote built on it is firm. Reusable until it expires.
+   */
+  async prebook(offerId: string): Promise<HotelPrebook> {
     const json = await this.post(LITEAPI_BOOK_URL, "/rates/prebook", {
       offerId,
       usePaymentSdk: false,
     });
-    return PrebookResponse.parse(json).data.prebookId;
+    const { data } = PrebookResponse.parse(json);
+    const tag = data.roomTypes?.[0]?.rates[0]?.cancellationPolicies?.refundableTag;
+    return {
+      prebookId: data.prebookId,
+      total: data.price,
+      currency: data.currency,
+      priceChangedPercent: data.priceDifferencePercent ?? 0,
+      refundable: tag === undefined ? undefined : tag === "RFN",
+    };
   }
 
   /** Confirms the booking with a simulated sandbox card (step 2 of 2). */

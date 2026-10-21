@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { assertSandboxKey, LITEAPI_URL, litePost } from "./liteapi-http";
-import type { Traveller } from "./types";
+import type { FlightLeg, Traveller } from "./types";
 
 /**
  * LiteAPI (Nuitee Connect) flights, used with a **sandbox** key only (same key as hotels).
@@ -69,14 +69,9 @@ const BookResponse = z.object({
 
 export interface LiteFlightOffer {
   offerId: string;
-  carrier: string;
-  flightNumber?: string;
-  origin: string;
-  destination: string;
-  departAt: string;
-  arriveAt: string;
-  stops: number;
-  total: number;
+  outbound: FlightLeg;
+  inbound?: FlightLeg; // present for round trips
+  total: number; // whole itinerary, all passengers
   currency: string;
   provider?: string;
 }
@@ -100,16 +95,28 @@ export class LiteFlightsClient {
     return litePost(this.fetchImpl, this.apiKey, `${LITEAPI_URL}${path}`, body);
   }
 
-  /** One-way economy search; every offer, cheapest first. */
+  /** One-way, or round trip when `returnDate` is set; every offer, cheapest first. */
   async searchFlights(q: {
     origin: string;
     destination: string;
     date: string;
+    returnDate?: string;
     adults: number;
     currency?: string;
   }): Promise<LiteFlightOffer[]> {
+    const legs = [
+      { origin: q.origin, destination: q.destination, date: q.date, direction: "OUTBOUND" },
+    ];
+    if (q.returnDate) {
+      legs.push({
+        origin: q.destination,
+        destination: q.origin,
+        date: q.returnDate,
+        direction: "INBOUND",
+      });
+    }
     const json = await this.post("/flights/rates", {
-      legs: [{ origin: q.origin, destination: q.destination, date: q.date }],
+      legs,
       adults: q.adults,
       cabinClass: "ECONOMY",
       currency: q.currency ?? "INR",
@@ -118,22 +125,18 @@ export class LiteFlightsClient {
     const journeys = RatesResponse.parse(json).data.flatMap((d) => d.journeys);
     return journeys
       .flatMap((j) => {
-        const segs = j.segments.filter((s) => (s.direction ?? "OUTBOUND") === "OUTBOUND");
-        const a = segs[0];
-        const b = segs[segs.length - 1];
-        if (!a || !b) return [];
+        const outbound = legOf(
+          j.segments.filter((s) => (s.direction ?? "OUTBOUND") === "OUTBOUND"),
+        );
+        const inbound = q.returnDate
+          ? legOf(j.segments.filter((s) => s.direction === "INBOUND"))
+          : undefined;
+        if (!outbound || (q.returnDate && !inbound)) return [];
         return j.offers.map(
           (o): LiteFlightOffer => ({
             offerId: o.offerId,
-            carrier: a.carrier.marketingName,
-            flightNumber: a.flight?.marketingNumber
-              ? `${a.carrier.marketingCode ?? ""}${a.flight.marketingNumber}`
-              : undefined,
-            origin: a.originCode,
-            destination: b.destinationCode,
-            departAt: a.departureTime,
-            arriveAt: b.arrivalTime,
-            stops: segs.length - 1,
+            outbound,
+            inbound,
             total: o.pricing.display.total,
             currency: o.pricing.display.currency,
             provider: o.provider?.code,
@@ -181,4 +184,21 @@ export class LiteFlightsClient {
       status: booking.status,
     };
   }
+}
+
+function legOf(segs: z.infer<typeof Segment>[]): FlightLeg | undefined {
+  const a = segs[0];
+  const b = segs[segs.length - 1];
+  if (!a || !b) return undefined;
+  return {
+    carrier: a.carrier.marketingName,
+    flightNumber: a.flight?.marketingNumber
+      ? `${a.carrier.marketingCode ?? ""}${a.flight.marketingNumber}`
+      : undefined,
+    origin: a.originCode,
+    destination: b.destinationCode,
+    departAt: a.departureTime,
+    arriveAt: b.arrivalTime,
+    stops: segs.length - 1,
+  };
 }

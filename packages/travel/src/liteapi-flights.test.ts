@@ -61,13 +61,49 @@ describe("LiteFlightsClient", () => {
       adults: 2,
     });
     expect(offers.map((o) => o.offerId)).toEqual(["o_low", "o_mid", "o_high"]);
-    expect(offers[0]).toMatchObject({ origin: "BOM", destination: "GOI", stops: 1, total: 4100 });
-    expect(offers[1]).toMatchObject({ carrier: "IndiGo", flightNumber: "6E5321", stops: 0 });
+    expect(offers[0]).toMatchObject({
+      outbound: { origin: "BOM", destination: "GOI", stops: 1 },
+      total: 4100,
+    });
+    expect(offers[1]?.outbound).toMatchObject({ carrier: "IndiGo", flightNumber: "6E5321" });
     expect(calls[0]?.headers.get("X-API-Key")).toBe("sand_x");
     expect(calls[0]?.body).toMatchObject({
       legs: [{ origin: "BOM", destination: "GOI", date: "2026-11-06" }],
       adults: 2,
       currency: "INR",
+    });
+  });
+
+  it("searches a round trip as one itinerary with outbound + inbound legs", async () => {
+    const { fetchImpl, calls } = stubFetch({
+      "/flights/rates": {
+        data: [
+          {
+            journeys: [
+              {
+                segments: [segment("OUTBOUND", "BOM", "GOX"), segment("INBOUND", "GOX", "BOM")],
+                offers: [offer("o_rt", 12617.85)],
+              },
+              { segments: [segment("OUTBOUND", "BOM", "GOI")], offers: [offer("o_half", 3000)] },
+            ],
+          },
+        ],
+      },
+    });
+    const offers = await new LiteFlightsClient("sand_x", fetchImpl).searchFlights({
+      origin: "BOM",
+      destination: "GOI",
+      date: "2026-10-30",
+      returnDate: "2026-11-01",
+      adults: 2,
+    });
+    expect(offers.map((o) => o.offerId)).toEqual(["o_rt"]); // one-way-only itinerary dropped
+    expect(offers[0]?.inbound).toMatchObject({ origin: "GOX", destination: "BOM", stops: 0 });
+    expect(calls[0]?.body).toMatchObject({
+      legs: [
+        { origin: "BOM", destination: "GOI", date: "2026-10-30", direction: "OUTBOUND" },
+        { origin: "GOI", destination: "BOM", date: "2026-11-01", direction: "INBOUND" },
+      ],
     });
   });
 
