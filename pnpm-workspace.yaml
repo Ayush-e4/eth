@@ -7,3 +7,6 @@ allowBuilds:
   protobufjs: false
   sharp: false
   unrs-resolver: false
+
+minimumReleaseAgeExclude:
+  - '@anthropic-ai/sdk@1.0.0'

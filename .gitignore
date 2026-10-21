@@ -16,6 +16,7 @@ packages/contracts/cache/
 packages/contracts/broadcast/
 
 # env & secrets
+*.local.json
 .env
 .env.*
 !.env.example

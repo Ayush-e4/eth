@@ -1,0 +1,179 @@
+import { z } from "zod";
+
+/**
+ * LiteAPI (Nuitee Connect) hotels, used with a **sandbox** key only (starts with `sand_`).
+ * Sandbox bookings with payment method ACC_CREDIT_CARD are simulated — nobody is charged.
+ * Docs: https://docs.liteapi.travel/reference/overview
+ */
+
+const SEARCH = "https://api.liteapi.travel/v3.0";
+const BOOK = "https://book.liteapi.travel/v3.0";
+
+const RatesResponse = z.object({
+  data: z.array(
+    z.object({
+      hotelId: z.string(),
+      roomTypes: z.array(
+        z.object({
+          offerId: z.string(),
+          name: z.string().optional(),
+          offerRetailRate: z
+            .array(z.object({ amount: z.number(), currency: z.string() }))
+            .optional(),
+          rates: z
+            .array(z.object({ name: z.string(), boardName: z.string().optional() }))
+            .optional(),
+        }),
+      ),
+    }),
+  ),
+  hotels: z
+    .array(z.object({ id: z.string(), name: z.string(), rating: z.number().optional() }))
+    .optional(),
+});
+
+const PrebookResponse = z.object({
+  data: z.object({
+    prebookId: z.string(),
+    price: z.number().optional(),
+    currency: z.string().optional(),
+  }),
+});
+
+const BookResponse = z.object({
+  data: z.object({
+    bookingId: z.string(),
+    status: z.string(),
+    hotelConfirmationCode: z.string().optional().nullable(),
+    hotel: z.object({ name: z.string() }).partial().optional(),
+    price: z.number().optional(),
+    currency: z.string().optional(),
+  }),
+});
+
+export interface HotelOffer {
+  offerId: string;
+  hotelId: string;
+  hotelName: string;
+  roomName: string;
+  board?: string;
+  total: number;
+  currency: string;
+}
+
+export interface HotelGuest {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+}
+
+export interface HotelBooking {
+  bookingId: string;
+  status: string;
+  confirmationCode?: string;
+  hotelName?: string;
+  total?: number;
+  currency?: string;
+}
+
+export class LiteApiClient {
+  constructor(
+    private readonly apiKey: string,
+    private readonly fetchImpl: typeof fetch = fetch,
+  ) {
+    if (!apiKey.startsWith("sand_")) {
+      throw new Error("Refusing to use a LiteAPI key that is not a sandbox key");
+    }
+  }
+
+  private async post(base: string, path: string, body: unknown): Promise<unknown> {
+    const res = await this.fetchImpl(`${base}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-API-Key": this.apiKey },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`LiteAPI ${path} → HTTP ${res.status}: ${await res.text()}`);
+    return res.json();
+  }
+
+  /** Hotels near an airport (IATA code), cheapest offer per hotel, cheapest first. */
+  async searchHotels(q: {
+    iataCode: string;
+    checkin: string;
+    checkout: string;
+    adults: number;
+    currency?: string;
+    guestNationality?: string;
+    limit?: number;
+  }): Promise<HotelOffer[]> {
+    const json = await this.post(SEARCH, "/hotels/rates", {
+      iataCode: q.iataCode,
+      checkin: q.checkin,
+      checkout: q.checkout,
+      occupancies: [{ adults: q.adults }],
+      currency: q.currency ?? "INR",
+      guestNationality: q.guestNationality ?? "IN",
+      maxRatesPerHotel: 1,
+      includeHotelData: true,
+      limit: q.limit ?? 20,
+    });
+    const parsed = RatesResponse.parse(json);
+    const names = new Map((parsed.hotels ?? []).map((h) => [h.id, h.name]));
+    return parsed.data
+      .flatMap((h) =>
+        h.roomTypes.slice(0, 1).map((rt): HotelOffer | null => {
+          const price = rt.offerRetailRate?.[0];
+          if (!price) return null;
+          return {
+            offerId: rt.offerId,
+            hotelId: h.hotelId,
+            hotelName: names.get(h.hotelId) ?? h.hotelId,
+            roomName: rt.rates?.[0]?.name ?? rt.name ?? "Room",
+            board: rt.rates?.[0]?.boardName,
+            total: price.amount,
+            currency: price.currency,
+          };
+        }),
+      )
+      .filter((o): o is HotelOffer => o !== null)
+      .sort((a, b) => a.total - b.total);
+  }
+
+  /** Locks the rate and returns a prebook id (step 1 of 2). */
+  async prebook(offerId: string): Promise<string> {
+    const json = await this.post(BOOK, "/rates/prebook", { offerId, usePaymentSdk: false });
+    return PrebookResponse.parse(json).data.prebookId;
+  }
+
+  /** Confirms the booking with a simulated sandbox card (step 2 of 2). */
+  async book(
+    prebookId: string,
+    guest: HotelGuest,
+    clientReference?: string,
+  ): Promise<HotelBooking> {
+    const json = await this.post(BOOK, "/rates/book", {
+      prebookId,
+      clientReference,
+      holder: guest,
+      guests: [
+        {
+          occupancyNumber: 1,
+          firstName: guest.firstName,
+          lastName: guest.lastName,
+          email: guest.email,
+        },
+      ],
+      payment: { method: "ACC_CREDIT_CARD" },
+    });
+    const { data } = BookResponse.parse(json);
+    return {
+      bookingId: data.bookingId,
+      status: data.status,
+      confirmationCode: data.hotelConfirmationCode ?? undefined,
+      hotelName: data.hotel?.name,
+      total: data.price,
+      currency: data.currency,
+    };
+  }
+}
