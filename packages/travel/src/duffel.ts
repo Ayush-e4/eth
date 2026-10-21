@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Traveller } from "./types";
+import type { FlightLeg, Traveller } from "./types";
 
 /**
  * Duffel flights API, used in **test mode** only (token starts with `duffel_test_`).
@@ -26,7 +26,8 @@ const OfferRequestResponse = z.object({
                 arriving_at: z.string(),
                 origin: z.object({ iata_code: z.string() }),
                 destination: z.object({ iata_code: z.string() }),
-                marketing_carrier: z.object({ name: z.string() }),
+                marketing_carrier: z.object({ name: z.string(), iata_code: z.string().optional() }),
+                marketing_carrier_flight_number: z.string().optional(),
               }),
             ),
           }),
@@ -48,13 +49,9 @@ const OrderResponse = z.object({
 export interface DuffelOffer {
   offerId: string;
   passengerIds: string[];
-  carrier: string;
-  origin: string;
-  destination: string;
-  departAt: string;
-  arriveAt: string;
-  stops: number;
-  total: string;
+  outbound: FlightLeg;
+  inbound?: FlightLeg; // present for round trips
+  total: string; // whole itinerary, all passengers — kept as Duffel's string for the payment
   currency: string;
 }
 
@@ -90,40 +87,41 @@ export class DuffelClient {
     return res.json();
   }
 
-  /** One-way search; returns offers cheapest first. */
+  /** One-way, or round trip when `returnDate` is set; offers cheapest first. */
   async searchFlights(q: {
     origin: string;
     destination: string;
     date: string;
+    returnDate?: string;
     adults: number;
   }): Promise<DuffelOffer[]> {
+    const slices = [{ origin: q.origin, destination: q.destination, departure_date: q.date }];
+    if (q.returnDate) {
+      slices.push({ origin: q.destination, destination: q.origin, departure_date: q.returnDate });
+    }
     const json = await this.post("/air/offer_requests?return_offers=true", {
-      slices: [{ origin: q.origin, destination: q.destination, departure_date: q.date }],
+      slices,
       passengers: Array.from({ length: q.adults }, () => ({ type: "adult" })),
       cabin_class: "economy",
     });
     const { data } = OfferRequestResponse.parse(json);
     const passengerIds = data.passengers.map((p) => p.id);
     return data.offers
-      .map((o) => {
-        const segs = o.slices[0]?.segments ?? [];
-        const first = segs[0];
-        const last = segs[segs.length - 1];
-        if (!first || !last) return null;
-        return {
-          offerId: o.id,
-          passengerIds,
-          carrier: first.marketing_carrier.name,
-          origin: first.origin.iata_code,
-          destination: last.destination.iata_code,
-          departAt: first.departing_at,
-          arriveAt: last.arriving_at,
-          stops: segs.length - 1,
-          total: o.total_amount,
-          currency: o.total_currency,
-        };
+      .flatMap((o): DuffelOffer[] => {
+        const outbound = legOf(o.slices[0]?.segments ?? []);
+        const inbound = q.returnDate ? legOf(o.slices[1]?.segments ?? []) : undefined;
+        if (!outbound || (q.returnDate && !inbound)) return [];
+        return [
+          {
+            offerId: o.id,
+            passengerIds,
+            outbound,
+            inbound,
+            total: o.total_amount,
+            currency: o.total_currency,
+          },
+        ];
       })
-      .filter((o): o is DuffelOffer => o !== null)
       .sort((a, b) => Number(a.total) - Number(b.total));
   }
 
@@ -155,4 +153,26 @@ export class DuffelClient {
       currency: data.total_currency,
     };
   }
+}
+
+type Segment = z.infer<
+  typeof OfferRequestResponse
+>["data"]["offers"][number]["slices"][number]["segments"][number];
+
+function legOf(segs: Segment[]): FlightLeg | undefined {
+  const first = segs[0];
+  const last = segs[segs.length - 1];
+  if (!first || !last) return undefined;
+  const code = first.marketing_carrier.iata_code ?? "";
+  return {
+    carrier: first.marketing_carrier.name,
+    flightNumber: first.marketing_carrier_flight_number
+      ? `${code}${first.marketing_carrier_flight_number}`
+      : undefined,
+    origin: first.origin.iata_code,
+    destination: last.destination.iata_code,
+    departAt: first.departing_at,
+    arriveAt: last.arriving_at,
+    stops: segs.length - 1,
+  };
 }

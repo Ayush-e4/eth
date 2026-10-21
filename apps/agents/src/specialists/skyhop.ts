@@ -1,5 +1,6 @@
 import type { DuffelBooking, DuffelClient, DuffelOffer } from "@eth/travel";
 import { demoTravellers } from "../trip";
+import { describeItinerary } from "./flight-note";
 import type { SpecialistDef } from "./server";
 
 /** SkyHop: finds and books the cheapest flight on Duffel (test mode). Fee: 0.05 USDC. */
@@ -15,13 +16,13 @@ export function skyhop(duffel: DuffelClient): SpecialistDef<DuffelOffer, DuffelB
         origin: trip.origin,
         destination: trip.destination,
         date: trip.departDate,
+        returnDate: trip.returnFlight ? trip.returnDate : undefined,
         adults: trip.adults,
       });
       if (!best)
         throw new Error(`No flights ${trip.origin}→${trip.destination} on ${trip.departDate}`);
-      const time = best.departAt.slice(11, 16);
       return {
-        note: `${best.carrier} ${best.origin}→${best.destination} ${trip.departDate} ${time}, ${best.stops ? `${best.stops} stop` : "nonstop"}, ${best.total} ${best.currency}`,
+        note: describeItinerary(best, `${best.total} ${best.currency}`),
         detail: best,
         itemTotal: Number(best.total),
         itemCurrency: best.currency,

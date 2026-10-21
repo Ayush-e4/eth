@@ -2,12 +2,13 @@ import { describe, expect, it } from "vitest";
 import { DuffelClient } from "./duffel";
 import { stubFetch as stub } from "./fetch-stub";
 
-const segment = (origin: string, dest: string) => ({
-  departing_at: "2026-11-13T19:00:00",
-  arriving_at: "2026-11-13T20:10:00",
+const segment = (origin: string, dest: string, day = "13") => ({
+  departing_at: `2026-11-${day}T19:00:00`,
+  arriving_at: `2026-11-${day}T20:10:00`,
   origin: { iata_code: origin },
   destination: { iata_code: dest },
-  marketing_carrier: { name: "Duffel Airways" },
+  marketing_carrier: { name: "Duffel Airways", iata_code: "ZZ" },
+  marketing_carrier_flight_number: "0421",
 });
 
 describe("DuffelClient", () => {
@@ -45,11 +46,56 @@ describe("DuffelClient", () => {
     });
     expect(offers.map((o) => o.offerId)).toEqual(["off_a", "off_b"]);
     expect(offers[0]).toMatchObject({
-      carrier: "Duffel Airways",
-      stops: 0,
+      outbound: { carrier: "Duffel Airways", flightNumber: "ZZ0421", stops: 0 },
       passengerIds: ["pas_1"],
     });
+    expect(offers[0]?.inbound).toBeUndefined();
     expect(calls[0]?.headers.get("Duffel-Version")).toBe("v2");
+  });
+
+  it("asks for a return slice and keeps only offers that include it", async () => {
+    const { fetchImpl, calls } = stub({
+      "/air/offer_requests": {
+        data: {
+          passengers: [{ id: "pas_1" }, { id: "pas_2" }],
+          offers: [
+            {
+              id: "off_rt",
+              total_amount: "176.84",
+              total_currency: "GBP",
+              slices: [
+                { segments: [segment("BOM", "GOI", "13")] },
+                { segments: [segment("GOI", "BLR", "15"), segment("BLR", "BOM", "15")] },
+              ],
+            },
+            {
+              id: "off_oneway_only",
+              total_amount: "50.00",
+              total_currency: "GBP",
+              slices: [{ segments: [segment("BOM", "GOI")] }],
+            },
+          ],
+        },
+      },
+    });
+    const offers = await new DuffelClient("duffel_test_x", fetchImpl).searchFlights({
+      origin: "BOM",
+      destination: "GOI",
+      date: "2026-11-13",
+      returnDate: "2026-11-15",
+      adults: 2,
+    });
+    expect(offers.map((o) => o.offerId)).toEqual(["off_rt"]);
+    expect(offers[0]?.inbound).toMatchObject({ origin: "GOI", destination: "BOM", stops: 1 });
+    expect(calls[0]?.body).toMatchObject({
+      data: {
+        slices: [
+          { origin: "BOM", destination: "GOI", departure_date: "2026-11-13" },
+          { origin: "GOI", destination: "BOM", departure_date: "2026-11-15" },
+        ],
+        passengers: [{ type: "adult" }, { type: "adult" }],
+      },
+    });
   });
 
   it("books an instant order paid from balance", async () => {
@@ -66,12 +112,14 @@ describe("DuffelClient", () => {
     const offer = {
       offerId: "off_a",
       passengerIds: ["pas_1"],
-      carrier: "ZZ",
-      origin: "BOM",
-      destination: "GOI",
-      departAt: "",
-      arriveAt: "",
-      stops: 0,
+      outbound: {
+        carrier: "Duffel Airways",
+        origin: "BOM",
+        destination: "GOI",
+        departAt: "",
+        arriveAt: "",
+        stops: 0,
+      },
       total: "45.00",
       currency: "USD",
     };

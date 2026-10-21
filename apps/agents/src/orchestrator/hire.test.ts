@@ -21,6 +21,7 @@ const trip: Trip = {
   destinationName: "Goa",
   departDate: "2026-11-06",
   returnDate: "2026-11-08",
+  returnFlight: true,
   adults: 2,
   budgetInr: null,
   notes: "",
