@@ -54,6 +54,32 @@ describe("LiteApiClient", () => {
     expect(calls[0]?.body).toMatchObject({ iataCode: "GOI", occupancies: [{ adults: 2 }] });
   });
 
+  it("finds hotels by meaning, then prices exactly those hotels", async () => {
+    const { fetchImpl, calls } = stub({
+      "/data/hotels/semantic-search": {
+        data: [
+          { id: "h2", name: "Bogmallo Beach", score: 0.86, location_type: "Coastal Resort" },
+          { id: "h1", name: "Agonda Serenity", score: 0.91, location_type: "Beach Resort" },
+        ],
+      },
+      "/hotels/rates": { data: [], hotels: [] },
+    });
+    const c = new LiteApiClient("sand_x", fetchImpl);
+    const matches = await c.semanticSearch("quiet beachfront hotel in Goa", 5);
+    expect(matches.map((m) => m.hotelId)).toEqual(["h1", "h2"]);
+    expect(matches[0]).toMatchObject({ score: 0.91, locationType: "Beach Resort" });
+    expect(calls[0]?.url).toContain("query=quiet+beachfront+hotel+in+Goa");
+    expect(calls[0]?.url).toContain("limit=5");
+    await c.searchHotels({
+      hotelIds: ["h1", "h2"],
+      checkin: "2026-10-30",
+      checkout: "2026-11-01",
+      adults: 2,
+    });
+    expect(calls[1]?.body).toMatchObject({ hotelIds: ["h1", "h2"] });
+    expect(calls[1]?.body).not.toHaveProperty("iataCode");
+  });
+
   it("prebooks then books with the sandbox card", async () => {
     const { fetchImpl, calls } = stub({
       "/rates/prebook": {

@@ -1,4 +1,11 @@
-import type { HotelBooking, HotelOffer, HotelPrebook, LiteApiClient } from "@eth/travel";
+import type {
+  HotelBooking,
+  HotelMatch,
+  HotelOffer,
+  HotelPrebook,
+  LiteApiClient,
+} from "@eth/travel";
+import type { Trip } from "../trip";
 import { demoTraveller } from "../trip";
 import type { SpecialistDef } from "./server";
 
@@ -9,9 +16,35 @@ export interface FirmHotelQuote {
 }
 
 const TRIES = 3; // cheapest rooms to try locking before giving up
+const STRONG = 0.75; // semantic match scores: prefer strong matches, accept good ones
+const GOOD = 0.55;
 
 /**
- * StayWise: books the best-value hotel near the destination airport (LiteAPI sandbox).
+ * Which hotels to price. With wishes ("quiet, beachfront") LiteAPI's search-by-meaning picks them:
+ * strong matches if any have rooms, else good ones. Without wishes: everything near the airport.
+ */
+async function candidates(lite: LiteApiClient, trip: Trip) {
+  const stay = { checkin: trip.departDate, checkout: trip.returnDate, adults: trip.adults };
+  if (trip.hotelWishes) {
+    const matches = await lite
+      .semanticSearch(`${trip.hotelWishes} hotel in ${trip.destinationName}`, 12)
+      .catch(() => [] as HotelMatch[]);
+    for (const min of [STRONG, GOOD]) {
+      const picked = matches.filter((m) => m.score >= min);
+      if (!picked.length) continue;
+      const offers = await lite.searchHotels({ ...stay, hotelIds: picked.map((m) => m.hotelId) });
+      if (offers.length) {
+        const byId = new Map(picked.map((m) => [m.hotelId, m]));
+        return { offers, matchOf: (id: string) => byId.get(id) };
+      }
+    }
+  }
+  const offers = await lite.searchHotels({ ...stay, iataCode: trip.destination });
+  return { offers, matchOf: (_id: string): HotelMatch | undefined => undefined };
+}
+
+/**
+ * StayWise: books the best-value hotel for the traveller's wishes (LiteAPI sandbox).
  * Firm quotes: it locks the room (prebook) BEFORE quoting, falling back to the next-cheapest
  * room if one can't be locked — so failures happen before the buyer pays, not after.
  * Fee: 0.04 USDC.
@@ -24,12 +57,7 @@ export function staywise(lite: LiteApiClient): SpecialistDef<FirmHotelQuote, Hot
     description: "Searches hotels via LiteAPI, locks the price, books it (sandbox). Firm quotes.",
     priceUnits: 40_000n,
     async quote({ trip }) {
-      const offers = await lite.searchHotels({
-        iataCode: trip.destination,
-        checkin: trip.departDate,
-        checkout: trip.returnDate,
-        adults: trip.adults,
-      });
+      const { offers, matchOf } = await candidates(lite, trip);
       if (!offers.length) throw new Error(`No hotels near ${trip.destination} for those dates`);
       const failures: string[] = [];
       for (const offer of offers.slice(0, TRIES)) {
@@ -45,8 +73,14 @@ export function staywise(lite: LiteApiClient): SpecialistDef<FirmHotelQuote, Hot
             : prebook.refundable
               ? ", free cancellation"
               : ", non-refundable";
+        const match = matchOf(offer.hotelId);
+        const fit = trip.hotelWishes
+          ? match
+            ? ` · matches "${trip.hotelWishes}" (${match.locationType ?? "match"}, ${match.score.toFixed(2)})`
+            : ` · no hotel matching "${trip.hotelWishes}" had rooms; cheapest instead`
+          : "";
         return {
-          note: `${offer.hotelName} — ${offer.roomName}${board}${cancel}, ${prebook.total.toLocaleString("en-IN")} ${prebook.currency} total (price locked)`,
+          note: `${offer.hotelName} — ${offer.roomName}${board}${cancel}, ${prebook.total.toLocaleString("en-IN")} ${prebook.currency} total (price locked)${fit}`,
           detail: { offer, prebook },
           itemTotal: prebook.total,
           itemCurrency: prebook.currency,

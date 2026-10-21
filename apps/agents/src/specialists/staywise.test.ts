@@ -21,14 +21,19 @@ const body = {
     departDate: "2026-10-23",
     returnDate: "2026-10-25",
     returnFlight: true,
+    hotelWishes: "",
     adults: 2,
     budgetInr: null,
     notes: "",
   },
 } satisfies TaskBody;
 
-function fakeLite(prebook: LiteApiClient["prebook"]) {
+function fakeLite(
+  prebook: LiteApiClient["prebook"],
+  matches: Awaited<ReturnType<LiteApiClient["semanticSearch"]>> = [],
+) {
   return {
+    semanticSearch: vi.fn(async () => matches),
     searchHotels: vi.fn(async () => [
       offer("o1", "Park Inn", 9000),
       offer("o2", "Fairfield", 9500),
@@ -75,5 +80,41 @@ describe("StayWise firm quotes", () => {
       throw new Error("no prebook availability");
     });
     await expect(staywise(lite as never).quote(body)).rejects.toThrow("Couldn't lock any");
+  });
+});
+
+describe("StayWise with the traveller's hotel wishes", () => {
+  const wishful = { ...body, trip: { ...body.trip, hotelWishes: "quiet, beachfront" } };
+  const locked = async () => ({
+    prebookId: "pb_w",
+    total: 8043,
+    currency: "INR",
+    priceChangedPercent: 0,
+    refundable: false,
+  });
+  const match = (hotelId: string, name: string, score: number) => ({
+    hotelId,
+    name,
+    score,
+    locationType: "Beachfront Resort",
+    tags: [],
+  });
+
+  it("prices only strong matches from search-by-meaning and says why it fits", async () => {
+    const lite = fakeLite(locked, [
+      match("o1", "Dunhill Beach Resort", 0.77),
+      match("o9", "Lotus Sutra", 0.53),
+    ]);
+    const q = await staywise(lite as never).quote(wishful);
+    expect(lite.semanticSearch).toHaveBeenCalledWith("quiet, beachfront hotel in Goa", 12);
+    expect(lite.searchHotels).toHaveBeenCalledWith(expect.objectContaining({ hotelIds: ["o1"] }));
+    expect(q.note).toContain('matches "quiet, beachfront" (Beachfront Resort, 0.77)');
+  });
+
+  it("falls back to the cheapest near the airport — and says so — when no match has rooms", async () => {
+    const lite = fakeLite(locked, []);
+    const q = await staywise(lite as never).quote(wishful);
+    expect(lite.searchHotels).toHaveBeenCalledWith(expect.objectContaining({ iataCode: "GOI" }));
+    expect(q.note).toContain('no hotel matching "quiet, beachfront" had rooms; cheapest instead');
   });
 });

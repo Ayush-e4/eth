@@ -11,7 +11,7 @@ import type { z } from "zod";
 export const MODEL = "claude-haiku-5-5";
 
 let client: Anthropic | undefined;
-function anthropic() {
+export function anthropic() {
   client ??= new Anthropic();
   return client;
 }

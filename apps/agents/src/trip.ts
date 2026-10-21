@@ -14,6 +14,7 @@ export const TripSchema = z.object({
   returnFlight: z.boolean(), // false only when the traveller wants a one-way flight
   adults: z.number().int().min(1).max(6),
   budgetInr: z.number().int().positive().nullable(),
+  hotelWishes: z.string().max(120), // what the traveller wants from the hotel, e.g. "quiet, beachfront"; "" if nothing
   notes: z.string().max(300),
 });
 

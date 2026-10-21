@@ -22,6 +22,7 @@ const trip: Trip = {
   departDate: "2026-11-06",
   returnDate: "2026-11-08",
   returnFlight: true,
+  hotelWishes: "",
   adults: 2,
   budgetInr: null,
   notes: "",
@@ -129,7 +130,7 @@ describe("hire", () => {
     const h = await hire("flights", "t1", trip, deps());
     expect(h.agent).toBe(B);
     expect(h.choice).toContain("cheapest agent fee");
-    expect(h.rejected).toContain("agent aa: higher agent fee");
+    expect(h.rejected).toContain("agent aa: no comparable price");
   });
 
   it("an agent that fails to quote is skipped, not fatal", async () => {

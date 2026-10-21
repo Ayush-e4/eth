@@ -4,7 +4,7 @@ export function stubFetch(routes: Record<string, unknown>) {
   const fetchImpl = (async (url: string, init?: RequestInit) => {
     calls.push({
       url,
-      body: JSON.parse(String(init?.body ?? "null")),
+      body: init?.body ? JSON.parse(String(init.body)) : null,
       headers: new Headers(init?.headers),
     });
     const hit = Object.entries(routes).find(([frag]) => url.includes(frag));

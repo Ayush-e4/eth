@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { assertSandboxKey, LITEAPI_BOOK_URL, LITEAPI_URL, litePost } from "./liteapi-http";
+import { assertSandboxKey, LITEAPI_BOOK_URL, LITEAPI_URL, liteGet, litePost } from "./liteapi-http";
 
 /**
  * LiteAPI (Nuitee Connect) hotels, used with a **sandbox** key only (starts with `sand_`).
@@ -8,6 +8,19 @@ import { assertSandboxKey, LITEAPI_BOOK_URL, LITEAPI_URL, litePost } from "./lit
  */
 
 const Money = z.object({ amount: z.number(), currency: z.string() });
+
+const SemanticResponse = z.object({
+  data: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      score: z.number(),
+      city: z.string().optional(),
+      location_type: z.string().optional(),
+      tags: z.array(z.string()).optional(),
+    }),
+  ),
+});
 
 const RatesResponse = z.object({
   data: z.array(
@@ -72,6 +85,15 @@ export interface HotelOffer {
   currency: string;
 }
 
+export interface HotelMatch {
+  hotelId: string;
+  name: string;
+  score: number; // 0–1, how well it matches the query
+  city?: string;
+  locationType?: string; // e.g. "Beachfront Resort"
+  tags: string[];
+}
+
 export interface HotelPrebook {
   prebookId: string;
   total: number; // final price for the stay
@@ -110,7 +132,8 @@ export class LiteApiClient {
 
   /** Hotels near an airport (IATA code), cheapest offer per hotel, cheapest first. */
   async searchHotels(q: {
-    iataCode: string;
+    iataCode?: string; // hotels near this airport…
+    hotelIds?: string[]; // …or exactly these hotels
     checkin: string;
     checkout: string;
     adults: number;
@@ -118,8 +141,9 @@ export class LiteApiClient {
     guestNationality?: string;
     limit?: number;
   }): Promise<HotelOffer[]> {
+    if (!q.iataCode && !q.hotelIds?.length) throw new Error("Need iataCode or hotelIds");
     const json = await this.post(LITEAPI_URL, "/hotels/rates", {
-      iataCode: q.iataCode,
+      ...(q.hotelIds?.length ? { hotelIds: q.hotelIds } : { iataCode: q.iataCode }),
       checkin: q.checkin,
       checkout: q.checkout,
       occupancies: [{ adults: q.adults }],
@@ -151,6 +175,29 @@ export class LiteApiClient {
       )
       .filter((o): o is HotelOffer => o !== null)
       .sort((a, b) => a.total - b.total);
+  }
+
+  /** Hotels that match a description by meaning ("quiet beachfront in Goa"), best match first. */
+  async semanticSearch(query: string, limit = 10): Promise<HotelMatch[]> {
+    const json = await liteGet(
+      this.fetchImpl,
+      this.apiKey,
+      `${LITEAPI_URL}/data/hotels/semantic-search`,
+      {
+        query,
+        limit,
+      },
+    );
+    return SemanticResponse.parse(json)
+      .data.map((h) => ({
+        hotelId: h.id,
+        name: h.name,
+        score: h.score,
+        city: h.city,
+        locationType: h.location_type,
+        tags: h.tags ?? [],
+      }))
+      .sort((a, b) => b.score - a.score);
   }
 
   /**

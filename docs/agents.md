@@ -5,10 +5,10 @@ inside a mandate a human signed on Hedera.
 
 | Agent | Role | Sells | Fee | Backed by |
 |---|---|---|---|---|
-| **Orchestrator** | Buyer. Turns "plan a Goa weekend" into a trip, runs procurement, explains every spend | — | — | Claude Haiku (`claude-haiku-5-5`) |
+| **Orchestrator** | Buyer. An agent (Claude Haiku on the Tool Runner): plans, gets quotes, checks hotels, hires, explains | — | — | Claude Haiku (`claude-haiku-5-5`) |
 | **SkyHop** | Specialist | `flights`: cheapest fare | 0.05 USDC | Duffel (test mode) |
 | **AirNest** | SkyHop's competitor | `flights`: cheapest fare | 0.03 USDC | LiteAPI flights (sandbox) |
-| **StayWise** | Specialist | `hotels`: best-value hotel | 0.04 USDC | LiteAPI hotels (sandbox) |
+| **StayWise** | Specialist | `hotels`: best-value hotel for the traveller's wishes | 0.04 USDC | LiteAPI hotels (sandbox) |
 
 Web2 analogy: the orchestrator is a company buyer on Upwork with a company card that has a limit.
 SkyHop, AirNest and StayWise are freelancers with public profiles. Upwork's database is
@@ -65,6 +65,31 @@ Two kinds of money move, and only one is crypto:
 - **Booking costs** (flight and hotel prices) are paid inside the providers' sandboxes: Duffel's
   test balance (unlimited in test mode) and LiteAPI's simulated sandbox card. No real tickets or
   rooms are issued.
+
+## The orchestrator is an agent
+
+Web2 analogy: a travel assistant with a company card. It can look things up freely, but every card
+swipe goes through one checkout counter that enforces the rules — and the card has a hard limit.
+
+- **Dates first, in code.** `planTrip` (Claude, structured output) reads the request against a calendar;
+  code rejects impossible dates. The trip also carries `hotelWishes` ("quiet, beachfront").
+- **Then Claude runs the marketplace** with the SDK's Tool Runner (`orchestrator/agent.ts`):
+
+| Tool | What it does | Who enforces what |
+|---|---|---|
+| `get_quotes(skill)` | Discover agents on Arkiv, keep mandate payees, collect signed quotes, rank by total cost | code |
+| `hire_agent(skill, quoteKey, reason)` | Pay the fee over x402 and have the agent book | code: known quote only, once per skill, one retry after a refund; the **mandate onchain** caps spend |
+| `finish(explanation)` | The traveller-facing summary | — |
+| LiteAPI MCP (read-only) | Hotel search by meaning, reviews, "ask the hotel" | allowlist: booking tools are off |
+| `web_search` | One destination fact (weather, events) | `max_uses: 2` |
+
+Claude may pick a quote that isn't the cheapest, but must say why; the reason and rank go into the
+Arkiv job record. StayWise turns wishes into hotels with LiteAPI's search-by-meaning and locks the
+cheapest strong match. `--autopilot` runs the old fixed flow without the agent loop.
+
+**Models:** Claude Haiku for everything. The basic web search tool is used because Haiku sent
+malformed inputs to the newer dynamic-filtering version in our tests; Sonnet is reserved for
+anything Haiku can't do.
 
 ## Safety rules in code
 
@@ -123,23 +148,35 @@ HashScan and Arkiv links and Claude's explanation, then shuts everything down.
 
 ## Live run (testnet + sandboxes, 2026-10-22)
 
-`pnpm --filter @eth/agents demo` with the default request ("Plan a weekend in Goa for 2 of us,
-flying from Mumbai next Friday and back on Sunday. Budget ₹40,000."):
+Agent mode, request: *"Plan a weekend in Goa for 2 of us from Mumbai, leaving next Friday and back on
+Sunday. Budget ₹40,000. We'd love a quiet beachfront hotel and nonstop flights."*
 
-| Step | Result |
+```
+plan: 2 adults BOM→GOI 2026-10-23…2026-10-25 (return flight)
+claude → get_quotes flights · get_quotes hotels                (in parallel)
+claude → liteapi.get_data_reviews {"hotelId":"Dunhill Beach Resort"}   → 400, wrong id
+claude → liteapi.get_data_hotels_semantic_search "quiet beachfront resort in Goa"  → finds the id
+claude → liteapi.get_data_reviews lpd3b84 (with sentiment) · web_search "Goa weather late October"
+claude → hire_agent flights: rank 1, ₹14,282, both legs nonstop as requested
+claude → hire_agent hotels: Dunhill Beach Resort (StayWise matched "quiet, beachfront", 0.77);
+         reviews: quiet and peaceful, beachfront; some AC/maintenance complaints
+```
+
+| Result | |
 |---|---|
-| Plan (Claude Haiku) | BOM→GOI, Fri 23 → Sun 25 Oct 2026, 2 adults, return flight |
-| Flights procurement | AirNest ₹14,282 total beat SkyHop ₹14,817 (Duffel, priced in GBP) by ₹535 |
-| Flights booked | Air India Express IX1163 out + IX1209 back, one round-trip booking `FH-26A-LRF3WIP6` (`PENDING_CONFIRMATION`) |
-| Hotel | StayWise locked the price when quoting: Fairfield by Marriott Goa Calangute, ₹14,761, booking `lMcUZrFtf` `CONFIRMED` |
-| Agent fees | 0.03 + 0.04 USDC through mandate #10 — [flights](https://hashscan.io/testnet/transaction/0.0.11045937@1792609339.465454468), [hotels](https://hashscan.io/testnet/transaction/0.0.11045937@1792609342.306679547) |
-| Arkiv | jobs [flights](https://tiramisu.explorer.arkiv.network/entity/0x00e3b77db7c3be8ab547da5b1125d4495a4b42a2f13a7f1bbe888b3615458bbd), [hotels](https://tiramisu.explorer.arkiv.network/entity/0x92fef58efd63fd3f77dd0e6a55b9394c2b01917bd4716f380a75671d8f2aee80), plus receipts and ratings |
+| Flights | Air India Express IX1163 out + IX1209 back, AirNest, `FH-26A-A9O4HO54` (pending confirmation) |
+| Hotel | Dunhill Beach Resort, Agonda, ₹14,910, booking `kT9UyS4mA` confirmed |
+| Total | ≈ ₹29,196 of ₹40,000; fees 0.03 + 0.04 USDC through mandate #14 |
+| Proof | [flights fee](https://hashscan.io/testnet/transaction/0.0.11045937@1792610440.116013437), [hotel fee](https://hashscan.io/testnet/transaction/0.0.11045937@1792610440.940325765); Arkiv jobs [flights](https://tiramisu.explorer.arkiv.network/entity/0x574e15d90ed37a7582db7c5f08e86a4dbc11172f6326d17962c92b8cdc82b863), [hotel](https://tiramisu.explorer.arkiv.network/entity/0x53c947f54c9273726d39ff4614787e582d05ad10262cc8073d235aecbaf026c0) |
 
-What earlier live runs caught (all fixed): LiteAPI rejects placeholder-looking phone numbers;
-a paid agent that failed kept the fee (now it refunds — seen live:
-[StayWise refund](https://hashscan.io/testnet/transaction/0.0.11116427@1792609053.346192286));
-Claude once read "next Friday" as today (now a calendar + date check); hotel rooms sold out between
-quote and payment (now firm quotes). LiteAPI flight bookings confirm asynchronously.
+In an earlier run, before StayWise understood wishes, the agent researched the only hotel offered
+(a busy-area, non-refundable room), judged it didn't match "quiet beachfront" and **declined to pay
+for it** — booking the flights only and saying why.
+
+What earlier live runs caught (all fixed): placeholder-looking phone numbers; a paid agent that failed
+kept the fee (now it refunds — [seen live](https://hashscan.io/testnet/transaction/0.0.11116427@1792609053.346192286));
+"next Friday" read as today; rooms selling out between quote and payment (firm quotes); web search
+inputs malformed with the newer tool version on Haiku.
 
 ## Code map
 
@@ -152,6 +189,9 @@ quote and payment (now firm quotes). LiteAPI flight bookings confirm asynchronou
 | `apps/agents/src/specialists/{skyhop,airnest,staywise}.ts` | Each agent: how it quotes and works |
 | `apps/agents/src/orchestrator/plan.ts` | Claude: request → structured `Trip` |
 | `apps/agents/src/orchestrator/procure.ts` | FX rates + rank quotes by total cost |
-| `apps/agents/src/orchestrator/hire.ts` | Discover → mandate filter → quotes → procure → pay → record |
+| `apps/agents/src/orchestrator/agent.ts` | The agent: Tool Runner loop, prompt, LiteAPI MCP + web search |
+| `apps/agents/src/orchestrator/tools.ts` | `get_quotes`, `hire_agent`, `finish` and their guardrails |
+| `apps/agents/src/orchestrator/quotes.ts` | Discover → mandate filter → quotes → rank |
+| `apps/agents/src/orchestrator/hire.ts` | Pay → record (and the autopilot `hire`) |
 | `apps/agents/src/orchestrator/explain.ts` | Claude: "why did my agent spend this?" |
 | `apps/agents/scripts/demo.ts` | The whole run end to end |
