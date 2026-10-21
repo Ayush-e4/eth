@@ -4,11 +4,11 @@ import type { z } from "zod";
 
 /**
  * One structured Claude call: system + user text in, a validated object out.
- * - claude-opus-5-5 (thinking is always on; effort controls depth — "low" suits extraction)
- * - server-side refusal fallbacks ("default" routes by refusal category)
+ * - Claude Haiku only (project rule: cheap and fast); thinking is adaptive, effort sets depth
+ *   ("low" suits extraction). Haiku has no server-side refusal fallback.
  * - typed result via structured outputs; refusals surface as errors, never as data
  */
-const MODEL = "claude-opus-5-5";
+export const MODEL = "claude-haiku-5-5";
 
 let client: Anthropic | undefined;
 function anthropic() {
@@ -25,8 +25,6 @@ export async function askStructured<T extends z.ZodType>(opts: {
   const response = await anthropic().beta.messages.parse({
     model: MODEL,
     max_tokens: 16000,
-    betas: ["server-side-fallback-2026-07-01"],
-    fallbacks: "default",
     system: opts.system,
     messages: [{ role: "user", content: opts.user }],
     output_config: { effort: opts.effort ?? "low", format: betaZodOutputFormat(opts.schema) },

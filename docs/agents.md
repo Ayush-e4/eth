@@ -5,7 +5,7 @@ inside a mandate a human signed on Hedera.
 
 | Agent | Role | Sells | Fee | Backed by |
 |---|---|---|---|---|
-| **Orchestrator** | Buyer. Turns "plan a Goa weekend" into a trip, runs procurement, explains every spend | — | — | Claude (`claude-opus-5-5`) |
+| **Orchestrator** | Buyer. Turns "plan a Goa weekend" into a trip, runs procurement, explains every spend | — | — | Claude Haiku (`claude-haiku-5-5`) |
 | **SkyHop** | Specialist | `flights`: cheapest fare | 0.05 USDC | Duffel (test mode) |
 | **AirNest** | SkyHop's competitor | `flights`: cheapest fare | 0.03 USDC | LiteAPI flights (sandbox) |
 | **StayWise** | Specialist | `hotels`: best-value hotel | 0.04 USDC | LiteAPI hotels (sandbox) |
@@ -84,8 +84,9 @@ Two kinds of money move, and only one is crypto:
 
 ## Known limits (next features)
 
-- **Pay-first, not pay-on-delivery.** If an agent takes the fee and its booking then fails, the
-  fee is gone. Planned fix: escrow in MandateRegistry, released when the job is delivered.
+- **Pay-first, not pay-on-delivery.** If an agent takes the fee and its booking then fails, it
+  refunds the fee itself — a promise, not a guarantee. Planned fix: escrow in MandateRegistry,
+  released when the booking is confirmed (LiteAPI webhooks `booking.book`, `flight.book.confirmed`).
 - Quotes live in the specialist's memory, so restarting it forgets them (Arkiv still has them).
 - Agents run on `localhost`; deploying them gives them public endpoints in their listings.
 - Sandbox data: Duffel test mode books "Duffel Airways" (ZZ) at made-up prices; LiteAPI's flight
@@ -114,6 +115,27 @@ HashScan and Arkiv links and Claude's explanation, then shuts everything down.
 | AirNest | [0.0.11116757](https://hashscan.io/testnet/account/0.0.11116757) | `0x65f8e30a61635afeb3f33b5221f05b8a6fce3e13` |
 | StayWise | [0.0.11116427](https://hashscan.io/testnet/account/0.0.11116427) | `0x78ef54682bce53b3eb9bf9432952423aaa274ad1` |
 | Orchestrator | — (signs only; the human's account pays) | `0xeE7bb1b4204C4384CFb7E497256eA1d061b397C8` |
+
+## Live run (testnet + sandboxes, 2026-10-22)
+
+`pnpm --filter @eth/agents demo` with the default Goa request:
+
+| Step | Result |
+|---|---|
+| Plan (Claude Haiku) | BOM→GOI, 30 Oct → 1 Nov 2026, 2 adults, budget ₹40,000 |
+| Flights procurement | AirNest ₹6,260 total (Air India Express IX1051, ₹6,257 + ₹3 fee) beat SkyHop ₹11,346 (Duffel, priced in GBP) |
+| Flight booking | LiteAPI sandbox ref `FH-26A-96UUNTIY`, `PENDING_CONFIRMATION` |
+| Hotel | StayWise: Park Inn by Radisson Goa Candolim, ₹9,488, booking `7BX71v9sh` `CONFIRMED` |
+| Agent fees | 0.03 + 0.04 USDC through mandate #7 — [flights](https://hashscan.io/testnet/transaction/0.0.11045937@1792608415.504001618), [hotels](https://hashscan.io/testnet/transaction/0.0.11045937@1792608417.443920225) |
+| Arkiv | jobs [flights](https://tiramisu.explorer.arkiv.network/entity/0x60198716ffe06084749f192238cd565d77d4db3b901ab235cb2bc78f71997d36), [hotels](https://tiramisu.explorer.arkiv.network/entity/0xf4d371b2a4f24f99a5b20a76f2b46f77e954034c01281f9603957c24a2f90e0e), plus receipts and ratings |
+
+Found by the first live run and fixed: LiteAPI rejects placeholder-looking phone numbers; an
+agent that is paid and then fails now **refunds its fee** from its own account (until
+pay-on-delivery escrow exists); the orchestrator survives non-JSON error replies. Old listings
+from the Arkiv demo were correctly skipped (not payees in the mandate).
+
+Gaps seen: only the outbound flight is booked (no return leg yet), and LiteAPI flight bookings
+confirm asynchronously (`PENDING_CONFIRMATION`).
 
 ## Code map
 

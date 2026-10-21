@@ -119,10 +119,15 @@ export async function hire(skill: string, task: string, trip: Trip, d: HireDeps)
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ task, trip, quoteKey: best.key }),
   });
-  const body = (await response.json()) as { result?: unknown; error?: string; detail?: string };
+  const body = await readJson(response);
   if (!response.ok || !paid) {
+    const refund = body.refund?.transaction
+      ? ` — fee refunded: ${body.refund.transaction}`
+      : body.refund?.failed
+        ? ` — refund failed: ${body.refund.failed}`
+        : "";
     throw new Error(
-      `[${skill}] hire failed: HTTP ${response.status} ${body.error ?? ""} ${body.detail ?? ""}`,
+      `[${skill}] hire failed: HTTP ${response.status} ${body.error ?? ""} ${body.detail ?? ""}${refund}`,
     );
   }
   const hederaTx = paid.settlement.transaction;
@@ -168,4 +173,21 @@ export async function hire(skill: string, task: string, trip: Trip, d: HireDeps)
     result: body.result,
     rejected,
   };
+}
+
+interface WorkReply {
+  result?: unknown;
+  error?: string;
+  detail?: string;
+  refund?: { transaction?: string; failed?: string };
+}
+
+/** Agents are third parties: a failed reply may not even be JSON. */
+async function readJson(res: Response): Promise<WorkReply> {
+  const text = await res.text();
+  try {
+    return JSON.parse(text) as WorkReply;
+  } catch {
+    return { error: "non_json_reply", detail: text.slice(0, 200) };
+  }
 }

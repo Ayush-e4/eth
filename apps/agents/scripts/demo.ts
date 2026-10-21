@@ -6,7 +6,7 @@
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { ARKIV_EXPLORER, arkivReader, arkivWriter } from "@eth/arkiv";
-import { loadConfig, NETWORKS } from "@eth/hedera";
+import { createClient, loadConfig, NETWORKS, transferToken } from "@eth/hedera";
 import { DEPLOYMENTS, hederaTestnet, MandateClient, tokenIdToEvmAddress } from "@eth/mandates";
 import { DuffelClient, LiteApiClient, LiteFlightsClient } from "@eth/travel";
 import { createPayingFetch, HttpFacilitator, MirrorResolver } from "@eth/x402";
@@ -60,7 +60,24 @@ const ctx = (identity: SpecialistIdentity, port: number) => ({
   facilitator: facilitatorClient,
   usdcTokenId: net.usdcTokenId,
   executorId: DEPLOYMENTS.testnet.mandateRegistryId,
+  refund: refunder(identity),
 });
+/** Refunds come from the agent's own Hedera account, signed with its own key. */
+function refunder(identity: SpecialistIdentity) {
+  const client = createClient({
+    network: "testnet",
+    operatorId: identity.hederaAccount,
+    operatorKey: identity.key.replace(/^0x/, ""),
+  });
+  return (to: string, units: bigint, memo: string) =>
+    transferToken(client, {
+      tokenId: net.usdcTokenId,
+      from: identity.hederaAccount,
+      to,
+      units,
+      memo,
+    });
+}
 const specialists = [
   {
     port: 8411,

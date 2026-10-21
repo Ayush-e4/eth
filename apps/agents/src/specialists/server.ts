@@ -33,6 +33,8 @@ export interface SpecialistContext {
   facilitator: Facilitator;
   usdcTokenId: string;
   executorId: string; // MandateRegistry contract id admitted for payments
+  /** Sends a fee back from the agent's own account (paid, then couldn't deliver). Returns the tx id. */
+  refund?: (to: string, units: bigint, memo: string) => Promise<string>;
 }
 
 /**
@@ -109,8 +111,22 @@ export function createSpecialist<D, R>(def: SpecialistDef<D, R>, ctx: Specialist
       const quote = live(body.quoteKey);
       if (!quote) return c.json({ error: "unknown_or_expired_quote" }, 409);
       quotes.delete(body.quoteKey as string); // one job per quote
-      const result = await def.work(body, quote.detail);
-      return c.json({ agent: def.name, result });
+      try {
+        const result = await def.work(body, quote.detail);
+        return c.json({ agent: def.name, result });
+      } catch (err) {
+        // Paid but couldn't deliver → give the fee back (until pay-on-delivery escrow exists).
+        const detail = (err instanceof Error ? err.message : String(err)).slice(0, 500);
+        const payer = (c.get("x402Settlement" as never) as { payer?: string } | undefined)?.payer;
+        const refund =
+          payer && ctx.refund
+            ? await ctx
+                .refund(payer, def.priceUnits, `refund ${body.task}`)
+                .then((transaction) => ({ transaction }))
+                .catch((e: unknown) => ({ failed: String(e).slice(0, 200) }))
+            : undefined;
+        return c.json({ error: "work_failed", detail, refund }, 502);
+      }
     },
   );
 

@@ -38,7 +38,12 @@ const facilitator: Facilitator = {
   }),
 };
 
-function setup() {
+function setup(
+  opts: {
+    failWork?: boolean;
+    refund?: (to: string, units: bigint, memo: string) => Promise<string>;
+  } = {},
+) {
   const def: SpecialistDef<{ offerId: string }, { booked: string }> = {
     name: "TestHop",
     skill: "flights",
@@ -51,7 +56,10 @@ function setup() {
       itemTotal: 5400,
       itemCurrency: "INR",
     })),
-    work: vi.fn(async (_body, d) => ({ booked: d.offerId })),
+    work: vi.fn(async (_body, d) => {
+      if (opts.failWork) throw new Error("supplier said no");
+      return { booked: d.offerId };
+    }),
   };
   const s = createSpecialist(def, {
     identity,
@@ -59,6 +67,7 @@ function setup() {
     facilitator,
     usdcTokenId: "0.0.429274",
     executorId: REGISTRY,
+    refund: opts.refund,
   });
   const appFetch = ((url: string, init?: RequestInit) => s.app.request(url, init)) as typeof fetch;
   const mirror = (async () =>
@@ -147,6 +156,20 @@ describe("specialist agent server", () => {
     const again = await work("0xq1");
     expect(again.response.status).toBe(409);
     expect(again.paid).toBeUndefined(); // refused before any payment
+  });
+
+  it("refunds the fee to the payer when it was paid but couldn't deliver", async () => {
+    const refund = vi.fn(async () => "0.0.5005@9.9");
+    const { post, work } = setup({ failWork: true, refund });
+    await post("/quote", { task: "trip-goi-1", trip });
+    const res = await work("0xq1");
+    expect(res.response.status).toBe(502);
+    expect(await res.response.json()).toEqual({
+      error: "work_failed",
+      detail: "supplier said no",
+      refund: { transaction: "0.0.5005@9.9" },
+    });
+    expect(refund).toHaveBeenCalledWith("0.0.1", 50_000n, "refund trip-goi-1");
   });
 
   it("publishes its profile + listing once", async () => {

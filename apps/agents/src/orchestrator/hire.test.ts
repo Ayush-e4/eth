@@ -148,6 +148,27 @@ describe("hire", () => {
     expect(d.payingFetch).not.toHaveBeenCalled();
   });
 
+  it("reports the refund when a paid agent fails, and survives non-JSON replies", async () => {
+    const refunded = vi.fn(async () => ({
+      response: Response.json(
+        { error: "work_failed", detail: "supplier said no", refund: { transaction: "0.0.9@1.1" } },
+        { status: 502 },
+      ),
+      paid: { settlement: { transaction: "0.0.1@1.1" }, requirements: { payTo: "0.0.5005" } },
+    }));
+    await expect(
+      hire("flights", "t1", trip, deps({ payingFetch: refunded } as never)),
+    ).rejects.toThrow("HTTP 502 work_failed supplier said no — fee refunded: 0.0.9@1.1");
+    const html = vi.fn(async () => ({
+      response: new Response("Internal Server Error", { status: 500 }),
+      paid: { settlement: { transaction: "0.0.1@1.1" }, requirements: { payTo: "0.0.5005" } },
+    }));
+    await expect(hire("flights", "t1", trip, deps({ payingFetch: html } as never))).rejects.toThrow(
+      "HTTP 500 non_json_reply Internal Server Error",
+    );
+    expect(openJob).not.toHaveBeenCalled();
+  });
+
   it("records nothing on Arkiv when the payment is refused", async () => {
     const payingFetch = vi.fn(async () => ({
       response: Response.json(

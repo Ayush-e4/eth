@@ -18,6 +18,16 @@ export const TripSchema = z.object({
 
 export type Trip = z.infer<typeof TripSchema>;
 
+// Not real numbers, but not sequential either: suppliers reject placeholder-looking phones.
+const FAKE_PHONES = [
+  "9820471638",
+  "9867302915",
+  "9930548127",
+  "9819264073",
+  "9892607451",
+  "9821739506",
+];
+
 /** Clearly fake traveller #i for sandbox bookings (real profiles come from the app later). */
 export function demoTraveller(i: number): Traveller {
   const names = ["Asha", "Rohan", "Meera", "Kabir", "Isha", "Arjun"];
@@ -31,7 +41,7 @@ export function demoTraveller(i: number): Traveller {
     nationality: "IN",
     email: `traveller${i + 1}@example.com`,
     phoneCountryCode: "91",
-    phone: `98765432${String(i).padStart(2, "0")}`,
+    phone: FAKE_PHONES[i % FAKE_PHONES.length] ?? "9820471638",
   };
 }
 

@@ -16,7 +16,7 @@ describe("LiteApiClient", () => {
             roomTypes: [
               {
                 offerId: "o2",
-                offerRetailRate: [{ amount: 9000, currency: "INR" }],
+                offerRetailRate: { amount: 9000, currency: "INR" }, // real sandbox shape
                 rates: [{ name: "Deluxe" }],
               },
             ],

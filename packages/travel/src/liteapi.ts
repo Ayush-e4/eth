@@ -7,6 +7,8 @@ import { assertSandboxKey, LITEAPI_BOOK_URL, LITEAPI_URL, litePost } from "./lit
  * Docs: https://docs.liteapi.travel/reference/overview
  */
 
+const Money = z.object({ amount: z.number(), currency: z.string() });
+
 const RatesResponse = z.object({
   data: z.array(
     z.object({
@@ -15,9 +17,8 @@ const RatesResponse = z.object({
         z.object({
           offerId: z.string(),
           name: z.string().optional(),
-          offerRetailRate: z
-            .array(z.object({ amount: z.number(), currency: z.string() }))
-            .optional(),
+          // The sandbox returns one { amount, currency }; older docs show a list — accept both.
+          offerRetailRate: z.union([Money, z.array(Money)]).optional(),
           rates: z
             .array(z.object({ name: z.string(), boardName: z.string().optional() }))
             .optional(),
@@ -113,7 +114,9 @@ export class LiteApiClient {
     return parsed.data
       .flatMap((h) =>
         h.roomTypes.slice(0, 1).map((rt): HotelOffer | null => {
-          const price = rt.offerRetailRate?.[0];
+          const price = Array.isArray(rt.offerRetailRate)
+            ? rt.offerRetailRate[0]
+            : rt.offerRetailRate;
           if (!price) return null;
           return {
             offerId: rt.offerId,
