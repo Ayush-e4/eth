@@ -79,6 +79,13 @@ describe("decodeEntity", () => {
     expect(d?.record.agent).toBe(AGENT);
   });
 
+  it("carries the signed item price in the payload", () => {
+    const priced = { ...quote, itemTotal: 5216.4, itemCurrency: "INR" };
+    expect(toPayloadJson(priced)).toMatchObject({ itemTotal: 5216.4, itemCurrency: "INR" });
+    const d = decodeEntity("quote", entity(priced, quoteAttrs()));
+    expect(d?.record).toMatchObject({ itemTotal: 5216.4, itemCurrency: "INR" });
+  });
+
   it("rejects a quote whose author is not the agent it claims to be", () => {
     expect(decodeEntity("quote", entity(quote, quoteAttrs(), OTHER))).toBeNull();
   });
