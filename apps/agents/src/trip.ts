@@ -28,8 +28,10 @@ export function demoTraveller(i: number): Traveller {
     familyName: "Traveller",
     gender: female ? "f" : "m",
     bornOn: `199${i % 10}-0${(i % 9) + 1}-15`,
+    nationality: "IN",
     email: `traveller${i + 1}@example.com`,
-    phone: `+9198765432${String(i).padStart(2, "0")}`,
+    phoneCountryCode: "91",
+    phone: `98765432${String(i).padStart(2, "0")}`,
   };
 }
 

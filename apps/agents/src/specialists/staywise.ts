@@ -3,11 +3,11 @@ import { demoTraveller } from "../trip";
 import type { SpecialistDef } from "./server";
 
 /** StayWise: finds and books the cheapest hotel near the destination airport (LiteAPI sandbox). Fee: 0.04 USDC. */
-export function hotelsAgent(lite: LiteApiClient): SpecialistDef<HotelOffer, HotelBooking> {
+export function staywise(lite: LiteApiClient): SpecialistDef<HotelOffer, HotelBooking> {
   return {
     name: "StayWise",
     skill: "hotels",
-    title: "Find + book the best-value hotel",
+    title: "StayWise — best-value hotel, booked via LiteAPI",
     description: "Searches hotels via LiteAPI and books the cheapest good option (sandbox).",
     priceUnits: 40_000n,
     async quote({ trip }) {
@@ -22,6 +22,8 @@ export function hotelsAgent(lite: LiteApiClient): SpecialistDef<HotelOffer, Hote
       return {
         note: `${best.hotelName} — ${best.roomName}${board}, ${best.total.toLocaleString("en-IN")} ${best.currency} total`,
         detail: best,
+        itemTotal: best.total,
+        itemCurrency: best.currency,
       };
     },
     async work({ task }, offer) {
@@ -33,7 +35,7 @@ export function hotelsAgent(lite: LiteApiClient): SpecialistDef<HotelOffer, Hote
           firstName: lead.givenName,
           lastName: lead.familyName,
           email: lead.email,
-          phone: lead.phone,
+          phone: `+${lead.phoneCountryCode}${lead.phone}`,
         },
         task,
       );

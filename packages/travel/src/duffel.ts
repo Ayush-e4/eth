@@ -1,8 +1,10 @@
 import { z } from "zod";
+import type { Traveller } from "./types";
 
 /**
  * Duffel flights API, used in **test mode** only (token starts with `duffel_test_`).
- * Test mode books on "Duffel Airways" (ZZ) with unrealistic prices — no real tickets.
+ * Test mode books on "Duffel Airways" (ZZ) with unrealistic prices — no real tickets — and the
+ * test balance is unlimited. Prices come in the account's billing currency (GBP here).
  * Docs: https://duffel.com/docs/api/v2
  */
 
@@ -43,7 +45,7 @@ const OrderResponse = z.object({
   }),
 });
 
-export interface FlightOffer {
+export interface DuffelOffer {
   offerId: string;
   passengerIds: string[];
   carrier: string;
@@ -56,17 +58,7 @@ export interface FlightOffer {
   currency: string;
 }
 
-export interface Traveller {
-  title: "mr" | "ms" | "mrs";
-  givenName: string;
-  familyName: string;
-  gender: "m" | "f";
-  bornOn: string; // YYYY-MM-DD
-  email: string;
-  phone: string; // E.164, e.g. +919876543210
-}
-
-export interface FlightBooking {
+export interface DuffelBooking {
   orderId: string;
   bookingReference: string;
   total: string;
@@ -104,7 +96,7 @@ export class DuffelClient {
     destination: string;
     date: string;
     adults: number;
-  }): Promise<FlightOffer[]> {
+  }): Promise<DuffelOffer[]> {
     const json = await this.post("/air/offer_requests?return_offers=true", {
       slices: [{ origin: q.origin, destination: q.destination, departure_date: q.date }],
       passengers: Array.from({ length: q.adults }, () => ({ type: "adult" })),
@@ -131,12 +123,12 @@ export class DuffelClient {
           currency: o.total_currency,
         };
       })
-      .filter((o): o is FlightOffer => o !== null)
+      .filter((o): o is DuffelOffer => o !== null)
       .sort((a, b) => Number(a.total) - Number(b.total));
   }
 
   /** Books an offer instantly, paid from the Duffel test balance. */
-  async bookFlight(offer: FlightOffer, travellers: Traveller[]): Promise<FlightBooking> {
+  async bookFlight(offer: DuffelOffer, travellers: Traveller[]): Promise<DuffelBooking> {
     if (travellers.length !== offer.passengerIds.length) {
       throw new Error("Need one traveller per passenger on the offer");
     }
@@ -152,7 +144,7 @@ export class DuffelClient {
         gender: t.gender,
         born_on: t.bornOn,
         email: t.email,
-        phone_number: t.phone,
+        phone_number: `+${t.phoneCountryCode}${t.phone}`,
       })),
     });
     const { data } = OrderResponse.parse(json);

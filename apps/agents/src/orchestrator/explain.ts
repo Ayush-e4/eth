@@ -14,7 +14,8 @@ export type Explanation = z.infer<typeof ExplanationSchema>;
 
 const SYSTEM = `You explain to a traveller what their AI agents just did, in plain friendly English.
 - itinerary: short bullet lines (flight, hotel), using only facts from the data.
-- spends: one entry per agent fee paid in USDC, with a one-sentence "why" (e.g. cheapest live quote, other agents skipped and why).
+- spends: one entry per agent fee paid in USDC, with a one-sentence "why" taken from "choice" and
+  "otherQuotes": agents competed on total cost (item + fee, in INR), so say who lost and by how much.
 - caveats: say clearly these are SANDBOX bookings (no real tickets or rooms), plus anything that failed.
 Never invent prices, times, names or booking references that are not in the data.`;
 
@@ -27,9 +28,10 @@ export function explainRun(trip: Trip, hires: Hire[], failures: string[]): Promi
       agent: h.agent,
       quote: h.quoteNote,
       feeUsdc: (Number(h.feeUnits) / 1e6).toFixed(2),
+      choice: h.choice,
       hederaTx: h.hederaTx,
       result: h.result,
-      skippedCandidates: h.rejected,
+      otherQuotes: h.rejected,
     })),
     failures,
   };

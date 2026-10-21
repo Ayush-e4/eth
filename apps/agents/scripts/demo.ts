@@ -1,22 +1,25 @@
-// End-to-end: "Plan a Goa weekend" → orchestrator hires a flights agent and a hotels agent it
-// found on Arkiv, pays each through MandateRegistry over x402, they book in sandbox, and Claude
-// explains every spend. Needs ANTHROPIC_API_KEY, DUFFEL_ACCESS_TOKEN, LITEAPI_KEY in .env.
+// End-to-end: "Plan a Goa weekend" → the orchestrator finds agents on Arkiv, makes two flights
+// agents compete on total cost, hires the winner and a hotels agent, pays each through
+// MandateRegistry over x402, they book in sandbox, and Claude explains every spend.
+// Needs ANTHROPIC_API_KEY, DUFFEL_ACCESS_TOKEN (duffel_test_…) and LITEAPI_KEY (sand_…) in .env.
 // Run: pnpm --filter @eth/agents demo ["your request"]
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { ARKIV_EXPLORER, arkivReader, arkivWriter } from "@eth/arkiv";
 import { loadConfig, NETWORKS } from "@eth/hedera";
 import { DEPLOYMENTS, hederaTestnet, MandateClient, tokenIdToEvmAddress } from "@eth/mandates";
-import { DuffelClient, LiteApiClient } from "@eth/travel";
+import { DuffelClient, LiteApiClient, LiteFlightsClient } from "@eth/travel";
 import { createPayingFetch, HttpFacilitator, MirrorResolver } from "@eth/x402";
 import { serve } from "@hono/node-server";
 import type { Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { loadIdentities } from "../src/identities";
+import { loadIdentities, type SpecialistIdentity } from "../src/identities";
+import { fetchInrRates } from "../src/orchestrator/procure";
 import { runTrip } from "../src/orchestrator/run";
-import { flightsAgent } from "../src/specialists/flights";
-import { hotelsAgent } from "../src/specialists/hotels";
+import { airnest } from "../src/specialists/airnest";
 import { createSpecialist } from "../src/specialists/server";
+import { skyhop } from "../src/specialists/skyhop";
+import { staywise } from "../src/specialists/staywise";
 
 for (const k of ["ANTHROPIC_API_KEY", "DUFFEL_ACCESS_TOKEN", "LITEAPI_KEY"]) {
   if (!process.env[k]) throw new Error(`${k} is empty in .env`);
@@ -24,6 +27,8 @@ for (const k of ["ANTHROPIC_API_KEY", "DUFFEL_ACCESS_TOKEN", "LITEAPI_KEY"]) {
 const request =
   process.argv[2] ??
   "Plan a weekend in Goa for 2 of us, flying from Mumbai next Friday and back on Sunday. Budget ₹40,000.";
+const liteKey = process.env.LITEAPI_KEY as string;
+const duffelToken = process.env.DUFFEL_ACCESS_TOKEN as string;
 const config = loadConfig();
 const net = NETWORKS.testnet;
 const ids = loadIdentities();
@@ -48,36 +53,34 @@ for (let i = 0; i < 40; i++) {
 }
 const facilitatorClient = new HttpFacilitator("http://localhost:8402");
 
-// ── Specialist agents ────────────────────────────────────────────────
-const ctx = (identity: typeof ids.flights, port: number) => ({
+// ── Specialist agents: two compete for flights, one does hotels ──────
+const ctx = (identity: SpecialistIdentity, port: number) => ({
   identity,
   baseUrl: `http://localhost:${port}`,
   facilitator: facilitatorClient,
   usdcTokenId: net.usdcTokenId,
   executorId: DEPLOYMENTS.testnet.mandateRegistryId,
 });
-const flights = createSpecialist(
-  flightsAgent(new DuffelClient(process.env.DUFFEL_ACCESS_TOKEN as string)),
-  ctx(ids.flights, 8411),
-);
-const hotels = createSpecialist(
-  hotelsAgent(new LiteApiClient(process.env.LITEAPI_KEY as string)),
-  ctx(ids.hotels, 8412),
-);
-const servers = [
-  serve({ fetch: flights.app.fetch, port: 8411 }),
-  serve({ fetch: hotels.app.fetch, port: 8412 }),
+const specialists = [
+  {
+    port: 8411,
+    s: createSpecialist(skyhop(new DuffelClient(duffelToken)), ctx(ids.agents.skyhop, 8411)),
+  },
+  {
+    port: 8413,
+    s: createSpecialist(airnest(new LiteFlightsClient(liteKey)), ctx(ids.agents.airnest, 8413)),
+  },
+  {
+    port: 8412,
+    s: createSpecialist(staywise(new LiteApiClient(liteKey)), ctx(ids.agents.staywise, 8412)),
+  },
 ];
-console.log(
-  "1. agents online — SkyHop (flights) :8411, StayWise (hotels) :8412, facilitator :8402",
-);
-for (const [name, s] of [
-  ["SkyHop", flights],
-  ["StayWise", hotels],
-] as const) {
+const servers = specialists.map(({ s, port }) => serve({ fetch: s.app.fetch, port }));
+console.log("1. agents online — SkyHop :8411 + AirNest :8413 (flights), StayWise :8412 (hotels)");
+for (const { s } of specialists) {
   const r = await s.publish();
   console.log(
-    `   ${name} ${r.alreadyListed ? "already listed on Arkiv" : `listed on Arkiv ${ARKIV_EXPLORER.tx(r.txHash)}`}`,
+    `   ${s.name} ${r.alreadyListed ? "already listed on Arkiv" : `listed on Arkiv ${ARKIV_EXPLORER.tx(r.txHash)}`}`,
   );
 }
 
@@ -93,10 +96,10 @@ const { id: mandateId, receipt } = await mc.createMandate(owner, {
   budget: 300_000n, // 0.30 USDC of agent fees
   perPaymentCap: 100_000n,
   expiresAt: BigInt(Math.floor(Date.now() / 1000) + 3600),
-  payees: [ids.flights.evm, ids.hotels.evm],
+  payees: [ids.agents.skyhop.evm, ids.agents.airnest.evm, ids.agents.staywise.evm],
 });
 console.log(
-  `2. mandate #${mandateId}: orchestrator may spend 0.30 USDC on agent fees (SkyHop, StayWise only)  ${tx(receipt.transactionHash)}`,
+  `2. mandate #${mandateId}: orchestrator may spend 0.30 USDC on agent fees, only to SkyHop, AirNest, StayWise  ${tx(receipt.transactionHash)}`,
 );
 
 // ── The orchestrator runs the trip ───────────────────────────────────
@@ -120,6 +123,7 @@ const run = await runTrip(request, {
   registry: DEPLOYMENTS.testnet.mandateRegistry,
   mandateId,
   payer: config.operatorId,
+  inrRates: await fetchInrRates(),
   log,
 });
 

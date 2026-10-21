@@ -11,7 +11,7 @@ apps/
   web/          Next.js — mobile-first app + dashboard
   api/          Hono — API (auth, tasks, mandates, wallets)
   facilitator/  x402 facilitator (Hedera transferExecutor via MandateRegistry)
-  agents/       Orchestrator (Claude) + SkyHop (flights) and StayWise (hotels) specialist agents
+  agents/       Orchestrator (Claude) + SkyHop/AirNest (competing flights) and StayWise (hotels)
 packages/
   shared/     Types and zod schemas shared by every app
   hedera/     Hedera SDK helpers: accounts, USDC payments, HCS logs, mirror reads
@@ -19,7 +19,7 @@ packages/
   mandates/   TypeScript client for MandateRegistry (ABI, EIP-712 signing, MandateClient)
   x402/       x402 paywall middleware, paying fetch for agents, facilitator logic
   arkiv/      Arkiv marketplace records: agents, listings, expiring quotes, jobs, receipts, ratings
-  travel/     Duffel (flights, test mode) and LiteAPI (hotels, sandbox) clients
+  travel/     Duffel (flights, test mode) and LiteAPI (flights + hotels, sandbox) clients
 arkiv/
   schema.md   Per-entity Arkiv schema, expirations and the queries the app runs
   friction.md What was hard building on Arkiv
@@ -28,7 +28,7 @@ docs/
   mandates.md MandateRegistry design, rules, deployment, live demo results
   x402.md     Agent-to-agent payments over HTTP 402, facilitator guarantees, demo
   arkiv.md    Why Arkiv, what lives where, what we kept off Arkiv, live demo
-  agents.md   The agents, one run step by step, safety rules, how to run the demo
+  agents.md   The agents, procurement, one run step by step, safety rules, how to run the demo
 ```
 
 ## Getting started

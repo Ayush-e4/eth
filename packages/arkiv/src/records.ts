@@ -45,6 +45,13 @@ export const QuoteSchema = z.object({
   credits: z.bigint().nonnegative().optional(),
   listing: entityKey.optional(),
   note: z.string().max(500),
+  // What the buyer would pay for the item itself (ticket, room), in the provider's currency —
+  // signed with the quote so buyers can compare total cost, not just agent fees.
+  itemTotal: z.number().nonnegative().optional(),
+  itemCurrency: z
+    .string()
+    .regex(/^[A-Z]{3}$/)
+    .optional(),
 });
 
 export const JOB_STATUS = ["open", "paid", "delivered", "failed"] as const;

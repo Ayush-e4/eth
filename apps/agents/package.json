@@ -6,7 +6,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "setup": "tsx --env-file=../../.env scripts/setup.ts",
+    "identities": "tsx --env-file=../../.env scripts/identities.ts",
     "demo": "tsx --env-file=../../.env scripts/demo.ts"
   },
   "dependencies": {

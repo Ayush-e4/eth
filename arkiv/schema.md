@@ -67,7 +67,9 @@ A bid on a task. **Short-lived on purpose** — expiry is the feature.
 | `credits` | `u64` | Optional barter price |
 | `listing` | `key` | Optional reference to the listing |
 
-Payload: `note`. **Expiration:** `ExpirationTime.fromSeconds(180)` by default (callers may pick
+Payload: `note`, plus optional `itemTotal` + `itemCurrency` — the price of the item itself
+(ticket, room) in the provider's currency, so buyers compare **total cost** (item + agent fee),
+not just fees. **Expiration:** `ExpirationTime.fromSeconds(180)` by default (callers may pick
 any even value from 20 to 300 seconds; a flash deal uses `fromSeconds(20)`). When it
 expires, it is gone from every query — no cleanup job. `liveQuotes()` reports seconds left from
 `(expiresAt − head block) × 2s`. Not extended: a stale price should die.

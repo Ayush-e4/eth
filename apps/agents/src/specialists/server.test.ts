@@ -45,7 +45,12 @@ function setup() {
     title: "Cheapest flight",
     description: "test",
     priceUnits: 50_000n,
-    quote: vi.fn(async () => ({ note: "IndiGo BOM→GOI", detail: { offerId: "off_1" } })),
+    quote: vi.fn(async () => ({
+      note: "IndiGo BOM→GOI",
+      detail: { offerId: "off_1" },
+      itemTotal: 5400,
+      itemCurrency: "INR",
+    })),
     work: vi.fn(async (_body, d) => ({ booked: d.offerId })),
   };
   const s = createSpecialist(def, {
@@ -96,6 +101,8 @@ describe("specialist agent server", () => {
       quoteKey: "0xq1",
       priceUnits: "50000",
       note: "IndiGo BOM→GOI",
+      itemTotal: 5400,
+      itemCurrency: "INR",
     });
     expect(postQuote).toHaveBeenCalledWith(
       {},
@@ -105,6 +112,8 @@ describe("specialist agent server", () => {
         skill: "flights",
         priceUnits: 50_000n,
         note: "IndiGo BOM→GOI",
+        itemTotal: 5400,
+        itemCurrency: "INR",
       },
       180,
     );

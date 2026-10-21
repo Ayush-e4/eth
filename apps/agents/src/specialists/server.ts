@@ -4,6 +4,14 @@ import { Hono } from "hono";
 import type { SpecialistIdentity } from "../identities";
 import { type TaskBody, TaskBodySchema } from "../trip";
 
+/** A specialist's answer to /quote: what it found, and what the item itself costs. */
+export interface Quoted<Detail> {
+  note: string;
+  detail: Detail;
+  itemTotal: number; // ticket / room price in the provider's currency (signed on Arkiv)
+  itemCurrency: string;
+}
+
 /** What makes one specialist different from another: how it quotes and how it does the work. */
 export interface SpecialistDef<Detail, Result> {
   name: string;
@@ -12,7 +20,7 @@ export interface SpecialistDef<Detail, Result> {
   description: string;
   priceUnits: bigint; // agent fee per job, USDC base units
   /** Look up the best option for the trip (no side effects). */
-  quote(body: TaskBody): Promise<{ note: string; detail: Detail }>;
+  quote(body: TaskBody): Promise<Quoted<Detail>>;
   /** Do the job for a quote the buyer accepted and paid for. */
   work(body: TaskBody, detail: Detail): Promise<Result>;
 }
@@ -54,7 +62,7 @@ export function createSpecialist<D, R>(def: SpecialistDef<D, R>, ctx: Specialist
 
   app.post("/quote", async (c) => {
     const body = TaskBodySchema.parse(await c.req.json());
-    const { note, detail } = await def.quote(body);
+    const { note, detail, itemTotal, itemCurrency } = await def.quote(body);
     const { entityKey } = await postQuote(
       writer,
       {
@@ -63,11 +71,19 @@ export function createSpecialist<D, R>(def: SpecialistDef<D, R>, ctx: Specialist
         skill: def.skill,
         priceUnits: def.priceUnits,
         note,
+        itemTotal,
+        itemCurrency,
       },
       QUOTE_TTL_SECONDS,
     );
     quotes.set(entityKey, { detail, expiresAt: Date.now() + QUOTE_TTL_SECONDS * 1000 });
-    return c.json({ quoteKey: entityKey, priceUnits: def.priceUnits.toString(), note });
+    return c.json({
+      quoteKey: entityKey,
+      priceUnits: def.priceUnits.toString(),
+      note,
+      itemTotal,
+      itemCurrency,
+    });
   });
 
   app.post(
@@ -130,5 +146,5 @@ export function createSpecialist<D, R>(def: SpecialistDef<D, R>, ctx: Specialist
     return { alreadyListed: false as const, txHash: r.txHash };
   }
 
-  return { app, publish };
+  return { name: def.name, app, publish };
 }

@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { z } from "zod";
 
 /**
- * Local agent identities created by `pnpm --filter @eth/agents setup`.
+ * Local agent identities created by `pnpm --filter @eth/agents identities`.
  * One ECDSA key per specialist does everything: it controls the agent's Hedera account
  * (where it gets paid), and it signs the agent's Arkiv records — so the marketplace author,
  * the mandate payee and the payment recipient are provably the same agent.
@@ -19,10 +19,17 @@ const SpecialistIdentity = z.object({
   hederaAccount: z.string().regex(/^0\.0\.\d+$/),
 });
 
+/** The specialist agents this app runs, by slug. */
+export const AGENT_SLUGS = ["skyhop", "airnest", "staywise"] as const;
+export type AgentSlug = (typeof AGENT_SLUGS)[number];
+
 export const IdentitiesSchema = z.object({
   orchestrator: z.object({ key: hex, evm }),
-  flights: SpecialistIdentity,
-  hotels: SpecialistIdentity,
+  agents: z.object({
+    skyhop: SpecialistIdentity,
+    airnest: SpecialistIdentity,
+    staywise: SpecialistIdentity,
+  }),
 });
 
 export type Identities = z.infer<typeof IdentitiesSchema>;
@@ -35,7 +42,7 @@ export function loadIdentities(): Identities {
   try {
     raw = readFileSync(IDENTITIES_PATH, "utf8");
   } catch {
-    throw new Error("No agent identities yet — run: pnpm --filter @eth/agents setup");
+    throw new Error("No agent identities yet — run: pnpm --filter @eth/agents identities");
   }
   return IdentitiesSchema.parse(JSON.parse(raw));
 }

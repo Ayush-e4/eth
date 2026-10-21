@@ -1,13 +1,11 @@
 import { z } from "zod";
+import { assertSandboxKey, LITEAPI_BOOK_URL, LITEAPI_URL, litePost } from "./liteapi-http";
 
 /**
  * LiteAPI (Nuitee Connect) hotels, used with a **sandbox** key only (starts with `sand_`).
  * Sandbox bookings with payment method ACC_CREDIT_CARD are simulated — nobody is charged.
  * Docs: https://docs.liteapi.travel/reference/overview
  */
-
-const SEARCH = "https://api.liteapi.travel/v3.0";
-const BOOK = "https://book.liteapi.travel/v3.0";
 
 const RatesResponse = z.object({
   data: z.array(
@@ -82,19 +80,11 @@ export class LiteApiClient {
     private readonly apiKey: string,
     private readonly fetchImpl: typeof fetch = fetch,
   ) {
-    if (!apiKey.startsWith("sand_")) {
-      throw new Error("Refusing to use a LiteAPI key that is not a sandbox key");
-    }
+    assertSandboxKey(apiKey);
   }
 
-  private async post(base: string, path: string, body: unknown): Promise<unknown> {
-    const res = await this.fetchImpl(`${base}${path}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-API-Key": this.apiKey },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) throw new Error(`LiteAPI ${path} → HTTP ${res.status}: ${await res.text()}`);
-    return res.json();
+  private post(base: string, path: string, body: unknown): Promise<unknown> {
+    return litePost(this.fetchImpl, this.apiKey, `${base}${path}`, body);
   }
 
   /** Hotels near an airport (IATA code), cheapest offer per hotel, cheapest first. */
@@ -107,7 +97,7 @@ export class LiteApiClient {
     guestNationality?: string;
     limit?: number;
   }): Promise<HotelOffer[]> {
-    const json = await this.post(SEARCH, "/hotels/rates", {
+    const json = await this.post(LITEAPI_URL, "/hotels/rates", {
       iataCode: q.iataCode,
       checkin: q.checkin,
       checkout: q.checkout,
@@ -142,7 +132,10 @@ export class LiteApiClient {
 
   /** Locks the rate and returns a prebook id (step 1 of 2). */
   async prebook(offerId: string): Promise<string> {
-    const json = await this.post(BOOK, "/rates/prebook", { offerId, usePaymentSdk: false });
+    const json = await this.post(LITEAPI_BOOK_URL, "/rates/prebook", {
+      offerId,
+      usePaymentSdk: false,
+    });
     return PrebookResponse.parse(json).data.prebookId;
   }
 
@@ -152,7 +145,7 @@ export class LiteApiClient {
     guest: HotelGuest,
     clientReference?: string,
   ): Promise<HotelBooking> {
-    const json = await this.post(BOOK, "/rates/book", {
+    const json = await this.post(LITEAPI_BOOK_URL, "/rates/book", {
       prebookId,
       clientReference,
       holder: guest,
