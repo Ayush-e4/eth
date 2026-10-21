@@ -10,6 +10,8 @@ const SYSTEM = `You turn a traveller's request into a structured trip for bookin
   If no departure date is given, use the first Friday after today.
 - returnFlight is true unless the traveller only wants a one-way flight (e.g. "one way", or returning by train or car).
 - adults defaults to 1. budgetInr is the total budget in Indian rupees if stated, else null.
+- nonRefundableOk is true only if the traveller says price matters more than flexibility, or that a
+  non-refundable booking is fine; otherwise false (we book rates that can be cancelled/changed).
 - hotelWishes: what the traveller wants from the hotel in a few words (e.g. "quiet, beachfront"), or "".
 - notes: anything else that matters for choosing (e.g. "nonstop flights"), or "".`;
 

@@ -54,7 +54,7 @@ export const QuoteSchema = z.object({
     .optional(),
 });
 
-export const JOB_STATUS = ["open", "paid", "delivered", "failed"] as const;
+export const JOB_STATUS = ["open", "paid", "delivered", "failed", "changed", "cancelled"] as const;
 
 /** A hire: buyer took a quote. Owned by the buyer, who updates its status. */
 export const JobSchema = z.object({

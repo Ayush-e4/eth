@@ -80,6 +80,20 @@ describe("LiteApiClient", () => {
     expect(calls[1]?.body).not.toHaveProperty("iataCode");
   });
 
+  it("treats LiteAPI's 'no availability' reply as no results, and other errors as errors", async () => {
+    const none = stub({
+      "/hotels/rates": { error: { code: 2001, message: "no availability found" } },
+    });
+    const stay = { iataCode: "GOI", checkin: "2026-10-23", checkout: "2026-10-25", adults: 2 };
+    expect(await new LiteApiClient("sand_x", none.fetchImpl).searchHotels(stay)).toEqual([]);
+    const bad = stub({
+      "/hotels/rates": { error: { code: 4002, message: "invalid occupancies" } },
+    });
+    await expect(new LiteApiClient("sand_x", bad.fetchImpl).searchHotels(stay)).rejects.toThrow(
+      "4002",
+    );
+  });
+
   it("prebooks then books with the sandbox card", async () => {
     const { fetchImpl, calls } = stub({
       "/rates/prebook": {

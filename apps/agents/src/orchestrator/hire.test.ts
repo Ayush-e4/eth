@@ -22,6 +22,7 @@ const trip: Trip = {
   departDate: "2026-11-06",
   returnDate: "2026-11-08",
   returnFlight: true,
+  nonRefundableOk: false,
   hotelWishes: "",
   adults: 2,
   budgetInr: null,

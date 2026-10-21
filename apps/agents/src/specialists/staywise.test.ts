@@ -21,6 +21,7 @@ const body = {
     departDate: "2026-10-23",
     returnDate: "2026-10-25",
     returnFlight: true,
+    nonRefundableOk: false,
     hotelWishes: "",
     adults: 2,
     budgetInr: null,

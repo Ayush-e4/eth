@@ -1,6 +1,6 @@
 import { arkivReader, arkivWriter, findListings, postQuote, publishAgent } from "@eth/arkiv";
 import { type Facilitator, paywall } from "@eth/x402";
-import { Hono } from "hono";
+import { type Context, Hono, type MiddlewareHandler } from "hono";
 import type { SpecialistIdentity } from "../identities";
 import { type TaskBody, TaskBodySchema } from "../trip";
 
@@ -23,7 +23,21 @@ export interface SpecialistDef<Detail, Result> {
   quote(body: TaskBody): Promise<Quoted<Detail>>;
   /** Do the job for a quote the buyer accepted and paid for. */
   work(body: TaskBody, detail: Detail): Promise<Result>;
+  /** Extra routes (e.g. managing what was booked), mounted on the same service. */
+  extend?(app: Hono, kit: SpecialistKit): void;
 }
+
+/** Building blocks a specialist's extra routes can use. */
+export interface SpecialistKit {
+  writer: ReturnType<typeof arkivWriter>;
+  ctx: SpecialistContext;
+  /** x402 paywall for a fee to this agent's own account. */
+  feeWall(units: bigint, description: string): MiddlewareHandler;
+  /** After a paid request failed: send the fee back to whoever paid it. */
+  refundPaid(c: Context, units: bigint, memo: string): Promise<Refund | undefined>;
+}
+
+export type Refund = { transaction: string } | { failed: string };
 
 const QUOTE_TTL_SECONDS = 180;
 
@@ -52,6 +66,24 @@ export function createSpecialist<D, R>(def: SpecialistDef<D, R>, ctx: Specialist
     return q && q.expiresAt > Date.now() ? q : undefined;
   };
   const app = new Hono();
+  const feeWall = (units: bigint, description: string) =>
+    paywall({
+      network: "hedera:testnet",
+      asset: ctx.usdcTokenId,
+      amount: units.toString(),
+      payTo: ctx.identity.hederaAccount,
+      executors: [ctx.executorId],
+      facilitator: ctx.facilitator,
+      description,
+    });
+  const refundPaid = async (c: Context, units: bigint, memo: string) => {
+    const payer = (c.get("x402Settlement" as never) as { payer?: string } | undefined)?.payer;
+    if (!payer || !ctx.refund) return undefined;
+    return ctx
+      .refund(payer, units, memo)
+      .then((transaction): Refund => ({ transaction }))
+      .catch((e: unknown): Refund => ({ failed: String(e).slice(0, 200) }));
+  };
 
   app.get("/", (c) =>
     c.json({
@@ -97,15 +129,7 @@ export function createSpecialist<D, R>(def: SpecialistDef<D, R>, ctx: Specialist
       if (!live(body.data.quoteKey)) return c.json({ error: "unknown_or_expired_quote" }, 409);
       await next();
     },
-    paywall({
-      network: "hedera:testnet",
-      asset: ctx.usdcTokenId,
-      amount: def.priceUnits.toString(),
-      payTo: ctx.identity.hederaAccount,
-      executors: [ctx.executorId],
-      facilitator: ctx.facilitator,
-      description: def.title,
-    }),
+    feeWall(def.priceUnits, def.title),
     async (c) => {
       const body = TaskBodySchema.parse(await c.req.json());
       const quote = live(body.quoteKey);
@@ -117,18 +141,13 @@ export function createSpecialist<D, R>(def: SpecialistDef<D, R>, ctx: Specialist
       } catch (err) {
         // Paid but couldn't deliver → give the fee back (until pay-on-delivery escrow exists).
         const detail = (err instanceof Error ? err.message : String(err)).slice(0, 500);
-        const payer = (c.get("x402Settlement" as never) as { payer?: string } | undefined)?.payer;
-        const refund =
-          payer && ctx.refund
-            ? await ctx
-                .refund(payer, def.priceUnits, `refund ${body.task}`)
-                .then((transaction) => ({ transaction }))
-                .catch((e: unknown) => ({ failed: String(e).slice(0, 200) }))
-            : undefined;
+        const refund = await refundPaid(c, def.priceUnits, `refund ${body.task}`);
         return c.json({ error: "work_failed", detail, refund }, 502);
       }
     },
   );
+
+  def.extend?.(app, { writer, ctx, feeWall, refundPaid });
 
   /** Publish profile + listing on Arkiv unless this agent already has a live listing. */
   async function publish() {

@@ -23,6 +23,8 @@ const SemanticResponse = z.object({
 });
 
 const RatesResponse = z.object({
+  // "No availability" comes back as HTTP 200 with { error: { code: 2001 } } and no data.
+  error: z.object({ code: z.number(), message: z.string().optional() }).optional(),
   data: z.array(
     z.object({
       hotelId: z.string(),
@@ -134,6 +136,7 @@ export class LiteApiClient {
   async searchHotels(q: {
     iataCode?: string; // hotels near this airport…
     hotelIds?: string[]; // …or exactly these hotels
+    refundableOnly?: boolean; // only rates with free cancellation (RFN)
     checkin: string;
     checkout: string;
     adults: number;
@@ -151,9 +154,17 @@ export class LiteApiClient {
       guestNationality: q.guestNationality ?? "IN",
       maxRatesPerHotel: 1,
       includeHotelData: true,
+      ...(q.refundableOnly ? { refundableRatesOnly: true } : {}),
       limit: q.limit ?? 20,
     });
-    const parsed = RatesResponse.parse(json);
+    const parsed = RatesResponse.parse(
+      (json as { error?: unknown }).error ? { data: [], ...(json as object) } : json,
+    );
+    if (parsed.error && parsed.error.code !== 2001) {
+      throw new Error(
+        `LiteAPI /hotels/rates → ${parsed.error.code}: ${parsed.error.message ?? ""}`,
+      );
+    }
     const names = new Map((parsed.hotels ?? []).map((h) => [h.id, h.name]));
     return parsed.data
       .flatMap((h) =>

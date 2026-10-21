@@ -8,7 +8,7 @@ inside a mandate a human signed on Hedera.
 | **Orchestrator** | Buyer. An agent (Claude Haiku on the Tool Runner): plans, gets quotes, checks hotels, hires, explains | — | — | Claude Haiku (`claude-haiku-5-5`) |
 | **SkyHop** | Specialist | `flights`: cheapest fare | 0.05 USDC | Duffel (test mode) |
 | **AirNest** | SkyHop's competitor | `flights`: cheapest fare | 0.03 USDC | LiteAPI flights (sandbox) |
-| **StayWise** | Specialist | `hotels`: best-value hotel for the traveller's wishes | 0.04 USDC | LiteAPI hotels (sandbox) |
+| **StayWise** | Specialist | `hotels`: best-value hotel for the traveller's wishes; later changes and cancels | 0.04 USDC (+ 0.02 change, 0.01 guest) | LiteAPI hotels (sandbox) |
 
 Web2 analogy: the orchestrator is a company buyer on Upwork with a company card that has a limit.
 SkyHop, AirNest and StayWise are freelancers with public profiles. Upwork's database is
@@ -91,6 +91,40 @@ cheapest strong match. `--autopilot` runs the old fixed flow without the agent l
 malformed inputs to the newer dynamic-filtering version in our tests; Sonnet is reserved for
 anything Haiku can't do.
 
+## Managing a booking later
+
+The traveller comes back: *"add a night"*, *"put Rohan's name on the hotel"*, *"cancel the hotel"*.
+`pnpm --filter @eth/agents manage "…"` loads the saved trip, and a follow-up Claude agent works through
+StayWise, the agent that made the booking.
+
+| Action | StayWise route | Fee | Under the hood (LiteAPI) |
+|---|---|---|---|
+| Look up | `POST /bookings/:id/view` | free | booking + refund rules + cost of cancelling now |
+| Change dates / guests | `…/change-options` → `…/change` | 0.02 USDC | locked alternatives at the same hotel → rebook; old booking auto-cancelled |
+| Change lead guest | `…/guest` | 0.01 USDC | amendment request (`PENDING` until the hotel processes it) |
+| Cancel | `…/cancel` | free | `CANCELLED` (refund) or `CANCELLED_WITH_CHARGES` |
+
+- **Only the buyer can touch a booking.** Web2: "only the account that ordered can modify the order".
+  Here every request is **signed** with the orchestrator's key (`src/auth.ts`), and StayWise checks
+  the signer is the *buyer* on the booking's **Arkiv job**. Checked before any fee is charged.
+- **Refundable by default.** StayWise books free-cancellation rates unless the traveller says price
+  matters more (`nonRefundableOk`), because non-refundable bookings can't be changed or refunded.
+- **Claude asks before money is lost** (`ask_user`): a change that costs more than what was paid, or
+  a cancellation with charges. Code refuses those actions until the traveller said yes; cheaper
+  changes and free cancellations just happen.
+- **The public record follows:** the old Arkiv job becomes `changed` (a new job + receipt for the new
+  booking) or `cancelled`; each fee has a receipt.
+- Each agent keeps its own records in a local JSON file (`.staywise.local.json`, `.trips.local.json`,
+  gitignored) until Postgres arrives.
+
+Live (13–15 Nov trip, Park Inn Candolim, refundable):
+
+| Request | What happened |
+|---|---|
+| "one more night, check out on the 16th" | options +57% → **asked**: "28,050.63 INR total, up from 17,815.68… extra 10,234.95 INR plus a 0.02 USDC fee. Proceed?" → yes → new booking `h6Byy7oZ6`, old `nQ2dX8UFw` cancelled by LiteAPI. Claude also warned the return flight leaves 15 Nov 00:05, so the extra night is wasted unless flights change |
+| "put Rohan as lead guest" | amendment #3661 `PENDING`, 0.01 USDC |
+| "plans changed, cancel the hotel" | free cancellation, no question → `CANCELLED`, refund ₹28,051, job marked `cancelled` |
+
 ## Safety rules in code
 
 - **Only test keys.** `DuffelClient` refuses tokens that don't start with `duffel_test_`; both
@@ -129,6 +163,7 @@ anything Haiku can't do.
 ```bash
 pnpm --filter @eth/agents identities   # once: Hedera accounts for each agent + orchestrator key + Arkiv gas
 pnpm --filter @eth/agents demo         # or: demo "Plan 3 nights in Jaipur for 1 from Delhi, 12 Dec"
+pnpm --filter @eth/agents manage "add one more night to the hotel"   # [--yes|--no] to answer for you
 ```
 
 Needs `ANTHROPIC_API_KEY`, `DUFFEL_ACCESS_TOKEN` (`duffel_test_…`) and `LITEAPI_KEY` (`sand_…`,
@@ -194,4 +229,8 @@ inputs malformed with the newer tool version on Haiku.
 | `apps/agents/src/orchestrator/quotes.ts` | Discover → mandate filter → quotes → rank |
 | `apps/agents/src/orchestrator/hire.ts` | Pay → record (and the autopilot `hire`) |
 | `apps/agents/src/orchestrator/explain.ts` | Claude: "why did my agent spend this?" |
-| `apps/agents/scripts/demo.ts` | The whole run end to end |
+| `apps/agents/src/specialists/staywise-manage.ts` | StayWise booking management routes (signed, owner-checked, fees) |
+| `apps/agents/src/orchestrator/change-agent.ts` + `change-tools.ts` | The follow-up agent and its guardrails (`ask_user`) |
+| `apps/agents/src/auth.ts` | Signed agent requests |
+| `packages/travel/src/liteapi-manage.ts` | LiteAPI look up / alternatives / rebook / amend / cancel |
+| `apps/agents/scripts/demo.ts`, `manage.ts`, `runtime.ts` | Book a trip; change it later; shared wiring |
