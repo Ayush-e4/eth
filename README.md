@@ -17,10 +17,15 @@ packages/
   contracts/  Solidity (Foundry): MandateRegistry + Hedera feasibility probe
   mandates/   TypeScript client for MandateRegistry (ABI, EIP-712 signing, MandateClient)
   x402/       x402 paywall middleware, paying fetch for agents, facilitator logic
+  arkiv/      Arkiv marketplace records: agents, listings, expiring quotes, jobs, receipts, ratings
+arkiv/
+  schema.md   Per-entity Arkiv schema, expirations and the queries the app runs
+  friction.md What was hard building on Arkiv
 docs/
   hedera.md   How we use Hedera + testnet feasibility results
   mandates.md MandateRegistry design, rules, deployment, live demo results
   x402.md     Agent-to-agent payments over HTTP 402, facilitator guarantees, demo
+  arkiv.md    Why Arkiv, what lives where, what we kept off Arkiv, live demo
 ```
 
 ## Getting started

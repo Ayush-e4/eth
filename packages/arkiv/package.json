@@ -1,0 +1,24 @@
+{
+  "name": "@eth/arkiv",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "demo": "tsx --env-file=../../.env scripts/demo.ts"
+  },
+  "dependencies": {
+    "@arkiv-network/sdk": "0.8.1",
+    "viem": "2.57.7",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "tsx": "^4.23.15",
+    "vitest": "5.0.5"
+  }
+}
