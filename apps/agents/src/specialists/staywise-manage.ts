@@ -2,7 +2,7 @@ import { type ArkivReader, jobsForTask, postQuote } from "@eth/arkiv";
 import { type ChangeOption, cancellationFeeAt, type LiteHotelBookings } from "@eth/travel";
 import type { Context, Hono, Next } from "hono";
 import { z } from "zod";
-import { verifySigned } from "../auth";
+import { type RepriceDelegation, type Signed, verifySigned } from "../auth";
 import type { JsonStore } from "../store";
 import { demoTraveller } from "../trip";
 import type { SpecialistKit } from "./server";
@@ -17,7 +17,30 @@ export interface BookingRecord {
   task: string;
   quoteKey: string; // the quote the buyer paid for; its Arkiv job names the buyer
   owner?: `0x${string}`; // the buyer, once confirmed from Arkiv (or inherited on a change)
-  replacedBy?: string; // set when a date change replaced this booking
+  replacedBy?: string; // set when a change or a cheaper rebook replaced this booking
+  hotelId?: string; // to search the same hotel again (price watching)
+  adults?: number;
+  delegations?: Signed<RepriceDelegation>[]; // watchers the owner allowed to reprice this booking
+}
+
+/** Who owns a booking: the buyer on its Arkiv job (cached once found, inherited on changes). */
+export function bookingOwner(deps: Pick<ManageDeps, "store" | "arkiv">, me: string) {
+  return async (rec: BookingRecord): Promise<`0x${string}` | undefined> => {
+    if (rec.owner) return rec.owner;
+    const jobs = await jobsForTask(deps.arkiv, rec.task);
+    const job = jobs.find(
+      (j) => j.record.seller.toLowerCase() === me.toLowerCase() && j.record.quote === rec.quoteKey,
+    );
+    if (job) deps.store.set(rec.bookingId, { ...rec, owner: job.record.buyer });
+    return job?.record.buyer;
+  };
+}
+
+/** The address that signed this request, or undefined if unsigned/stale/forged. */
+export async function signerOf(c: Context): Promise<`0x${string}` | undefined> {
+  return verifySigned((n) => c.req.header(n), c.req.method, c.req.path, await c.req.text()).catch(
+    () => undefined,
+  );
 }
 
 export interface ManageDeps {
@@ -58,32 +81,15 @@ export function manageRoutes(deps: ManageDeps) {
     >();
     const record = (c: Context) => c.get("booking" as never) as BookingRecord;
 
-    async function ownerOf(rec: BookingRecord): Promise<`0x${string}` | undefined> {
-      if (rec.owner) return rec.owner;
-      const jobs = await jobsForTask(deps.arkiv, rec.task);
-      const job = jobs.find(
-        (j) => j.record.seller.toLowerCase() === me && j.record.quote === rec.quoteKey,
-      );
-      if (job) deps.store.set(rec.bookingId, { ...rec, owner: job.record.buyer });
-      return job?.record.buyer;
-    }
+    const ownerOf = bookingOwner(deps, me);
 
     const guard = async (c: Context, next: Next) => {
       const rec = deps.store.get(c.req.param("id") ?? "");
       if (!rec) return c.json({ error: "unknown_booking" }, 404);
       if (rec.replacedBy)
         return c.json({ error: "booking_replaced", replacedBy: rec.replacedBy }, 409);
-      let signer: `0x${string}`;
-      try {
-        signer = await verifySigned(
-          (n) => c.req.header(n),
-          c.req.method,
-          c.req.path,
-          await c.req.text(),
-        );
-      } catch (err) {
-        return c.json({ error: "unauthorized", detail: String(err) }, 401);
-      }
+      const signer = await signerOf(c);
+      if (!signer) return c.json({ error: "unauthorized" }, 401);
       const buyer = await ownerOf(rec);
       if (!buyer || buyer.toLowerCase() !== signer.toLowerCase()) {
         return c.json({ error: "not_your_booking" }, 403);

@@ -1,6 +1,7 @@
 import type { z } from "zod";
 import {
   AgentSchema,
+  InvoiceSchema,
   JobSchema,
   type Kind,
   ListingSchema,
@@ -32,6 +33,7 @@ const SCHEMAS = {
   job: JobSchema,
   receipt: ReceiptSchema,
   rating: RatingSchema,
+  invoice: InvoiceSchema,
 } as const;
 
 /** Indexed attribute name → record field. Attributes win over the payload: they are what queries matched. */
@@ -75,6 +77,7 @@ const ATTR_FIELDS: Record<Kind, Record<string, string>> = {
     hcs_seq: "hcsSequence",
   },
   rating: { agent: "agent", job: "job", rater: "rater", score: "score" },
+  invoice: { agent: "agent", buyer: "buyer", task: "task", amount_units: "amountUnits" },
 };
 
 /** Fields stored as bigint in records (decimal strings in JSON payloads). */

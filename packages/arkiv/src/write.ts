@@ -5,6 +5,8 @@ import {
   type Agent,
   AgentSchema,
   attributesFor,
+  type Invoice,
+  InvoiceSchema,
   type JOB_STATUS,
   type Job,
   JobSchema,
@@ -114,5 +116,16 @@ export async function rateAgent(w: ArkivWriter, rating: Rating) {
     attributes: attributesFor.rating(r),
     expires: LIFETIME.rating(),
     flags: { readonly: true },
+  });
+}
+
+/** An agent bills a buyer for work already done, with the proof the buyer will check. */
+export async function issueInvoice(w: ArkivWriter, invoice: Invoice) {
+  const i = InvoiceSchema.parse(invoice);
+  return w.createEntity({
+    payload: jsonToPayload(toPayloadJson(i)),
+    contentType: json,
+    attributes: attributesFor.invoice(i),
+    expires: LIFETIME.invoice(),
   });
 }

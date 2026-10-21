@@ -8,7 +8,7 @@ import { PROJECT } from "./config";
  * which Arkiv sets and nobody can forge — readers verify it (see read.ts).
  */
 
-export type Kind = "agent" | "listing" | "quote" | "job" | "receipt" | "rating";
+export type Kind = "agent" | "listing" | "quote" | "job" | "receipt" | "rating" | "invoice";
 
 const hederaId = z.string().regex(/^0\.0\.\d+$/);
 const address = z.string().regex(/^0x[0-9a-fA-F]{40}$/) as unknown as z.ZodType<`0x${string}`>;
@@ -88,12 +88,26 @@ export const RatingSchema = z.object({
   comment: z.string().max(500),
 });
 
+/**
+ * A bill from an agent for work it already did (e.g. a success fee), carrying its proof — such as
+ * another agent's signed attestation — so the buyer can check it before paying.
+ */
+export const InvoiceSchema = z.object({
+  agent: address, // issuer; must be $creator
+  buyer: address, // who owes it
+  task: slug,
+  amountUnits: z.bigint().positive(), // USDC base units
+  note: z.string().max(500),
+  proof: z.string().max(4000),
+});
+
 export type Agent = z.infer<typeof AgentSchema>;
 export type Listing = z.infer<typeof ListingSchema>;
 export type Quote = z.infer<typeof QuoteSchema>;
 export type Job = z.infer<typeof JobSchema>;
 export type Receipt = z.infer<typeof ReceiptSchema>;
 export type Rating = z.infer<typeof RatingSchema>;
+export type Invoice = z.infer<typeof InvoiceSchema>;
 
 const base = (kind: Kind) => ({ project: str(PROJECT), kind: str(kind) });
 
@@ -148,6 +162,13 @@ export const attributesFor = {
     job: key(r.job),
     rater: addr(r.rater),
     score: i32(r.score),
+  }),
+  invoice: (i: Invoice) => ({
+    ...base("invoice"),
+    agent: addr(i.agent),
+    buyer: addr(i.buyer),
+    task: str(i.task),
+    amount_units: u64(i.amountUnits),
   }),
 } as const;
 

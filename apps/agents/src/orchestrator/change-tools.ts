@@ -15,6 +15,8 @@ export interface ChangeDeps extends HireDeps {
   signer: LocalAccount; // signs requests: StayWise checks it is the buyer on the booking's job
   ask: (question: string) => Promise<string>; // the human in the loop
   save: (record: TripRecord) => void;
+  /** Sandbox demos only: let PriceGuard's SIMULATED savings be paid, to show the flow. */
+  demoPaySimulated?: boolean;
 }
 
 interface Option {

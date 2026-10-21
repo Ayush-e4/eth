@@ -17,6 +17,7 @@ export const LIFETIME = {
   job: () => ExpirationTime.fromDays(7),
   receipt: () => ExpirationTime.fromDays(90),
   rating: () => ExpirationTime.fromDays(365),
+  invoice: () => ExpirationTime.fromDays(30),
 } as const;
 
 export const ARKIV_CHAIN = tiramisu;

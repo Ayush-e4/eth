@@ -1,6 +1,6 @@
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { describe, expect, it } from "vitest";
-import { signedHeaders, verifySigned } from "./auth";
+import { signedHeaders, signStatement, verifySigned, verifyStatement } from "./auth";
 
 const me = privateKeyToAccount(generatePrivateKey());
 const body = JSON.stringify({ checkin: "2026-11-13", checkout: "2026-11-16" });
@@ -39,5 +39,35 @@ describe("signed agent requests", () => {
     const h = await signedHeaders(me, "POST", "/x", body, Date.now() - 10 * 60_000);
     await expect(verifySigned(reader(h), "POST", "/x", body)).rejects.toThrow("expired");
     await expect(verifySigned(reader({}), "POST", "/x", body)).rejects.toThrow("unsigned");
+  });
+});
+
+describe("signed statements", () => {
+  const slip = {
+    bookingId: "b1",
+    agent: me.address,
+    delegate: me.address,
+    minSavingInr: 500,
+    minSavingPercent: 5,
+    until: "2026-11-13",
+    issuedAt: 1,
+  };
+
+  it("anyone can check who signed it, whatever the key order", async () => {
+    const s = await signStatement(me, "reprice-delegation", slip);
+    expect(await verifyStatement("reprice-delegation", s)).toBe(true);
+    const reordered = {
+      ...s,
+      body: Object.fromEntries(Object.entries(slip).reverse()) as typeof slip,
+    };
+    expect(await verifyStatement("reprice-delegation", reordered)).toBe(true);
+  });
+
+  it("fails if the limits were edited or it's passed off as another kind", async () => {
+    const s = await signStatement(me, "reprice-delegation", slip);
+    expect(
+      await verifyStatement("reprice-delegation", { ...s, body: { ...slip, minSavingInr: 1 } }),
+    ).toBe(false);
+    expect(await verifyStatement("attestation", s)).toBe(false);
   });
 });
