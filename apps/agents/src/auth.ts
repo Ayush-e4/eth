@@ -56,3 +56,55 @@ export async function verifySigned(
   if (!ok) throw new Error("bad signature");
   return address as `0x${string}`;
 }
+
+/** A JSON statement signed by its author, checkable by anyone (permission slips, receipts). */
+export interface Signed<T> {
+  body: T;
+  signer: `0x${string}`;
+  signature: `0x${string}`;
+}
+
+/** Same bytes whatever the key order: sort object keys recursively. */
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, v]) => v !== undefined)
+      .sort(([a], [b]) => a.localeCompare(b));
+    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonical(v)}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+const statement = (kind: string, body: unknown) => `eth-agentnet ${kind}\n${canonical(body)}`;
+
+export async function signStatement<T>(
+  account: LocalAccount,
+  kind: string,
+  body: T,
+): Promise<Signed<T>> {
+  return {
+    body,
+    signer: account.address,
+    signature: await account.signMessage({ message: statement(kind, body) }),
+  };
+}
+
+export function verifyStatement<T>(kind: string, s: Signed<T>): Promise<boolean> {
+  return verifyMessage({
+    address: s.signer,
+    message: statement(kind, s.body),
+    signature: s.signature,
+  }).catch(() => false);
+}
+
+/** The traveller lets a watcher agent reprice one booking, within limits only they can change. */
+export interface RepriceDelegation {
+  bookingId: string;
+  agent: `0x${string}`; // the agent holding the booking (StayWise)
+  delegate: `0x${string}`; // the watcher (PriceGuard)
+  minSavingInr: number;
+  minSavingPercent: number;
+  until: string; // YYYY-MM-DD, normally check-in
+  issuedAt: number;
+}

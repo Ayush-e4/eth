@@ -1,7 +1,9 @@
 // Come back to a booked trip: "add a night", "put Rohan's name on the hotel", "cancel the hotel".
 // Claude talks to StayWise (signed as the buyer), pays its small fees through a new mandate, and
 // asks you before anything that costs more or loses money.
-// Run: pnpm --filter @eth/agents manage "your change" [--yes | --no]   (default: ask in the terminal)
+// Run: pnpm --filter @eth/agents manage "your change" [--yes | --no] [--demo-pay-simulated]
+//   --yes/--no answer for you (default: ask in the terminal); --demo-pay-simulated lets a sandbox
+//   demo pay PriceGuard for a SIMULATED saving (normally such invoices are refused).
 import { createInterface } from "node:readline/promises";
 import { privateKeyToAccount } from "viem/accounts";
 import { runChangeAgent } from "../src/orchestrator/change-agent";
@@ -33,9 +35,10 @@ for (const h of record.hires)
   console.log(`   ${h.skill}: ${h.status} ${h.bookingId ?? ""} — ${h.quoteNote}`);
 
 const facilitator = await startFacilitator();
-const agents = await startAgents(["staywise"], facilitator.client);
-const { mandateId, mc } = await createMandate(100_000n, 50_000n, ["staywise"]);
-const deps = await orchestratorDeps(mandateId, mc);
+const agents = await startAgents(["staywise", "priceguard"], facilitator.client);
+// Room for StayWise's small fees and one PriceGuard success fee (capped at 5 USDC per invoice).
+const { mandateId, mc } = await createMandate(5_200_000n, 5_000_000n, ["staywise", "priceguard"]);
+const deps = await orchestratorDeps(mandateId, mc, 5_000_000n);
 
 async function ask(question: string): Promise<string> {
   if (auto) {
@@ -54,6 +57,7 @@ const run = await runChangeAgent(request, record, {
   signer: privateKeyToAccount(ids.orchestrator.key),
   ask,
   save: (r) => store.set(r.task, r),
+  demoPaySimulated: args.includes("--demo-pay-simulated"),
 });
 if (run.explanation) printExplanation(run.explanation);
 for (const line of run.record.history) console.log(`   ⋯ ${line}`);

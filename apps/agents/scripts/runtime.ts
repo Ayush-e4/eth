@@ -14,6 +14,7 @@ import type { Explanation } from "../src/orchestrator/explain";
 import type { HireDeps } from "../src/orchestrator/hire";
 import { fetchInrRates } from "../src/orchestrator/procure";
 import { airnest } from "../src/specialists/airnest";
+import { priceGuard, type Watch } from "../src/specialists/priceguard";
 import { createSpecialist } from "../src/specialists/server";
 import { skyhop } from "../src/specialists/skyhop";
 import { staywise } from "../src/specialists/staywise";
@@ -69,12 +70,23 @@ function refunder(identity: SpecialistIdentity) {
     });
 }
 
-type AgentName = "skyhop" | "airnest" | "staywise";
-const PORTS: Record<AgentName, number> = { skyhop: 8411, staywise: 8412, airnest: 8413 };
+type AgentName = "skyhop" | "airnest" | "staywise" | "priceguard";
+const PORTS: Record<AgentName, number> = {
+  skyhop: 8411,
+  staywise: 8412,
+  airnest: 8413,
+  priceguard: 8414,
+};
+const PRICEGUARD_STORE = fileURLToPath(new URL("../.priceguard.local.json", import.meta.url));
 
 /** Starts the chosen specialist agents and lists them on Arkiv. */
-export async function startAgents(which: AgentName[], facilitator: HttpFacilitator) {
+export async function startAgents(
+  which: AgentName[],
+  facilitator: HttpFacilitator,
+  opts: { simulateDropPercent?: number } = {},
+) {
   const liteKey = process.env.LITEAPI_KEY ?? "";
+  let guard: ReturnType<typeof priceGuard> | undefined;
   const make = (name: AgentName) => {
     const identity = ids.agents[name];
     const ctx = {
@@ -88,10 +100,18 @@ export async function startAgents(which: AgentName[], facilitator: HttpFacilitat
     if (name === "skyhop")
       return createSpecialist(skyhop(new DuffelClient(process.env.DUFFEL_ACCESS_TOKEN ?? "")), ctx);
     if (name === "airnest") return createSpecialist(airnest(new LiteFlightsClient(liteKey)), ctx);
+    if (name === "priceguard") {
+      guard = priceGuard(ctx, {
+        store: new JsonStore<Watch>(PRICEGUARD_STORE),
+        inrPerUsdc: async () => (await fetchInrRates()).USDC ?? 0,
+      });
+      return guard;
+    }
     const manage = {
       bookings: new LiteHotelBookings(liteKey),
       store: new JsonStore<BookingRecord>(STAYWISE_STORE),
       arkiv: arkivReader(),
+      simulateDropPercent: opts.simulateDropPercent, // sandbox demos only; labelled SIMULATED
     };
     return createSpecialist(staywise(new LiteApiClient(liteKey), manage), ctx);
   };
@@ -106,6 +126,7 @@ export async function startAgents(which: AgentName[], facilitator: HttpFacilitat
     );
   }
   return {
+    priceGuard: guard,
     stop: () => {
       for (const { server } of started) server.close();
     },
@@ -117,8 +138,9 @@ export async function createMandate(budget: bigint, perPaymentCap: bigint, payee
   const owner = privateKeyToAccount(operatorKey);
   const mc = new MandateClient(DEPLOYMENTS.testnet.mandateRegistry, hederaTestnet);
   const usdc = tokenIdToEvmAddress(net.usdcTokenId);
-  if ((await mc.allowance(usdc, owner.address)) < 1_000_000n)
-    await mc.approve(owner, usdc, 2_000_000n);
+  // The registry pulls fees from the owner's account via an allowance: keep it ≥ this budget.
+  if ((await mc.allowance(usdc, owner.address)) < budget)
+    await mc.approve(owner, usdc, budget * 2n);
   const { id, receipt } = await mc.createMandate(owner, {
     agent: ids.orchestrator.evm,
     token: usdc,
@@ -134,7 +156,11 @@ export async function createMandate(budget: bigint, perPaymentCap: bigint, payee
 }
 
 /** Everything the orchestrator needs to pay agents and keep the public record. */
-export async function orchestratorDeps(mandateId: bigint, mc: MandateClient): Promise<HireDeps> {
+export async function orchestratorDeps(
+  mandateId: bigint,
+  mc: MandateClient,
+  maxAmount = 100_000n, // largest single payment this run may make (USDC base units)
+): Promise<HireDeps> {
   return {
     arkiv: arkivReader(),
     buyerWriter: arkivWriter(ids.orchestrator.key),
@@ -147,7 +173,7 @@ export async function orchestratorDeps(mandateId: bigint, mc: MandateClient): Pr
       executorEvm: DEPLOYMENTS.testnet.mandateRegistry,
       chainId: hederaTestnet.id,
       resolver: new MirrorResolver(net.mirrorUrl),
-      maxAmount: 100_000n,
+      maxAmount,
     }),
     evm: mc.publicClient,
     registry: DEPLOYMENTS.testnet.mandateRegistry,

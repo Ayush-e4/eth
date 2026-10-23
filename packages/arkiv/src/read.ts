@@ -2,7 +2,7 @@ import { addr, str, u64 } from "@arkiv-network/sdk/attr";
 import { eq, lte } from "@arkiv-network/sdk/query";
 import { type ArkivReader, PROJECT } from "./config";
 import { type Decoded, decodeEntity, type RawEntity } from "./decode";
-import type { Agent, Job, Kind, Listing, Quote, Rating, Receipt } from "./records";
+import type { Agent, Invoice, Job, Kind, Listing, Quote, Rating, Receipt } from "./records";
 
 const FIELDS = {
   key: true,
@@ -90,4 +90,9 @@ export async function ratingsFor(r: ArkivReader, agent: `0x${string}`) {
     ? unique.reduce((s, x) => s + x.record.score, 0) / unique.length
     : null;
   return { ratings: unique, average };
+}
+
+/** Invoices addressed to a buyer (each one written by the agent that issued it). */
+export function invoicesFor(r: ArkivReader, buyer: `0x${string}`) {
+  return query(r, "invoice", [eq("buyer", addr(buyer))]) as Promise<Decoded<Invoice>[]>;
 }

@@ -22,6 +22,13 @@ export interface TripRecord {
   }[];
   history: string[]; // what happened after booking, newest last
   explanation?: Explanation;
+  priceWatch?: {
+    agent: `0x${string}`;
+    endpoint: string;
+    minSavingInr: number;
+    minSavingPercent: number;
+  };
+  paidInvoices?: string[];
 }
 
 export const TRIPS_PATH = fileURLToPath(new URL("../.trips.local.json", import.meta.url));

@@ -126,3 +126,40 @@ describe("decodeEntity", () => {
     expect(decodeEntity("rating", entity(rating, { score: { type: "i32", value: 9 } }))).toBeNull();
   });
 });
+
+describe("invoices", () => {
+  const invoice = {
+    agent: AGENT,
+    buyer: OTHER,
+    task: "trip-goi-1",
+    amountUnits: 42_000n,
+    note: "PriceGuard: saved ₹2,000 at Park Inn — 20% fee",
+    proof: '{"attestation":{},"signature":"0x"}',
+  };
+  const attrs = {
+    project: { type: "str", value: "eth-agentnet-mumbai26" },
+    kind: { type: "str", value: "invoice" },
+    agent: { type: "addr", value: AGENT },
+    buyer: { type: "addr", value: OTHER },
+    task: { type: "str", value: "trip-goi-1" },
+    amount_units: { type: "u64", value: 42_000n },
+  };
+
+  it("indexes who issued it, who owes it, the task and the amount", () => {
+    expect(Object.keys(attributesFor.invoice(invoice))).toEqual([
+      "project",
+      "kind",
+      "agent",
+      "buyer",
+      "task",
+      "amount_units",
+    ]);
+  });
+
+  it("is only trusted from the agent that issued it", () => {
+    expect(decodeEntity("invoice", entity(invoice, attrs, AGENT))?.record.amountUnits).toBe(
+      42_000n,
+    );
+    expect(decodeEntity("invoice", entity(invoice, attrs, OTHER))).toBeNull();
+  });
+});

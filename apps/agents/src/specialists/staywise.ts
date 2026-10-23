@@ -8,7 +8,8 @@ import type {
 import type { Trip } from "../trip";
 import { demoTraveller } from "../trip";
 import type { SpecialistDef } from "./server";
-import { type ManageDeps, manageRoutes } from "./staywise-manage";
+import { manageRoutes } from "./staywise-manage";
+import { type RepriceDeps, repriceRoutes } from "./staywise-reprice";
 
 /** A hotel quote that is already locked with the supplier, so what's paid for can be booked. */
 export interface FirmHotelQuote {
@@ -57,7 +58,7 @@ async function candidates(lite: LiteApiClient, trip: Trip, refundableOnly: boole
  */
 export function staywise(
   lite: LiteApiClient,
-  manage?: ManageDeps,
+  manage?: Omit<RepriceDeps, "lite">,
 ): SpecialistDef<FirmHotelQuote, HotelBooking> {
   return {
     name: "StayWise",
@@ -102,7 +103,7 @@ export function staywise(
       }
       throw new Error(`Couldn't lock any of the ${TRIES} cheapest rooms: ${failures.join("; ")}`);
     },
-    async work({ task, quoteKey }, { prebook }) {
+    async work({ task, quoteKey, trip }, { offer, prebook }) {
       const lead = demoTraveller(0);
       const booking = await lite.book(
         prebook.prebookId,
@@ -119,9 +120,16 @@ export function staywise(
         bookingId: booking.bookingId,
         task,
         quoteKey: quoteKey ?? "",
+        hotelId: offer.hotelId,
+        adults: trip.adults,
       });
       return booking;
     },
-    extend: manage ? manageRoutes(manage) : undefined,
+    extend: manage
+      ? (app, kit) => {
+          manageRoutes(manage)(app, kit);
+          repriceRoutes({ ...manage, lite })(app, kit);
+        }
+      : undefined,
   };
 }

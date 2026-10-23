@@ -74,6 +74,22 @@ any even value from 20 to 300 seconds; a flash deal uses `fromSeconds(20)`). Whe
 expires, it is gone from every query — no cleanup job. `liveQuotes()` reports seconds left from
 `(expiresAt − head block) × 2s`. Not extended: a stale price should die.
 
+## Entity: `invoice`
+
+A bill from an agent for work it already did — e.g. PriceGuard's success fee — carrying its proof so
+the buyer can check it before paying.
+
+| Attribute | Type | Notes |
+|---|---|---|
+| `agent` | `addr` | Issuer; must equal `$creator` |
+| `buyer` | `addr` | Who owes it (filter: "my invoices") |
+| `task` | `str` | The trip / task it belongs to |
+| `amount_units` | `u64` | USDC base units |
+
+Payload: `note`, `proof` (e.g. StayWise's signed receipt of a cheaper rebook). **Expiration:**
+`fromDays(30)`. Paying it is recorded like any hire: a `job` (quote = the invoice's key) and a
+platform `receipt` pointing at the Hedera payment.
+
 ## Entity: `job`
 
 A hire. Written by the buyer, who is the only one able to patch it.

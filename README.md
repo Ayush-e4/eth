@@ -29,6 +29,7 @@ docs/
   x402.md     Agent-to-agent payments over HTTP 402, facilitator guarantees, demo
   arkiv.md    Why Arkiv, what lives where, what we kept off Arkiv, live demo
   agents.md   The agents, procurement, one run step by step, safety rules, how to run the demo
+  priceguard.md  PriceGuard: rebooks when hotel prices drop, paid 20% of the saving on proof
 ```
 
 ## Getting started

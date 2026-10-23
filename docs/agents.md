@@ -9,6 +9,7 @@ inside a mandate a human signed on Hedera.
 | **SkyHop** | Specialist | `flights`: cheapest fare | 0.05 USDC | Duffel (test mode) |
 | **AirNest** | SkyHop's competitor | `flights`: cheapest fare | 0.03 USDC | LiteAPI flights (sandbox) |
 | **StayWise** | Specialist | `hotels`: best-value hotel for the traveller's wishes; later changes and cancels | 0.04 USDC (+ 0.02 change, 0.01 guest) | LiteAPI hotels (sandbox) |
+| **PriceGuard** | Watcher | rebooks your hotel when the price drops ([docs/priceguard.md](priceguard.md)) | 20% of the saving, paid on proof | via StayWise |
 
 Web2 analogy: the orchestrator is a company buyer on Upwork with a company card that has a limit.
 SkyHop, AirNest and StayWise are freelancers with public profiles. Upwork's database is
@@ -164,6 +165,7 @@ Live (13–15 Nov trip, Park Inn Candolim, refundable):
 pnpm --filter @eth/agents identities   # once: Hedera accounts for each agent + orchestrator key + Arkiv gas
 pnpm --filter @eth/agents demo         # or: demo "Plan 3 nights in Jaipur for 1 from Delhi, 12 Dec"
 pnpm --filter @eth/agents manage "add one more night to the hotel"   # [--yes|--no] to answer for you
+pnpm --filter @eth/agents priceguard   # one PriceGuard round [--simulate-drop N, sandbox only]
 ```
 
 Needs `ANTHROPIC_API_KEY`, `DUFFEL_ACCESS_TOKEN` (`duffel_test_…`) and `LITEAPI_KEY` (`sand_…`,
