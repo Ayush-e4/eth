@@ -1,0 +1,21 @@
+# Local development database. Start with `pnpm db:up`.
+# Dev-only credentials: never reuse them for a hosted database.
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: eth
+      POSTGRES_PASSWORD: eth
+      POSTGRES_DB: eth
+    ports:
+      - "127.0.0.1:54329:5432" # 54329 so it never clashes with a locally installed Postgres
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eth -d eth"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  pgdata:
