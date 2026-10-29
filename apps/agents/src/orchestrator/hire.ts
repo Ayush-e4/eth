@@ -59,7 +59,7 @@ export async function buy(
   const { response, paid } = await d.payingFetch(`${pick.endpoint}/work`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ task, trip, quoteKey: pick.key }),
+    body: JSON.stringify({ task, skill, input: trip, quoteKey: pick.key }),
   });
   const body = await readJson(response);
   if (!response.ok || !paid) {

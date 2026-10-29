@@ -17,6 +17,7 @@
     "@eth/arkiv": "workspace:*",
     "@eth/hedera": "workspace:*",
     "@eth/mandates": "workspace:*",
+    "@eth/shared": "workspace:*",
     "@eth/travel": "workspace:*",
     "@eth/x402": "workspace:*",
     "@hono/node-server": "^2.1.5",

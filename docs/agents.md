@@ -92,6 +92,27 @@ cheapest strong match. `--autopilot` runs the old fixed flow without the agent l
 malformed inputs to the newer dynamic-filtering version in our tests; Sonnet is reserved for
 anything Haiku can't do.
 
+## One task format for every agent
+
+Every agent speaks the same request, whatever it does (`packages/shared/src/task.ts`):
+
+```json
+{ "task": "trip-goi-mvtxbyn7", "skill": "hotels", "input": { …skill-specific… }, "quoteKey": "0x…" }
+```
+
+- `input` is checked against the agent's own schema; its JSON Schema is on the agent's profile
+  (`GET /` → `inputSchema`), so a buyer can learn how to call an agent it has never seen.
+- Flights and hotels take a Trip as `input`; a research agent would take `{ question, sources }`.
+- Errors are codes, not prose: `wrong_skill` (400), `invalid_input` (422, with the failing
+  fields), `unknown_or_expired_quote` (409), `work_failed` (502, fee refunded). All of them are
+  checked before the paywall, so nobody pays for a request the agent would refuse.
+
+Live check (2026-10-30, autopilot, mandate #27): StayWise booked Fairfield by Marriott Goa
+Calangute (0.04 USDC, [tx](https://hashscan.io/testnet/transaction/0.0.11045937@1793301381.086667411)),
+AirNest beat SkyHop by ₹406 on total cost (0.03 USDC,
+[tx](https://hashscan.io/testnet/transaction/0.0.11045937@1793301379.855836212)), all through the
+new envelope.
+
 ## Managing a booking later
 
 The traveller comes back: *"add a night"*, *"put Rohan's name on the hotel"*, *"cancel the hotel"*.

@@ -2,7 +2,7 @@ import { findListings, postQuote, publishAgent } from "@eth/arkiv";
 import { createPayingFetch, type Facilitator, MirrorResolver } from "@eth/x402";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Trip } from "../trip";
+import { type Trip, TripSchema } from "../trip";
 import { createSpecialist, type SpecialistDef } from "./server";
 
 vi.mock("@eth/arkiv", () => ({
@@ -47,9 +47,10 @@ function setup(
     refund?: (to: string, units: bigint, memo: string) => Promise<string>;
   } = {},
 ) {
-  const def: SpecialistDef<{ offerId: string }, { booked: string }> = {
+  const def: SpecialistDef<Trip, { offerId: string }, { booked: string }> = {
     name: "TestHop",
     skill: "flights",
+    input: TripSchema,
     title: "Cheapest flight",
     description: "test",
     priceUnits: 50_000n,
@@ -98,7 +99,7 @@ function setup(
     pay("http://agent/work", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ task: "trip-goi-1", trip, quoteKey }),
+      body: JSON.stringify({ task: "trip-goi-1", skill: "flights", input: trip, quoteKey }),
     });
   return { s, def, post, work };
 }
@@ -108,7 +109,7 @@ beforeEach(() => vi.clearAllMocks());
 describe("specialist agent server", () => {
   it("quotes for free and posts the quote on Arkiv with a 3-minute expiry", async () => {
     const { post } = setup();
-    const res = await post("/quote", { task: "trip-goi-1", trip });
+    const res = await post("/quote", { task: "trip-goi-1", skill: "flights", input: trip });
     expect(await res.json()).toEqual({
       quoteKey: "0xq1",
       priceUnits: "50000",
@@ -133,8 +134,13 @@ describe("specialist agent server", () => {
 
   it("asks for the agent fee (402) to its own Hedera account before doing work", async () => {
     const { post } = setup();
-    await post("/quote", { task: "trip-goi-1", trip });
-    const res = await post("/work", { task: "trip-goi-1", trip, quoteKey: "0xq1" });
+    await post("/quote", { task: "trip-goi-1", skill: "flights", input: trip });
+    const res = await post("/work", {
+      task: "trip-goi-1",
+      skill: "flights",
+      input: trip,
+      quoteKey: "0xq1",
+    });
     expect(res.status).toBe(402);
     const body = (await res.json()) as { accepts: Record<string, unknown>[] };
     expect(body.accepts[0]).toMatchObject({ amount: "50000", payTo: "0.0.5005" });
@@ -142,14 +148,19 @@ describe("specialist agent server", () => {
 
   it("refuses unknown quotes before any payment is taken", async () => {
     const { post } = setup();
-    const res = await post("/work", { task: "trip-goi-1", trip, quoteKey: "0xnope" });
+    const res = await post("/work", {
+      task: "trip-goi-1",
+      skill: "flights",
+      input: trip,
+      quoteKey: "0xnope",
+    });
     expect(res.status).toBe(409);
     expect(res.headers.get("PAYMENT-REQUIRED")).toBeNull();
   });
 
   it("does exactly the quoted job once it is paid, and only once", async () => {
     const { post, work, def } = setup();
-    await post("/quote", { task: "trip-goi-1", trip });
+    await post("/quote", { task: "trip-goi-1", skill: "flights", input: trip });
     const first = await work("0xq1");
     expect(first.response.status).toBe(200);
     expect(await first.response.json()).toEqual({ agent: "TestHop", result: { booked: "off_1" } });
@@ -164,7 +175,7 @@ describe("specialist agent server", () => {
   it("refunds the fee to the payer when it was paid but couldn't deliver", async () => {
     const refund = vi.fn(async () => "0.0.5005@9.9");
     const { post, work } = setup({ failWork: true, refund });
-    await post("/quote", { task: "trip-goi-1", trip });
+    await post("/quote", { task: "trip-goi-1", skill: "flights", input: trip });
     const res = await work("0xq1");
     expect(res.response.status).toBe(502);
     expect(await res.response.json()).toEqual({

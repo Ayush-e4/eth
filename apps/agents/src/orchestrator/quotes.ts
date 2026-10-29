@@ -1,6 +1,5 @@
 import { findListings, liveQuotes } from "@eth/arkiv";
 import { mandateRegistryAbi } from "@eth/mandates";
-import type { Trip } from "../trip";
 import type { HireDeps } from "./hire";
 import { type Candidate, describePriced, type Priced, rankByTotalCost } from "./procure";
 
@@ -24,11 +23,12 @@ export interface QuoteRound {
 /**
  * Discover agents for a skill on Arkiv → keep only payees the mandate allows → ask each for a
  * quote → read the live, signed quotes back from Arkiv → rank by total cost (item + fee, INR).
+ * `input` is the skill's own request body (a Trip for flights and hotels).
  */
 export async function collectQuotes(
   skill: string,
   task: string,
-  trip: Trip,
+  input: unknown,
   d: HireDeps,
 ): Promise<QuoteRound> {
   const skipped: string[] = [];
@@ -58,7 +58,7 @@ export async function collectQuotes(
         const res = await fetch(`${l.record.endpoint}/quote`, {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ task, trip }),
+          body: JSON.stringify({ task, skill, input }),
           signal: AbortSignal.timeout(QUOTE_TIMEOUT_MS),
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);

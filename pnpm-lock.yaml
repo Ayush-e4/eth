@@ -190,6 +190,9 @@ importers:
       '@eth/mandates':
         specifier: workspace:*
         version: link:../../packages/mandates
+      '@eth/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@eth/travel':
         specifier: workspace:*
         version: link:../../packages/travel

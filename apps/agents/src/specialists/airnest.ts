@@ -1,5 +1,5 @@
 import type { LiteFlightBooking, LiteFlightOffer, LiteFlightsClient } from "@eth/travel";
-import { demoTravellers } from "../trip";
+import { demoTravellers, type Trip, TripSchema } from "../trip";
 import { describeItinerary } from "./flight-note";
 import type { SpecialistDef } from "./server";
 
@@ -10,14 +10,15 @@ import type { SpecialistDef } from "./server";
  */
 export function airnest(
   flights: LiteFlightsClient,
-): SpecialistDef<LiteFlightOffer, LiteFlightBooking> {
+): SpecialistDef<Trip, LiteFlightOffer, LiteFlightBooking> {
   return {
     name: "AirNest",
     skill: "flights",
     title: "AirNest — budget flights, booked via LiteAPI",
     description: "Searches airlines via LiteAPI (Nuitee) and books the cheapest fare (sandbox).",
+    input: TripSchema,
     priceUnits: 30_000n,
-    async quote({ trip }) {
+    async quote({ input: trip }) {
       const [best] = await flights.searchFlights({
         origin: trip.origin,
         destination: trip.destination,
@@ -34,7 +35,7 @@ export function airnest(
         itemCurrency: best.currency,
       };
     },
-    async work({ trip }, offer) {
+    async work({ input: trip }, offer) {
       return flights.book(offer, demoTravellers(trip.adults));
     },
   };
