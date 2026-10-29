@@ -1,0 +1,30 @@
+{
+  "name": "@eth/mcp",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "agentnet-mcp": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "start": "tsx --env-file-if-exists=../../.env src/index.ts",
+    "setup-mandate": "tsx --env-file=../../.env scripts/setup-mandate.ts"
+  },
+  "dependencies": {
+    "@eth/agents": "workspace:*",
+    "@eth/arkiv": "workspace:*",
+    "@eth/hedera": "workspace:*",
+    "@eth/mandates": "workspace:*",
+    "@eth/x402": "workspace:*",
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "viem": "2.57.7",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "tsx": "^4.23.15",
+    "vitest": "5.0.5"
+  }
+}
