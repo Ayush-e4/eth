@@ -111,3 +111,16 @@ reloads the saved reply if the stream drops.
 
 Run the market for hiring: `pnpm --filter @eth/agents serve` (facilitator plus SkyHop, AirNest,
 StayWise and PriceGuard).
+
+## Tasks and wallet
+
+- `GET /tasks`: every hire in the user's chats, newest first, with result, fee, mandate and proof.
+- `GET /wallet`: the user's Hedera account (wallet users: looked up from their address; demo
+  users: the shared demo wallet), balances from the mirror node, each chat limit read live from
+  the contract (budget, spent, revoked, expiry), and all fees paid.
+- `POST /wallet/limits/:mandateId/revoke`: cancels a demo limit with the demo wallet. Wallet users
+  own their limits and cancel them in MetaMask (the contract lets only the owner or its agent
+  revoke). Another user's limit is "not found".
+
+`pnpm --filter @eth/api dev` loads the repo's `.env` if it exists (Hedera keys, Claude key).
+
