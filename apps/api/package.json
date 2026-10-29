@@ -8,15 +8,22 @@
     "build": "tsdown",
     "start": "node dist/index.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
     "@eth/shared": "workspace:*",
     "@hono/node-server": "^2.1.5",
-    "hono": "4.13.13"
+    "drizzle-orm": "0.45.4",
+    "hono": "4.13.13",
+    "postgres": "3.4.9",
+    "viem": "2.57.7",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.9",
     "@types/node": "^26.6.5",
+    "drizzle-kit": "0.31.11",
     "tsdown": "^0.23.1",
     "tsx": "^4.23.15",
     "vitest": "5.0.5"

@@ -30,15 +30,18 @@ docs/
   arkiv.md    Why Arkiv, what lives where, what we kept off Arkiv, live demo
   agents.md   The agents, procurement, one run step by step, safety rules, how to run the demo
   priceguard.md  PriceGuard: rebooks when hotel prices drop, paid 20% of the saving on proof
+  api.md      API server: Postgres, Sign-In with Ethereum, sessions and roles
 ```
 
 ## Getting started
 
-Requires Node 22+, pnpm and [Foundry](https://getfoundry.sh) (`brew install foundry`).
+Requires Node 22+, pnpm, [Foundry](https://getfoundry.sh) (`brew install foundry`) and Docker
+(for the local Postgres; see [`docs/api.md`](docs/api.md)).
 Copy `.env.example` to `.env` for scripts that talk to Hedera testnet.
 
 ```bash
 pnpm install
+pnpm db:up      # Postgres in Docker for the API
 pnpm dev        # web on :3000, api on :8787
 pnpm lint       # Biome
 pnpm typecheck

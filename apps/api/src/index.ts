@@ -1,8 +1,11 @@
 import { serve } from "@hono/node-server";
-import { app } from "./app";
+import { createApp } from "./app";
+import { loadConfig } from "./config";
+import { connectDb } from "./db/client";
 
-const port = Number(process.env.PORT ?? 8787);
+const config = loadConfig();
+const { db } = await connectDb(config.databaseUrl);
 
-serve({ fetch: app.fetch, port }, (info) => {
-  console.log(`api listening on http://localhost:${info.port}`);
+serve({ fetch: createApp(db, config).fetch, port: config.port }, (info) => {
+  console.log(`api listening on http://localhost:${info.port} (app ${config.appOrigin})`);
 });
