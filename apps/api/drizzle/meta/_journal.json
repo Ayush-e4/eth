@@ -36,6 +36,13 @@
       "when": 1793305601006,
       "tag": "0004_payee_names",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793308404600,
+      "tag": "0005_spend_log",
+      "breakpoints": true
     }
   ]
 }

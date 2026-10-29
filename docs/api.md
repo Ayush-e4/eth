@@ -122,5 +122,26 @@ StayWise and PriceGuard).
   own their limits and cancel them in MetaMask (the contract lets only the owner or its agent
   revoke). Another user's limit is "not found".
 
+## Public spending log (Hedera HCS)
+
+Web2 analogy: an append-only audit log that a third party hosts, numbers and timestamps, and
+nobody (us included) can edit or delete.
+
+Everything goes to one HCS topic, `SPEND_LOG_TOPIC_ID`, as JSON messages:
+
+| `kind` | Written by | When |
+|---|---|---|
+| `x402.settled` | the facilitator | every agent payment it settles (mandate, payer, payee, amount, transaction) |
+| `agentnet.mandate.created` | the API | a chat limit is set up (demo wallet or MetaMask) |
+| `agentnet.mandate.revoked` | the API | a demo limit is cancelled |
+| `agentnet.hired` | the API | an agent was hired and paid (skill, agent, fee, payment transaction, Arkiv job) |
+
+The operator account holds the topic's submit key. Writes are best-effort: the hire is saved
+first and a failed log write never undoes it. The entry's number is stored as `logSeq` on hires
+and limits; `/tasks`, `/wallet` and the hired card return it with `logTopic`.
+
+- `GET /spend-log` (no sign-in): the latest 100 entries read back from the mirror node, newest
+  first, plus `names` (agents from their Arkiv profiles, by Hedera account and EVM address).
+
 `pnpm --filter @eth/api dev` loads the repo's `.env` if it exists (Hedera keys, Claude key).
 

@@ -10,6 +10,7 @@ import {
 import { arkivReader, arkivWriter } from "@eth/arkiv";
 import type { Card } from "@eth/shared";
 import { createPayingFetch, MirrorResolver } from "@eth/x402";
+import { eq } from "drizzle-orm";
 import { privateKeyToAccount } from "viem/accounts";
 import type { Db } from "../db/client";
 import { type Chat, hires, type MandateRow } from "../db/schema";
@@ -166,17 +167,39 @@ export function hiringService(db: Db, env: HiringEnv) {
           chat.id,
           live(chat.id).filter((x) => x.round !== h.round),
         ); // that job is done
-        await db.insert(hires).values({
-          chatId: chat.id,
-          mandateId: m.mandateId,
-          skill: hire.skill,
-          agent: hire.agent,
-          title: hire.agentTitle,
-          feeUnits: hire.feeUnits,
-          hederaTx: hire.hederaTx,
-          jobKey: hire.jobKey,
-          result: hire.result,
-        });
+        const [row] = await db
+          .insert(hires)
+          .values({
+            chatId: chat.id,
+            mandateId: m.mandateId,
+            skill: hire.skill,
+            agent: hire.agent,
+            title: hire.agentTitle,
+            feeUnits: hire.feeUnits,
+            hederaTx: hire.hederaTx,
+            jobKey: hire.jobKey,
+            result: hire.result,
+          })
+          .returning({ id: hires.id });
+        // Saved first, so a slow or failed log write can't lose a paid hire.
+        const logSeq =
+          (await env.log?.write({
+            kind: "agentnet.hired",
+            mandateId: m.mandateId.toString(),
+            skill: hire.skill,
+            agent: hire.agent,
+            fee: hire.feeUnits.toString(),
+            payment: hire.hederaTx,
+            job: hire.jobKey,
+          })) ?? null;
+        if (row && logSeq !== null)
+          await db
+            .update(hires)
+            .set({ logSeq })
+            .where(eq(hires.id, row.id))
+            .catch(() => {}); // the entry is on Hedera either way
+        const log =
+          logSeq !== null && env.log ? { topic: env.log.topicId, seq: logSeq } : undefined;
         return {
           status: "hired",
           result: hire.result,
@@ -188,6 +211,7 @@ export function hiringService(db: Db, env: HiringEnv) {
             feeUnits: hire.feeUnits.toString(),
             hederaTx: hire.hederaTx,
             jobKey: hire.jobKey,
+            log,
           },
         };
       } catch (err) {

@@ -10,4 +10,5 @@ export {
   type TopicMessage,
 } from "./mirror";
 export { type TokenTransfer, transferToken } from "./payments";
+export { type SpendLog, type SpendLogEvent, spendLog } from "./spend-log";
 export { tinybarsToHbar, USDC_DECIMALS, unitsToUsdc, usdcToUnits } from "./units";

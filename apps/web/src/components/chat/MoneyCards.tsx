@@ -218,6 +218,16 @@ export function HiredCard({ card }: { card: Of<"hired"> }) {
         >
           job on Arkiv
         </a>
+        {card.log && (
+          <a
+            className="text-teal"
+            href={`https://hashscan.io/testnet/topic/${card.log.topic}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            public log #{card.log.seq}
+          </a>
+        )}
       </span>
     </section>
   );

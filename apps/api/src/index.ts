@@ -6,6 +6,7 @@ import { loadConfig } from "./config";
 import { connectDb } from "./db/client";
 import { loadHiringEnv } from "./hiring/env";
 import { hiringService } from "./hiring/service";
+import { arkivNames } from "./spend-log/routes";
 
 const config = loadConfig();
 const { db } = await connectDb(config.databaseUrl);
@@ -23,6 +24,12 @@ const concierge = process.env.ANTHROPIC_API_KEY
   : null;
 if (!concierge) console.warn("ANTHROPIC_API_KEY not set: the concierge is off");
 
-serve({ fetch: createApp(db, config, { concierge, hiring }).fetch, port: config.port }, (info) => {
-  console.log(`api listening on http://localhost:${info.port} (app ${config.appOrigin})`);
-});
+serve(
+  {
+    fetch: createApp(db, config, { concierge, hiring, logNames: arkivNames() }).fetch,
+    port: config.port,
+  },
+  (info) => {
+    console.log(`api listening on http://localhost:${info.port} (app ${config.appOrigin})`);
+  },
+);

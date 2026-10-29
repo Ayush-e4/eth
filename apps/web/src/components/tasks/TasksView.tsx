@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { api, arkivEntity, hashscanTx, type Task, usdc, when } from "@/lib/api";
+import { api, arkivEntity, hashscanTopic, hashscanTx, type Task, usdc, when } from "@/lib/api";
 import { CheckIcon } from "../icons";
 
 const TONE: Record<string, string> = {
@@ -31,12 +31,16 @@ function facts(result: unknown): [string, string][] {
 
 export function TasksView() {
   const [tasks, setTasks] = useState<Task[] | null>(null);
+  const [logTopic, setLogTopic] = useState<string | null>(null);
   const [skill, setSkill] = useState("all");
   const [selId, setSelId] = useState<string | null>(null);
 
   useEffect(() => {
-    api<{ tasks: Task[] }>("/tasks")
-      .then(({ tasks }) => setTasks(tasks))
+    api<{ tasks: Task[]; logTopic: string | null }>("/tasks")
+      .then(({ tasks, logTopic }) => {
+        setTasks(tasks);
+        setLogTopic(logTopic);
+      })
       .catch(() => setTasks([]));
   }, []);
 
@@ -181,6 +185,17 @@ export function TasksView() {
                     <span className="text-ink-3">Job record on Arkiv</span>
                     <span className="font-mono text-xs">{sel.jobKey.slice(0, 10)}…</span>
                   </a>
+                  {sel.logSeq !== null && logTopic && (
+                    <a
+                      className="flex justify-between gap-3 text-teal"
+                      href={hashscanTopic(logTopic)}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <span className="text-ink-3">Entry on the public spend log</span>
+                      <span className="font-mono text-xs">#{sel.logSeq}</span>
+                    </a>
+                  )}
                   <span className="flex justify-between gap-3">
                     <span className="text-ink-3">Paid under limit</span>
                     <span className="font-mono text-xs">#{sel.mandateId}</span>

@@ -16,7 +16,9 @@ const getMandate = vi.fn(async () => ({
   revoked: false,
   expiresAt: BigInt(Math.floor(Date.now() / 1000) + 3600),
 }));
+const logWrite = vi.fn(async () => 9);
 const env = {
+  log: { topicId: "0.0.99", write: logWrite },
   demo: {
     key: `0x${"22".repeat(32)}`,
     evm: "0x0000000000000000000000000000000000000d3d",
@@ -59,6 +61,7 @@ async function demoUserWithAHire() {
     hederaTx: "0.0.1001@1.2",
     jobKey: "0xjob",
     result: { reference: "FH-1" },
+    logSeq: 34,
   });
   return { cookie, chatId: chat.id };
 }
@@ -92,8 +95,10 @@ describe("tasks and wallet", () => {
         feeUnits: "30000",
         hederaTx: "0.0.1001@1.2",
         result: { reference: "FH-1" },
+        logSeq: 34,
       }),
     ]);
+    expect(body).toMatchObject({ logTopic: "0.0.99" });
   });
 
   it("shows balances, limits as the chain sees them, and payments", async () => {
@@ -115,7 +120,7 @@ describe("tasks and wallet", () => {
       (await app.request("/auth/demo", { method: "POST", headers: { origin: ORIGIN } })).headers
         .get("set-cookie")
         ?.split(";")[0] ?? "";
-    expect(await (await req("GET", "/tasks", other)).json()).toEqual({ tasks: [] });
+    expect(await (await req("GET", "/tasks", other)).json()).toMatchObject({ tasks: [] });
     expect((await req("POST", "/wallet/limits/28/revoke", other)).status).toBe(404);
     expect(revoke).not.toHaveBeenCalled();
   });
@@ -124,8 +129,46 @@ describe("tasks and wallet", () => {
     const { cookie } = await demoUserWithAHire();
     expect((await req("POST", "/wallet/limits/28/revoke", cookie)).status).toBe(200);
     expect(revoke).toHaveBeenCalledWith(expect.anything(), 28n);
+    expect(logWrite).toHaveBeenCalledWith({
+      kind: "agentnet.mandate.revoked",
+      mandateId: "28",
+      by: env.demo.evm,
+    });
     await db.update(mandates).set({ demo: false });
     expect((await req("POST", "/wallet/limits/28/revoke", cookie)).status).toBe(409);
+  });
+
+  it("reads the public spend log back from the mirror node, no sign-in needed", async () => {
+    const b64 = (v: unknown) =>
+      Buffer.from(typeof v === "string" ? v : JSON.stringify(v)).toString("base64");
+    vi.mocked(fetch).mockResolvedValueOnce(
+      Response.json({
+        messages: [
+          {
+            sequence_number: 35,
+            consensus_timestamp: "1793308077.058257691",
+            message: b64({ kind: "x402.settled", amount: "30000" }),
+          },
+          {
+            sequence_number: 1,
+            consensus_timestamp: "1793300000.000000001",
+            message: b64("hello"),
+          },
+        ],
+      }),
+    );
+    const res = await app.request("/spend-log");
+    expect(vi.mocked(fetch).mock.calls[0]?.[0]).toBe(
+      "https://mirror/api/v1/topics/0.0.99/messages?order=desc&limit=100",
+    );
+    expect(await res.json()).toEqual({
+      topic: "0.0.99",
+      entries: [
+        { seq: 35, at: "2026-10-29T21:07:57.000Z", kind: "x402.settled", amount: "30000" },
+        { seq: 1, at: "2026-10-29T18:53:20.000Z", kind: "note", text: "hello" },
+      ],
+      names: { "0.0.1001": "the demo wallet", [env.demo.evm]: "the demo wallet" },
+    });
   });
 
   it("needs a session", async () => {

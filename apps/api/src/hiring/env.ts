@@ -1,5 +1,5 @@
 import { loadIdentities } from "@eth/agents/hiring";
-import { NETWORKS } from "@eth/hedera";
+import { createClient, NETWORKS, type SpendLog, spendLog } from "@eth/hedera";
 import { DEPLOYMENTS, hederaTestnet, MandateClient, tokenIdToEvmAddress } from "@eth/mandates";
 import type { Address, Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
@@ -20,6 +20,8 @@ export interface HiringEnv {
   usdc: Address;
   usdcTokenId: string;
   mirrorUrl: string;
+  /** The public spend log on Hedera (HCS); null when SPEND_LOG_TOPIC_ID isn't set. */
+  log: SpendLog | null;
 }
 
 const hex = (k: string) => (k.startsWith("0x") ? k : `0x${k}`) as Hex;
@@ -35,6 +37,18 @@ export function loadHiringEnv(env: NodeJS.ProcessEnv = process.env): HiringEnv |
   }
   const net = NETWORKS.testnet;
   const demoKey = hex(env.HEDERA_PRIVATE_KEY);
+  const topicId = env.SPEND_LOG_TOPIC_ID;
+  const log = topicId
+    ? spendLog(
+        createClient({
+          network: "testnet",
+          operatorId: env.HEDERA_ACCOUNT_ID,
+          operatorKey: env.HEDERA_PRIVATE_KEY,
+        }),
+        topicId,
+        env.HEDERA_PRIVATE_KEY, // the operator holds the topic's submit key, like the facilitator
+      )
+    : null;
   return {
     concierge,
     demo: {
@@ -48,6 +62,7 @@ export function loadHiringEnv(env: NodeJS.ProcessEnv = process.env): HiringEnv |
     usdc: tokenIdToEvmAddress(net.usdcTokenId),
     usdcTokenId: net.usdcTokenId,
     mirrorUrl: net.mirrorUrl,
+    log,
   };
 }
 
