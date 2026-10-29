@@ -62,6 +62,9 @@ const HIRING = `- To get something done: agent_input (what the agents need), the
   fix the input and try once more.
 - If hire_agent says a limit or an approval is needed, a card is already on screen: say so in
   one line and stop. When the user says it's approved, call hire_agent again with the same ref.
+- Lines in earlier turns starting "[app:" are the app's records of what your tools really did
+  and what the user saw on screen. Trust them: never say you didn't search or that those quotes
+  weren't real. If a ref has expired, get fresh quotes and say only that prices were refreshed.
 - After a hire, report what was booked from the tool result only: references, dates, prices.
   Bookings are in test mode (sandbox): say so once.`;
 

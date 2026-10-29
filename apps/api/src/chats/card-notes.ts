@@ -4,27 +4,29 @@ const fee = (units: string) => `${(Number(units) / 1e6).toFixed(2)} USDC`;
 
 /**
  * Claude only sees earlier turns as text, so each card the user saw is summarised in one line.
- * That's how the concierge still knows "q2" or a pending approval on the next turn.
+ * That's how the concierge still knows "q2" or a pending approval on the next turn. The "[app:"
+ * prefix marks them as records of what its tools really did (the prompt says to trust them);
+ * plain brackets read like its own notes, and Haiku once doubted it had searched at all.
  */
 export function cardNote(card: Card): string {
   switch (card.type) {
     case "agents":
-      return `[showed agents for ${card.skill}: ${card.agents.map((a) => `${a.name} ${fee(a.priceUnits)}`).join("; ")}]`;
+      return `[app: find_agents showed agents for ${card.skill}: ${card.agents.map((a) => `${a.name} ${fee(a.priceUnits)}`).join("; ")}]`;
     case "options":
-      return `[asked: ${card.question} — ${card.options.map((o) => o.label).join(" / ")}]`;
+      return `[app: show_options asked: ${card.question} — ${card.options.map((o) => o.label).join(" / ")}]`;
     case "quotes":
-      return `[quotes for ${card.skill}: ${card.quotes
+      return `[app: get_quotes returned real quotes for ${card.skill}: ${card.quotes
         .map(
           (q) =>
             `${q.key} ${q.title} ${q.totalInr ? `₹${q.totalInr}` : ""} fee ${fee(q.feeUnits)} — ${q.note}`,
         )
         .join("; ")}]`;
     case "limit":
-      return `[asked the user to approve a limit of ${fee(card.budgetUnits)} for ${card.payees.map((p) => p.name).join(", ")}]`;
+      return `[app: hire_agent asked the user to approve a limit of ${fee(card.budgetUnits)} for ${card.payees.map((p) => p.name).join(", ")}]`;
     case "approval":
-      return `[asked the user to approve: ${card.title}, ${fee(card.feeUnits)}, code ${card.code}]`;
+      return `[app: hire_agent asked the user to approve a payment: ${card.title}, ${fee(card.feeUnits)}, code ${card.code}]`;
     case "hired":
-      return `[hired ${card.title} for ${card.skill}, paid ${fee(card.feeUnits)}, tx ${card.hederaTx}: ${card.summary}]`;
+      return `[app: hire_agent hired ${card.title} for ${card.skill}, paid ${fee(card.feeUnits)}, tx ${card.hederaTx}: ${card.summary}]`;
   }
 }
 

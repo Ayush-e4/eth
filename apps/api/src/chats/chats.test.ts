@@ -129,7 +129,10 @@ describe("sending a message", () => {
     expect(calls[1]?.history).toEqual([
       { role: "user", text: "first" },
       // cards the user saw are summarised so the concierge remembers them
-      { role: "assistant", text: "Hello there\n[asked: Which weekend? — This one / Next one]" },
+      {
+        role: "assistant",
+        text: "Hello there\n[app: show_options asked: Which weekend? — This one / Next one]",
+      },
     ]);
     expect(calls[1]?.chat).toMatchObject({ mode: "auto", limitUnits: 300_000n });
   });
