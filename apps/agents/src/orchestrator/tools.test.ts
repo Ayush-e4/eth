@@ -27,6 +27,7 @@ const option = (key: string, title: string, totalInr: number): QuoteOption =>
 const round = (): QuoteRound => ({
   skill: "flights",
   task: "t1",
+  input: {},
   options: [option("0xq1", "AirNest", 14_282), option("0xq2", "SkyHop", 14_817)],
   bestReason: "lowest total",
   skipped: [],

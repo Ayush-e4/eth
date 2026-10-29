@@ -6,10 +6,18 @@ import { chatRoutes } from "./chats/routes";
 import type { Concierge } from "./concierge/concierge";
 import type { Config } from "./config";
 import type { Db } from "./db/client";
+import type { HiringEnv } from "./hiring/env";
+import { mandateRoutes } from "./hiring/routes";
+import type { HiringService } from "./hiring/service";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
-export function createApp(db: Db, config: Config, concierge: Concierge | null = null) {
+export interface AppDeps {
+  concierge?: Concierge | null;
+  hiring?: { env: HiringEnv; service: HiringService } | null;
+}
+
+export function createApp(db: Db, config: Config, deps: AppDeps = {}) {
   const app = new Hono();
 
   app.use(
@@ -32,7 +40,12 @@ export function createApp(db: Db, config: Config, concierge: Concierge | null = 
 
   app.get("/health", (c) => c.json(health("api")));
   app.route("/", authRoutes(db, config));
-  app.route("/", chatRoutes(db, concierge));
+  const { concierge = null, hiring = null } = deps;
+  app.route(
+    "/",
+    chatRoutes(db, concierge, (id, text) => hiring?.service.noteUserMessage(id, text)),
+  );
+  app.route("/", mandateRoutes(db, hiring?.env ?? null));
 
   return app;
 }

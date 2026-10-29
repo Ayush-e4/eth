@@ -6,7 +6,7 @@ const API_URL = process.env.API_URL ?? "http://localhost:8787";
 
 const nextConfig: NextConfig = {
   // Workspace packages ship TypeScript source.
-  transpilePackages: ["@eth/shared"],
+  transpilePackages: ["@eth/shared", "@eth/mandates"],
   cacheComponents: true,
   partialPrefetching: true,
   turbopack: {

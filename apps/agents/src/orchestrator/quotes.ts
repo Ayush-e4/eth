@@ -1,6 +1,12 @@
 import { findListings, liveQuotes } from "@eth/arkiv";
 import { mandateRegistryAbi } from "@eth/mandates";
 import type { HireDeps } from "./hire";
+
+/** What quoting needs. Without a mandate, every listed agent is asked (the mandate comes later). */
+export type QuoteDeps = Pick<HireDeps, "arkiv" | "evm" | "registry" | "inrRates" | "log"> & {
+  mandateId?: bigint;
+};
+
 import { type Candidate, describePriced, type Priced, rankByTotalCost } from "./procure";
 
 const QUOTE_TIMEOUT_MS = 25_000;
@@ -15,6 +21,7 @@ export interface QuoteOption extends Candidate {
 export interface QuoteRound {
   skill: string;
   task: string;
+  input: unknown; // what was quoted for; /work must send the same
   options: QuoteOption[]; // best first: comparable total cost, then the rest by agent fee
   bestReason: string; // why options[0] is the default pick
   skipped: string[]; // agents that couldn't be asked or didn't quote, and why
@@ -29,7 +36,7 @@ export async function collectQuotes(
   skill: string,
   task: string,
   input: unknown,
-  d: HireDeps,
+  d: QuoteDeps,
 ): Promise<QuoteRound> {
   const skipped: string[] = [];
   const listings = await findListings(d.arkiv, { skill });
@@ -37,6 +44,10 @@ export async function collectQuotes(
 
   const allowed = [];
   for (const l of listings) {
+    if (d.mandateId === undefined) {
+      allowed.push(l);
+      continue;
+    }
     const ok = await d.evm.readContract({
       address: d.registry,
       abi: mandateRegistryAbi,
@@ -61,7 +72,7 @@ export async function collectQuotes(
           body: JSON.stringify({ task, skill, input }),
           signal: AbortSignal.timeout(QUOTE_TIMEOUT_MS),
         });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status} ${(await res.text()).slice(0, 300)}`);
       } catch (err) {
         skipped.push(`${l.record.title}: no quote (${String(err)})`);
       }
@@ -93,7 +104,7 @@ export async function collectQuotes(
     ? `lowest total of ${priced.length} comparable quote(s): ${describePriced(winner)}`
     : `cheapest agent fee (no comparable item prices among ${unpriced.length} quote(s))`;
   d.log(`[${skill}] ${options.length} live quote(s); best: ${options[0]?.title ?? "none"}`);
-  return { skill, task, options, bestReason, skipped };
+  return { skill, task, input, options, bestReason, skipped };
 }
 
 /** Why each option other than the chosen one lost — for the record and the explanation. */

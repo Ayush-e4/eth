@@ -1,0 +1,1 @@
+ALTER TABLE "mandates" ADD COLUMN "payee_names" jsonb DEFAULT '{}'::jsonb NOT NULL;

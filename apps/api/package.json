@@ -13,8 +13,12 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "1.0.0",
+    "@eth/agents": "workspace:*",
     "@eth/arkiv": "workspace:*",
+    "@eth/hedera": "workspace:*",
+    "@eth/mandates": "workspace:*",
     "@eth/shared": "workspace:*",
+    "@eth/x402": "workspace:*",
     "@hono/node-server": "^2.1.5",
     "drizzle-orm": "0.45.4",
     "hono": "4.13.13",

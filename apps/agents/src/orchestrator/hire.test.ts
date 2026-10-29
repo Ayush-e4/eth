@@ -141,7 +141,7 @@ describe("hire", () => {
     vi.mocked(liveQuotes).mockResolvedValue([quote(A, 50_000n)] as never);
     const h = await hire("flights", "t1", trip, deps());
     expect(h.agent).toBe(A);
-    expect(h.rejected).toContainEqual(expect.stringContaining("no quote (Error: HTTP 503)"));
+    expect(h.rejected).toContainEqual(expect.stringContaining("no quote (Error: HTTP 503 down)"));
   });
 
   it("refuses when no listed agent is an allowed payee", async () => {

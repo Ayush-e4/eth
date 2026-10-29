@@ -42,14 +42,14 @@ export async function hire(skill: string, task: string, trip: Trip, d: HireDeps)
   const round = await collectQuotes(skill, task, trip, d);
   const best = round.options[0];
   if (!best) throw new Error(`No live ${skill} quote for ${task}`);
-  return buy(round, best, trip, d, round.bestReason);
+  return buy(round, best, `${skill} for ${trip.destinationName}`, d, round.bestReason);
 }
 
 /** Pay the chosen agent's /work endpoint over x402, then record job, receipt and rating on Arkiv. */
 export async function buy(
   round: QuoteRound,
   pick: QuoteOption,
-  trip: Trip,
+  label: string, // what the job is for, e.g. "hotels for Goa" (public, on Arkiv)
   d: HireDeps,
   choice: string,
 ): Promise<Hire> {
@@ -59,7 +59,7 @@ export async function buy(
   const { response, paid } = await d.payingFetch(`${pick.endpoint}/work`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ task, skill, input: trip, quoteKey: pick.key }),
+    body: JSON.stringify({ task, skill, input: round.input, quoteKey: pick.key }),
   });
   const body = await readJson(response);
   if (!response.ok || !paid) {
@@ -83,7 +83,7 @@ export async function buy(
     quote: pick.key,
     status: "paid",
     mandateId: d.mandateId,
-    description: `${skill} for ${trip.destinationName}: ${choice}`.slice(0, 1000),
+    description: `${label}: ${choice}`.slice(0, 1000),
   });
   await recordReceipt(d.platformWriter, {
     job: job.entityKey,

@@ -1,9 +1,14 @@
+import { erc20Abi, hederaTestnet, mandateRegistryAbi } from "@eth/mandates";
+import type { Card } from "@eth/shared";
 import {
   type AddEthereumChainParameter,
+  createPublicClient,
   createWalletClient,
   custom,
+  decodeEventLog,
   type EIP1193Provider,
   getAddress,
+  http,
 } from "viem";
 import { createSiweMessage } from "viem/siwe";
 import { api, type Me } from "./api";
@@ -20,6 +25,7 @@ const HEDERA_PARAMS: AddEthereumChainParameter = {
 export const HEDERA_TESTNET = { chainId: 296, hex: "0x128", params: HEDERA_PARAMS } as const;
 
 export type WalletStep = "connect" | "no-wallet" | "network" | "sign";
+type LimitCard = Extract<Card, { type: "limit" }>;
 
 declare global {
   interface Window {
@@ -91,4 +97,65 @@ export async function signIn(address: `0x${string}`): Promise<Me> {
   const signature = await wallet.signMessage({ account: address, message });
   return (await api<{ user: Me }>("/auth/verify", { method: "POST", body: { message, signature } }))
     .user;
+}
+
+/**
+ * Creates this chat's spending limit on Hedera from the user's own wallet: first lets the
+ * registry pull up to the budget in USDC (if it can't already), then creates the mandate.
+ * MetaMask shows both transactions. Returns the new mandate id for the API to check.
+ */
+export async function createMandateInWallet(card: LimitCard): Promise<bigint> {
+  await switchToHedera();
+  const account = await connect();
+  const wallet = createWalletClient({
+    account,
+    chain: hederaTestnet,
+    transport: custom(provider()),
+  });
+  const chain = createPublicClient({ chain: hederaTestnet, transport: http() });
+  const token = card.token as `0x${string}`;
+  const registry = card.registry as `0x${string}`;
+  const budget = BigInt(card.budgetUnits);
+
+  const allowance = await chain.readContract({
+    address: token,
+    abi: erc20Abi,
+    functionName: "allowance",
+    args: [account, registry],
+  });
+  if (allowance < budget) {
+    // Add to what's there: other chats' limits draw on the same allowance.
+    const hash = await wallet.writeContract({
+      address: token,
+      abi: erc20Abi,
+      functionName: "approve",
+      args: [registry, allowance + budget],
+    });
+    await chain.waitForTransactionReceipt({ hash });
+  }
+
+  const hash = await wallet.writeContract({
+    address: registry,
+    abi: mandateRegistryAbi,
+    functionName: "createMandate",
+    args: [
+      {
+        agent: card.agent as `0x${string}`,
+        token,
+        budget,
+        perPaymentCap: BigInt(card.perPaymentCapUnits),
+        expiresAt: BigInt(card.expiresAt),
+        payees: card.payees.map((p) => p.agent as `0x${string}`),
+      },
+    ],
+  });
+  const receipt = await chain.waitForTransactionReceipt({ hash });
+  if (receipt.status !== "success") throw new WalletError("sign", "Hedera rejected the limit");
+  for (const log of receipt.logs) {
+    try {
+      const ev = decodeEventLog({ abi: mandateRegistryAbi, data: log.data, topics: log.topics });
+      if (ev.eventName === "MandateCreated") return ev.args.id;
+    } catch {}
+  }
+  throw new WalletError("sign", "Couldn't find the new limit in the transaction");
 }

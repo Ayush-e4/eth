@@ -227,12 +227,24 @@ importers:
       '@anthropic-ai/sdk':
         specifier: 1.0.0
         version: 1.0.0(zod@4.6.7)
+      '@eth/agents':
+        specifier: workspace:*
+        version: link:../agents
       '@eth/arkiv':
         specifier: workspace:*
         version: link:../../packages/arkiv
+      '@eth/hedera':
+        specifier: workspace:*
+        version: link:../../packages/hedera
+      '@eth/mandates':
+        specifier: workspace:*
+        version: link:../../packages/mandates
       '@eth/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@eth/x402':
+        specifier: workspace:*
+        version: link:../../packages/x402
       '@hono/node-server':
         specifier: ^2.1.5
         version: 2.1.5(hono@4.13.13)
@@ -313,6 +325,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@eth/mandates':
+        specifier: workspace:*
+        version: link:../../packages/mandates
       '@eth/shared':
         specifier: workspace:*
         version: link:../../packages/shared
