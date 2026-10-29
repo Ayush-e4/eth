@@ -219,8 +219,9 @@ export function Setup() {
                 </li>
               </ul>
               <p className="rounded-xl bg-side px-4 py-3 text-sm">
-                Saving your spending limit on Hedera (MetaMask asks once) comes with the next
-                update. Until then the concierge shows you agents but doesn't pay anyone.
+                The first time a chat needs to pay an agent, you approve a spending limit for that
+                chat: in MetaMask, or with the shared demo wallet in the demo. Hedera enforces it,
+                so nobody can spend past it.
               </p>
             </div>
           )}
