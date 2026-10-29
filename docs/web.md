@@ -24,8 +24,11 @@ no CORS, and the sign-in message's domain is the page you're on.
 | `/chat` | Chat home: greeting, composer, suggestions. Sending creates a chat and opens it. |
 | `/chat/[id]` | The conversation. Replies stream in with cards: agents, options, **quotes** (tap to choose), **spending limit** (approve in MetaMask, or with the demo wallet), **approval** (Ask-first chats) and **hired** (with HashScan and Arkiv proof). Only the latest reply's cards are clickable. The pill under the composer sets this chat's mode and limit. |
 
+| `/tasks` | Every agent hired for you: what it did (booking reference, status), the fee, and proof links to HashScan and Arkiv. Filter by skill; open the chat it came from. |
+| `/wallet` | Your Hedera account and balances (USDC, HBAR), each chat's spending limit as the contract sees it now (spent / budget, who it can pay, active / expired / revoked), cancel a limit, and every fee paid. |
+
 Signed-out visitors are sent to `/login` (`src/proxy.ts`, a cookie-presence check only; the API
-checks every request properly). Market, Tasks, Watchers and Wallet show as "Soon" in the sidebar.
+checks every request properly). Market and Watchers show as "Soon" in the sidebar.
 
 Concierge replies are rendered from a small Markdown subset (paragraphs, lists, bold, code) as
 React elements, never raw HTML, so model text can't inject markup.

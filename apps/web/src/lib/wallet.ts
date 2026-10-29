@@ -1,4 +1,4 @@
-import { erc20Abi, hederaTestnet, mandateRegistryAbi } from "@eth/mandates";
+import { DEPLOYMENTS, erc20Abi, hederaTestnet, mandateRegistryAbi } from "@eth/mandates";
 import type { Card } from "@eth/shared";
 import {
   type AddEthereumChainParameter,
@@ -158,4 +158,24 @@ export async function createMandateInWallet(card: LimitCard): Promise<bigint> {
     } catch {}
   }
   throw new WalletError("sign", "Couldn't find the new limit in the transaction");
+}
+
+/** The owner cancels a limit on Hedera; no agent can be paid from it afterwards. */
+export async function revokeInWallet(mandateId: string): Promise<void> {
+  await switchToHedera();
+  const account = await connect();
+  const wallet = createWalletClient({
+    account,
+    chain: hederaTestnet,
+    transport: custom(provider()),
+  });
+  const chain = createPublicClient({ chain: hederaTestnet, transport: http() });
+  const hash = await wallet.writeContract({
+    address: DEPLOYMENTS.testnet.mandateRegistry,
+    abi: mandateRegistryAbi,
+    functionName: "revoke",
+    args: [BigInt(mandateId)],
+  });
+  const receipt = await chain.waitForTransactionReceipt({ hash });
+  if (receipt.status !== "success") throw new WalletError("sign", "Hedera rejected the cancel");
 }

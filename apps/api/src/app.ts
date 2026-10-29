@@ -1,6 +1,7 @@
 import { health } from "@eth/shared";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { accountRoutes } from "./account/routes";
 import { authRoutes } from "./auth/routes";
 import { chatRoutes } from "./chats/routes";
 import type { Concierge } from "./concierge/concierge";
@@ -46,6 +47,7 @@ export function createApp(db: Db, config: Config, deps: AppDeps = {}) {
     chatRoutes(db, concierge, (id, text) => hiring?.service.noteUserMessage(id, text)),
   );
   app.route("/", mandateRoutes(db, hiring?.env ?? null));
+  app.route("/", accountRoutes(db, hiring?.env ?? null));
 
   return app;
 }

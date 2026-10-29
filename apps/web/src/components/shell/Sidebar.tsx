@@ -17,12 +17,16 @@ import {
   WalletIcon,
 } from "../icons";
 
+const LIVE = [
+  { href: "/chat", label: "Chat", Icon: ChatIcon },
+  { href: "/tasks", label: "Tasks", Icon: TasksIcon },
+  { href: "/wallet", label: "Wallet", Icon: WalletIcon },
+];
+
 // Screens from the mocks that arrive in later PRs: shown so the app's shape is clear.
 const SOON = [
-  { label: "Tasks", Icon: TasksIcon },
   { label: "Market", Icon: MarketIcon },
   { label: "Watchers", Icon: EyeIcon },
-  { label: "Wallet", Icon: WalletIcon },
 ];
 
 const navItem = "flex min-h-11 items-center gap-3 rounded-[10px] px-3 text-sm";
@@ -69,15 +73,17 @@ export function Sidebar() {
 
       <nav aria-label="Main">
         <ul className="flex flex-col gap-0.5">
-          <li>
-            <Link
-              href="/chat"
-              aria-current={pathname === "/chat" ? "page" : undefined}
-              className={`${navItem} ${pathname === "/chat" ? "border border-line bg-white font-semibold" : "font-medium text-ink-2"}`}
-            >
-              <ChatIcon /> Chat
-            </Link>
-          </li>
+          {LIVE.map(({ href, label, Icon }) => (
+            <li key={href}>
+              <Link
+                href={href}
+                aria-current={pathname === href ? "page" : undefined}
+                className={`${navItem} ${pathname === href ? "border border-line bg-white font-semibold" : "font-medium text-ink-2 hover:bg-white/60"}`}
+              >
+                <Icon /> {label}
+              </Link>
+            </li>
+          ))}
           {SOON.map(({ label, Icon }) => (
             <li key={label}>
               <span
