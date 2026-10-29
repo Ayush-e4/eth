@@ -5,8 +5,7 @@ import type {
   HotelPrebook,
   LiteApiClient,
 } from "@eth/travel";
-import type { Trip } from "../trip";
-import { demoTraveller } from "../trip";
+import { demoTraveller, type Trip, TripSchema } from "../trip";
 import type { SpecialistDef } from "./server";
 import { manageRoutes } from "./staywise-manage";
 import { type RepriceDeps, repriceRoutes } from "./staywise-reprice";
@@ -59,14 +58,15 @@ async function candidates(lite: LiteApiClient, trip: Trip, refundableOnly: boole
 export function staywise(
   lite: LiteApiClient,
   manage?: Omit<RepriceDeps, "lite">,
-): SpecialistDef<FirmHotelQuote, HotelBooking> {
+): SpecialistDef<Trip, FirmHotelQuote, HotelBooking> {
   return {
     name: "StayWise",
     skill: "hotels",
     title: "StayWise — best-value hotel, booked via LiteAPI",
     description: "Searches hotels via LiteAPI, locks the price, books it (sandbox). Firm quotes.",
+    input: TripSchema,
     priceUnits: 40_000n,
-    async quote({ trip }) {
+    async quote({ input: trip }) {
       // Refundable unless the traveller said price matters more: changes and refunds stay possible.
       let found = await candidates(lite, trip, !trip.nonRefundableOk);
       const noRefundable = !trip.nonRefundableOk && !found.offers.length;
@@ -103,7 +103,7 @@ export function staywise(
       }
       throw new Error(`Couldn't lock any of the ${TRIES} cheapest rooms: ${failures.join("; ")}`);
     },
-    async work({ task, quoteKey, trip }, { offer, prebook }) {
+    async work({ task, quoteKey, input: trip }, { offer, prebook }) {
       const lead = demoTraveller(0);
       const booking = await lite.book(
         prebook.prebookId,

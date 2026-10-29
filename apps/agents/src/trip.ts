@@ -49,12 +49,3 @@ export function demoTraveller(i: number): Traveller {
 }
 
 export const demoTravellers = (n: number) => Array.from({ length: n }, (_, i) => demoTraveller(i));
-
-/** Request body both specialists accept on /quote and /work. */
-export const TaskBodySchema = z.object({
-  task: z.string().regex(/^[a-z0-9_.-]{1,64}$/),
-  trip: TripSchema,
-  quoteKey: z.string().optional(),
-});
-
-export type TaskBody = z.infer<typeof TaskBodySchema>;

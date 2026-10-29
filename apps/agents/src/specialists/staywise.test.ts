@@ -1,6 +1,7 @@
+import type { TaskRequest } from "@eth/shared";
 import type { HotelOffer, LiteApiClient } from "@eth/travel";
 import { describe, expect, it, vi } from "vitest";
-import type { TaskBody } from "../trip";
+import type { Trip } from "../trip";
 import { staywise } from "./staywise";
 
 const offer = (offerId: string, hotelName: string, total: number): HotelOffer => ({
@@ -14,7 +15,8 @@ const offer = (offerId: string, hotelName: string, total: number): HotelOffer =>
 });
 const body = {
   task: "trip-goi-1",
-  trip: {
+  skill: "hotels",
+  input: {
     origin: "BOM",
     destination: "GOI",
     destinationName: "Goa",
@@ -27,7 +29,7 @@ const body = {
     budgetInr: null,
     notes: "",
   },
-} satisfies TaskBody;
+} satisfies TaskRequest<Trip>;
 
 function fakeLite(
   prebook: LiteApiClient["prebook"],
@@ -85,7 +87,7 @@ describe("StayWise firm quotes", () => {
 });
 
 describe("StayWise with the traveller's hotel wishes", () => {
-  const wishful = { ...body, trip: { ...body.trip, hotelWishes: "quiet, beachfront" } };
+  const wishful = { ...body, input: { ...body.input, hotelWishes: "quiet, beachfront" } };
   const locked = async () => ({
     prebookId: "pb_w",
     total: 8043,

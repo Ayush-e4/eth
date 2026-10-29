@@ -1,8 +1,9 @@
 import { arkivReader, arkivWriter, findListings, postQuote, publishAgent } from "@eth/arkiv";
+import { TASK_ERRORS, type TaskRequest, TaskRequestSchema } from "@eth/shared";
 import { type Facilitator, paywall } from "@eth/x402";
 import { type Context, Hono, type MiddlewareHandler } from "hono";
+import { z } from "zod";
 import type { SpecialistIdentity } from "../identities";
-import { type TaskBody, TaskBodySchema } from "../trip";
 
 /** A specialist's answer to /quote: what it found, and what the item itself costs. */
 export interface Quoted<Detail> {
@@ -12,17 +13,19 @@ export interface Quoted<Detail> {
   itemCurrency: string;
 }
 
-/** What makes one specialist different from another: how it quotes and how it does the work. */
-export interface SpecialistDef<Detail, Result> {
+/** What makes one specialist different from another: what it accepts, how it quotes and works. */
+export interface SpecialistDef<Input, Detail, Result> {
   name: string;
   skill: string;
   title: string;
   description: string;
   priceUnits: bigint; // agent fee per job, USDC base units
-  /** Look up the best option for the trip (no side effects). */
-  quote(body: TaskBody): Promise<Quoted<Detail>>;
+  /** The skill-specific `input` it accepts; published as JSON Schema on GET /. */
+  input: z.ZodType<Input>;
+  /** Look up the best option for the request (no side effects). */
+  quote(req: TaskRequest<Input>): Promise<Quoted<Detail>>;
   /** Do the job for a quote the buyer accepted and paid for. */
-  work(body: TaskBody, detail: Detail): Promise<Result>;
+  work(req: TaskRequest<Input>, detail: Detail): Promise<Result>;
   /** Extra routes (e.g. managing what was booked), mounted on the same service. */
   extend?(app: Hono, kit: SpecialistKit): void;
 }
@@ -57,7 +60,19 @@ export interface SpecialistContext {
  *   POST /quote   → free; finds the best option and posts a 3-minute quote on Arkiv
  *   POST /work    → x402-paywalled (agent fee via MandateRegistry); does the job
  */
-export function createSpecialist<D, R>(def: SpecialistDef<D, R>, ctx: SpecialistContext) {
+export function createSpecialist<I, D, R>(def: SpecialistDef<I, D, R>, ctx: SpecialistContext) {
+  // Same envelope for every agent; the skill must be ours and `input` must fit our schema.
+  const parseTask = (raw: unknown) => {
+    const env = TaskRequestSchema.safeParse(raw);
+    if (!env.success) return { error: TASK_ERRORS.invalidBody, status: 400 as const };
+    if (env.data.skill !== def.skill)
+      return { error: TASK_ERRORS.wrongSkill, status: 400 as const };
+    const input = def.input.safeParse(env.data.input);
+    if (!input.success)
+      return { error: TASK_ERRORS.invalidInput, status: 422 as const, issues: input.error.issues };
+    return { req: { ...env.data, input: input.data } as TaskRequest<I> };
+  };
+  const inputSchema = z.toJSONSchema(def.input, { unrepresentable: "any" });
   const writer = arkivWriter(ctx.identity.key);
   // quote key → detail, so /work does exactly what was quoted (and only while the quote is live)
   const quotes = new Map<string, { detail: D; expiresAt: number }>();
@@ -91,11 +106,14 @@ export function createSpecialist<D, R>(def: SpecialistDef<D, R>, ctx: Specialist
       skill: def.skill,
       agent: ctx.identity.evm,
       price: def.priceUnits.toString(),
+      inputSchema,
     }),
   );
 
   app.post("/quote", async (c) => {
-    const body = TaskBodySchema.parse(await c.req.json());
+    const parsed = parseTask(await c.req.json().catch(() => null));
+    if (!parsed.req) return c.json({ error: parsed.error, issues: parsed.issues }, parsed.status);
+    const body = parsed.req;
     const { note, detail, itemTotal, itemCurrency } = await def.quote(body);
     const { entityKey } = await postQuote(
       writer,
@@ -124,16 +142,16 @@ export function createSpecialist<D, R>(def: SpecialistDef<D, R>, ctx: Specialist
     "/work",
     // Check the quote BEFORE the paywall, so nobody pays for a quote we can't honour.
     async (c, next) => {
-      const body = TaskBodySchema.safeParse(await c.req.json());
-      if (!body.success) return c.json({ error: "invalid_body" }, 400);
-      if (!live(body.data.quoteKey)) return c.json({ error: "unknown_or_expired_quote" }, 409);
+      const parsed = parseTask(await c.req.json().catch(() => null));
+      if (!parsed.req) return c.json({ error: parsed.error, issues: parsed.issues }, parsed.status);
+      if (!live(parsed.req.quoteKey)) return c.json({ error: TASK_ERRORS.unknownQuote }, 409);
       await next();
     },
     feeWall(def.priceUnits, def.title),
     async (c) => {
-      const body = TaskBodySchema.parse(await c.req.json());
+      const body = parseTask(await c.req.json()).req as TaskRequest<I>; // checked above
       const quote = live(body.quoteKey);
-      if (!quote) return c.json({ error: "unknown_or_expired_quote" }, 409);
+      if (!quote) return c.json({ error: TASK_ERRORS.unknownQuote }, 409);
       quotes.delete(body.quoteKey as string); // one job per quote
       try {
         const result = await def.work(body, quote.detail);
@@ -142,7 +160,7 @@ export function createSpecialist<D, R>(def: SpecialistDef<D, R>, ctx: Specialist
         // Paid but couldn't deliver → give the fee back (until pay-on-delivery escrow exists).
         const detail = (err instanceof Error ? err.message : String(err)).slice(0, 500);
         const refund = await refundPaid(c, def.priceUnits, `refund ${body.task}`);
-        return c.json({ error: "work_failed", detail, refund }, 502);
+        return c.json({ error: TASK_ERRORS.workFailed, detail, refund }, 502);
       }
     },
   );

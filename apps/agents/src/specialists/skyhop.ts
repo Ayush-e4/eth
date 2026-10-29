@@ -1,17 +1,18 @@
 import type { DuffelBooking, DuffelClient, DuffelOffer } from "@eth/travel";
-import { demoTravellers } from "../trip";
+import { demoTravellers, type Trip, TripSchema } from "../trip";
 import { describeItinerary } from "./flight-note";
 import type { SpecialistDef } from "./server";
 
 /** SkyHop: finds and books the cheapest flight on Duffel (test mode). Fee: 0.05 USDC. */
-export function skyhop(duffel: DuffelClient): SpecialistDef<DuffelOffer, DuffelBooking> {
+export function skyhop(duffel: DuffelClient): SpecialistDef<Trip, DuffelOffer, DuffelBooking> {
   return {
     name: "SkyHop",
     skill: "flights",
     title: "SkyHop — cheapest flight, booked via Duffel",
     description: "Searches airlines via Duffel and books the cheapest fare (test mode).",
+    input: TripSchema,
     priceUnits: 50_000n,
-    async quote({ trip }) {
+    async quote({ input: trip }) {
       const [best] = await duffel.searchFlights({
         origin: trip.origin,
         destination: trip.destination,
@@ -28,7 +29,7 @@ export function skyhop(duffel: DuffelClient): SpecialistDef<DuffelOffer, DuffelB
         itemCurrency: best.currency,
       };
     },
-    async work({ trip }, offer) {
+    async work({ input: trip }, offer) {
       return duffel.bookFlight(offer, demoTravellers(trip.adults));
     },
   };
