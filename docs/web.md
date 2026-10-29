@@ -6,6 +6,7 @@
 
 ```bash
 pnpm db:up                                   # Postgres in Docker
+pnpm --filter @eth/agents serve              # the market: facilitator + 4 agents (for hiring)
 pnpm --filter @eth/api dev                   # API on :8787 (needs ANTHROPIC_API_KEY for the concierge)
 pnpm --filter @eth/web dev                   # app on http://localhost:3000
 ```
@@ -21,7 +22,7 @@ no CORS, and the sign-in message's domain is the page you're on.
 | `/login` | Connect MetaMask → switch to Hedera testnet (adds chain 296 if missing) → sign the one-time message. Or "Try the demo". Each step has its own state, including "MetaMask isn't installed". |
 | `/welcome` | First-time setup: name and city, default spending mode and per-chat limit, test-money links. Saved with `PATCH /me`. |
 | `/chat` | Chat home: greeting, composer, suggestions. Sending creates a chat and opens it. |
-| `/chat/[id]` | The conversation. Replies stream in; agents and options cards render as cards; tapping an option sends it. The pill under the composer sets this chat's mode and limit. |
+| `/chat/[id]` | The conversation. Replies stream in with cards: agents, options, **quotes** (tap to choose), **spending limit** (approve in MetaMask, or with the demo wallet), **approval** (Ask-first chats) and **hired** (with HashScan and Arkiv proof). Only the latest reply's cards are clickable. The pill under the composer sets this chat's mode and limit. |
 
 Signed-out visitors are sent to `/login` (`src/proxy.ts`, a cookie-presence check only; the API
 checks every request properly). Market, Tasks, Watchers and Wallet show as "Soon" in the sidebar.

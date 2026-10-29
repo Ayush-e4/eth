@@ -22,6 +22,20 @@
       "when": 1793303573069,
       "tag": "0002_user_defaults",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1793304619219,
+      "tag": "0003_mandates_hires",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793305601006,
+      "tag": "0004_payee_names",
+      "breakpoints": true
     }
   ]
 }

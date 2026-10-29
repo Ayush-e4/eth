@@ -29,7 +29,9 @@ const fake: Concierge = async (input) => {
 
 async function boot(concierge: Concierge | null = fake) {
   calls = [];
-  app = createApp(await testDb(), loadConfig({ NODE_ENV: "test", APP_ORIGIN: ORIGIN }), concierge);
+  app = createApp(await testDb(), loadConfig({ NODE_ENV: "test", APP_ORIGIN: ORIGIN }), {
+    concierge,
+  });
 }
 
 const req = (method: string, path: string, cookie: string, body?: unknown) =>
@@ -126,9 +128,10 @@ describe("sending a message", () => {
     await events(await req("POST", `/chats/${id}/messages`, me, { text: "second" }));
     expect(calls[1]?.history).toEqual([
       { role: "user", text: "first" },
-      { role: "assistant", text: "Hello there" },
+      // cards the user saw are summarised so the concierge remembers them
+      { role: "assistant", text: "Hello there\n[asked: Which weekend? — This one / Next one]" },
     ]);
-    expect(calls[1]?.chat).toEqual({ mode: "auto", limitUnits: 300_000n });
+    expect(calls[1]?.chat).toMatchObject({ mode: "auto", limitUnits: 300_000n });
   });
 
   it("sends an error event and saves no reply when the concierge fails", async () => {

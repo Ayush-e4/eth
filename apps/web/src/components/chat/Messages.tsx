@@ -4,6 +4,7 @@ import type { Card } from "@eth/shared";
 import { LogoMark } from "../icons";
 import { CardView } from "./Cards";
 import { Markdown } from "./Markdown";
+import type { CardCtx } from "./MoneyCards";
 
 export interface Turn {
   id: string;
@@ -19,11 +20,15 @@ export function Messages({
   turns,
   onReply,
   busy,
+  ctx,
 }: {
   turns: Turn[];
   onReply: (t: string) => void;
   busy: boolean;
+  ctx: Pick<CardCtx, "chatId" | "isDemo">;
 }) {
+  // Only the latest reply's cards can be acted on; older ones are history.
+  const latest = turns.findLast((t) => t.role === "assistant")?.id;
   return (
     <ol aria-label="Conversation" className="flex flex-col gap-7">
       {turns.map((t) =>
@@ -50,10 +55,15 @@ export function Messages({
                 ) : (
                   <Markdown text={t.text} />
                 ))}
-              {t.cards.map((c, i) => (
-                // biome-ignore lint/suspicious/noArrayIndexKey: cards have no id; a turn's cards never reorder
-                <CardView key={`${t.id}-${i}`} card={c} onReply={onReply} disabled={busy} />
-              ))}
+              {t.cards
+                .map((card, n) => ({ card, id: `${t.id}-card${n}` })) // a turn's cards never reorder
+                .map(({ card, id }) => (
+                  <CardView
+                    key={id}
+                    card={card}
+                    ctx={{ ...ctx, onReply, busy: busy || t.id !== latest }}
+                  />
+                ))}
               {t.streaming && (
                 <p role="status" className="flex items-center gap-2 text-sm text-muted">
                   <span aria-hidden className="size-2 animate-pulse rounded-full bg-saffron" />

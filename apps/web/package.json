@@ -10,6 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@eth/mandates": "workspace:*",
     "@eth/shared": "workspace:*",
     "next": "16.4.2",
     "react": "19.3.0",

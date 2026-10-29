@@ -13,7 +13,7 @@ export const MIGRATIONS_DIR = process.env.MIGRATIONS_DIR ?? path.resolve("drizzl
 
 /** Connects to Postgres and applies any pending migrations. */
 export async function connectDb(url: string): Promise<{ db: Db; close: () => Promise<void> }> {
-  const sql = postgres(url, { max: 10 });
+  const sql = postgres(url, { max: 10, onnotice: () => {} }); // skip "already exists" notices
   const db = drizzle(sql, { schema });
   await migrate(db, { migrationsFolder: MIGRATIONS_DIR });
   return { db, close: () => sql.end() };

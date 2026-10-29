@@ -1,12 +1,14 @@
 import { ChatModeSchema, type ConciergeEvent, SendMessageSchema } from "@eth/shared";
+import { asc, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import { type AuthEnv, requireUser } from "../auth/routes";
 import type { Concierge } from "../concierge/concierge";
 import type { Db } from "../db/client";
-import type { Chat, Message } from "../db/schema";
+import { type Chat, hires, type Message } from "../db/schema";
 import { limitUnitsSchema } from "../limits";
+import { withCardNotes } from "./card-notes";
 import { chatStore } from "./store";
 
 const PatchBody = z.object({
@@ -34,7 +36,13 @@ const messageJson = (m: Message) => ({
 
 const isUuid = (s: string) => z.uuid().safeParse(s).success;
 
-export function chatRoutes(db: Db, concierge: Concierge | null) {
+export function chatRoutes(
+  db: Db,
+  concierge: Concierge | null,
+  onUserMessage: (chatId: string, text: string) => void = () => {},
+) {
+  const hiredIn = (chatId: string) =>
+    db.select().from(hires).where(eq(hires.chatId, chatId)).orderBy(asc(hires.createdAt));
   const store = chatStore(db);
   const app = new Hono<AuthEnv>();
   app.use("/chats", requireUser(db));
@@ -83,29 +91,47 @@ export function chatRoutes(db: Db, concierge: Concierge | null) {
     if (!body.success) return c.json({ error: "send text (1 to 4000 characters)" }, 400);
     if (!concierge) return c.json({ error: "the concierge is not configured" }, 503);
 
-    const history = (await store.recent(chat.id)).map((m) => ({ role: m.role, text: m.text }));
+    const history = (await store.recent(chat.id)).map((m) => ({
+      role: m.role,
+      text: withCardNotes(m.text, m.cards),
+    }));
     await store.add(chat, "user", body.data.text);
+    onUserMessage(chat.id, body.data.text); // e.g. "Approve abc123"
+
+    const hired = (await hiredIn(chat.id)).map(
+      (h) =>
+        `${h.title.split(" — ")[0]} did the ${h.skill} job, paid ${(Number(h.feeUnits) / 1e6).toFixed(2)} USDC (tx ${h.hederaTx}); result: ${JSON.stringify(h.result ?? null).slice(0, 600)}`,
+    );
 
     return streamSSE(c, async (sse) => {
-      const send = (e: ConciergeEvent) => sse.writeSSE({ event: e.type, data: JSON.stringify(e) });
-      const abort = new AbortController();
-      sse.onAbort(() => abort.abort());
+      // The browser may go away mid-turn. We keep going anyway: an agent may already have been
+      // paid, so the turn must finish and be saved. We just stop writing to a closed stream.
+      let open = true;
+      sse.onAbort(() => {
+        open = false;
+      });
+      const send = (e: ConciergeEvent) =>
+        open ? sse.writeSSE({ event: e.type, data: JSON.stringify(e) }).catch(() => {}) : undefined;
+      // Hiring can take a minute; a ping every 10 s stops proxies closing a quiet stream.
+      const ping = setInterval(() => {
+        if (open) void sse.writeSSE({ event: "ping", data: "{}" }).catch(() => {});
+      }, 10_000);
       try {
         const reply = await concierge({
           history,
+          hired,
           text: body.data.text,
           user: { displayName: user.displayName, homeCity: user.homeCity },
-          chat: { mode: chat.mode, limitUnits: chat.limitUnits },
+          chat: { id: chat.id, mode: chat.mode, limitUnits: chat.limitUnits },
           emit: (e) => void send(e),
-          signal: abort.signal,
         });
         const saved = await store.add(chat, "assistant", reply.text, reply.cards);
         await send({ type: "done", messageId: saved.id });
       } catch (err) {
         console.error("concierge failed", err);
-        if (!abort.signal.aborted) {
-          await send({ type: "error", message: "The concierge couldn't answer. Try again." });
-        }
+        await send({ type: "error", message: "The concierge couldn't answer. Try again." });
+      } finally {
+        clearInterval(ping);
       }
     });
   });

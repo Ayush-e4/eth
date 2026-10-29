@@ -81,3 +81,33 @@ answer; "a quiet hotel for 2 nights, who can book it?" called `find_agents`, sho
 and replied that StayWise fits at 0.04 USDC, within the chat's 0.30 limit, and that booking from
 chat comes next. Two Arkiv agents both called StayWise, so cards add a short address to tell
 them apart.
+
+## Hiring from chat
+
+The concierge can now hire and pay agents. Money only moves through `apps/api/src/hiring`, which
+enforces the rules in code; the model can ask for a hire, it can't skip a check.
+
+1. **Quotes are free.** `agent_input` reads what the agents need (their published JSON Schema),
+   `get_quotes` asks every listed agent for the skill and shows a quotes card. Quotes get short
+   refs (`q1`, `q2`) and live about 3 minutes.
+2. **A spending limit per chat, on Hedera.** Before the first payment the chat needs a
+   MandateRegistry mandate whose agent is the concierge and whose payees are the quoting agents.
+   The limit card asks for what's left of the chat's limit (never the whole limit again).
+   - Wallet users create it in MetaMask (allow USDC, then create the mandate) and send its id to
+     `POST /chats/:id/mandate`. The API checks on-chain that they own it, the concierge is its
+     agent, it pays in USDC, it's live, and it allows every agent on the card.
+   - Demo users approve it with the shared test wallet (`{ demo: true }`), never wallet users.
+3. **"Ask first" chats** need an approval card per payment. Its buttons send
+   `Approve <code>` / `Decline <code>`; the server reads the code, and one approval pays once.
+4. **Paying** goes through x402 under the mandate (the concierge's key signs, the user's
+   account pays), then the job, receipt and rating are written to Arkiv and the hire is saved.
+
+Each turn the concierge is told what was already hired in the chat, from the `hires` table
+rather than its memory, so it doesn't book twice. Turns keep running when the browser
+disconnects (an agent may already be paid), the stream sends a ping every 10 s, and the web app
+reloads the saved reply if the stream drops.
+
+`GET /chats/:id/mandate` returns the chat's current mandate and what's left on it.
+
+Run the market for hiring: `pnpm --filter @eth/agents serve` (facilitator plus SkyHop, AirNest,
+StayWise and PriceGuard).

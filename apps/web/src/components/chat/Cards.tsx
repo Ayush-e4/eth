@@ -2,6 +2,7 @@
 
 import type { Card } from "@eth/shared";
 import { shortAddress, usdc } from "@/lib/api";
+import { ApprovalCard, type CardCtx, HiredCard, LimitCard, QuotesCard } from "./MoneyCards";
 
 type AgentsCard = Extract<Card, { type: "agents" }>;
 type OptionsCard = Extract<Card, { type: "options" }>;
@@ -21,20 +22,21 @@ const initials = (name: string) =>
     .map((w) => w[0]?.toUpperCase())
     .join("");
 
-export function CardView({
-  card,
-  onReply,
-  disabled,
-}: {
-  card: Card;
-  onReply: (text: string) => void;
-  disabled?: boolean;
-}) {
-  return card.type === "agents" ? (
-    <Agents card={card} />
-  ) : (
-    <Options card={card} onReply={onReply} disabled={disabled} />
-  );
+export function CardView({ card, ctx }: { card: Card; ctx: CardCtx }) {
+  switch (card.type) {
+    case "agents":
+      return <Agents card={card} />;
+    case "options":
+      return <Options card={card} onReply={ctx.onReply} disabled={ctx.busy} />;
+    case "quotes":
+      return <QuotesCard card={card} ctx={ctx} />;
+    case "limit":
+      return <LimitCard card={card} ctx={ctx} />;
+    case "approval":
+      return <ApprovalCard card={card} ctx={ctx} />;
+    case "hired":
+      return <HiredCard card={card} />;
+  }
 }
 
 function Agents({ card }: { card: AgentsCard }) {

@@ -76,7 +76,13 @@ export function tripTools(state: RunState, d: HireDeps) {
       const price = pick.priced ? describePriced(pick.priced) : "no comparable price";
       const choice = `${reason} [rank ${rank} of ${round.options.length}: ${price}]`;
       try {
-        const hire = await buy(round, pick, state.trip, d, choice);
+        const hire = await buy(
+          round,
+          pick,
+          `${skill} for ${state.trip.destinationName}`,
+          d,
+          choice,
+        );
         state.hires.set(skill, hire);
         const { departDate, returnDate, returnFlight } = state.trip;
         const dates =

@@ -10,7 +10,8 @@
     "demo": "tsx --env-file=../../.env scripts/demo.ts",
     "probe": "tsx --env-file=../../.env scripts/probe.ts",
     "manage": "tsx --env-file=../../.env scripts/manage.ts",
-    "priceguard": "tsx --env-file=../../.env scripts/priceguard.ts"
+    "priceguard": "tsx --env-file=../../.env scripts/priceguard.ts",
+    "serve": "tsx --env-file=../../.env scripts/serve.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "1.0.0",
@@ -29,5 +30,8 @@
     "@types/node": "^26.6.5",
     "tsx": "^4.23.15",
     "vitest": "5.0.5"
+  },
+  "exports": {
+    "./hiring": "./src/hiring.ts"
   }
 }
