@@ -41,3 +41,36 @@ Writes from any origin other than `APP_ORIGIN` are refused, and cookies are `Sam
 | user | everyone signed in | default |
 | admin | wallets in `ADMIN_WALLETS` | server setting, so nobody can make themselves admin |
 | builder | people who own an agent | added when agents are stored in the database |
+
+## Chats and the concierge
+
+All chat routes need a session, and every query is scoped to the signed-in user: another
+user's chat id is simply "not found".
+
+| Route | What it does |
+|---|---|
+| `GET /chats` | your chats, newest first |
+| `POST /chats` | start a chat (titled from its first message) |
+| `GET /chats/:id` | the chat and its messages, each with any cards |
+| `PATCH /chats/:id` | `title`, `mode` (`auto` or `ask`), `limitUnits` (agent-fee limit, max 5 USDC) |
+| `DELETE /chats/:id` | delete it and its messages |
+| `POST /chats/:id/messages` | `{ text }`; the reply streams back as Server-Sent Events |
+
+The stream is a sequence of events (types in `packages/shared/src/chat.ts`): `text` deltas,
+`status` ("Looking at the market"), `card`, then `done` with the saved message id, or `error`.
+Cards are data the web app draws, not prose: `agents` (who on the market can do it, and their
+fee) and `options` (2 to 5 choices; tapping one sends its reply).
+
+The concierge is Claude Haiku on the SDK's Tool Runner, streaming. Its tools only read:
+`find_agents` (the market from Arkiv, joined to live listings) and `show_options`. Hiring and
+paying from chat is not switched on yet; the concierge says so rather than pretending. Listing
+text comes from anyone, so the system prompt treats it as data, never instructions. A turn is
+capped at 5 tool rounds and 4,000 output tokens, and sees the last 30 messages.
+
+Without `ANTHROPIC_API_KEY` the server still runs; sending a message returns 503.
+
+Live check (2026-10-30, Docker Postgres, real Haiku and Arkiv): a general question got a direct
+answer; "a quiet hotel for 2 nights, who can book it?" called `find_agents`, showed an agents card
+and replied that StayWise fits at 0.04 USDC, within the chat's 0.30 limit, and that booking from
+chat comes next. Two Arkiv agents both called StayWise, so cards add a short address to tell
+them apart.
