@@ -1,15 +1,26 @@
+import { ChatModeSchema } from "@eth/shared";
+import { eq } from "drizzle-orm";
 import { type Context, Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { createMiddleware } from "hono/factory";
 import { z } from "zod";
 import type { Config } from "../config";
 import type { Db } from "../db/client";
-import type { User } from "../db/schema";
+import { type User, users } from "../db/schema";
+import { limitUnitsSchema } from "../limits";
 import { rolesFor } from "./roles";
 import { createSession, endSession, SESSION_COOKIE, SESSION_TTL_MS, userForToken } from "./session";
 import { demoUser, issueNonce, SignInError, signIn } from "./siwe";
 
 export type AuthEnv = { Variables: { user: User } };
+
+const ProfilePatch = z.object({
+  displayName: z.string().trim().min(1).max(60).nullable().optional(),
+  homeCity: z.string().trim().min(1).max(60).nullable().optional(),
+  defaultMode: ChatModeSchema.optional(),
+  defaultLimitUnits: limitUnitsSchema.optional(),
+  onboarded: z.literal(true).optional(), // finishing setup; there's no way to un-finish it
+});
 
 const VerifyBody = z.object({
   message: z.string().min(1).max(4000),
@@ -24,6 +35,9 @@ export function publicUser(user: User, config: Config) {
     displayName: user.displayName,
     homeCity: user.homeCity,
     isDemo: user.isDemo,
+    defaultMode: user.defaultMode,
+    defaultLimitUnits: user.defaultLimitUnits.toString(),
+    onboarded: user.onboardedAt !== null,
     roles: rolesFor(user, config.admins),
   };
 }
@@ -84,6 +98,18 @@ export function authRoutes(db: Db, config: Config) {
   });
 
   app.get("/me", requireUser(db), (c) => c.json({ user: publicUser(c.get("user"), config) }));
+
+  app.patch("/me", requireUser(db), async (c) => {
+    const body = ProfilePatch.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return c.json({ error: "invalid profile", issues: body.error.issues }, 400);
+    const { onboarded, ...fields } = body.data;
+    const [user] = await db
+      .update(users)
+      .set({ ...fields, ...(onboarded ? { onboardedAt: new Date() } : {}) })
+      .where(eq(users.id, c.get("user").id))
+      .returning();
+    return c.json({ user: publicUser(user ?? c.get("user"), config) });
+  });
 
   return app;
 }

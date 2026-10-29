@@ -69,6 +69,13 @@ capped at 5 tool rounds and 4,000 output tokens, and sees the last 30 messages.
 
 Without `ANTHROPIC_API_KEY` the server still runs; sending a message returns 503.
 
+The prompt includes today's date and the next 21 days with weekdays (India time): Haiku got
+"this weekend" wrong by a day without it.
+
+`GET /me` also returns the user's chat defaults (`defaultMode`, `defaultLimitUnits`) and whether
+setup is done (`onboarded`); `PATCH /me` changes name, city, defaults, or finishes setup. New
+chats start with the user's defaults.
+
 Live check (2026-10-30, Docker Postgres, real Haiku and Arkiv): a general question got a direct
 answer; "a quiet hotel for 2 nights, who can book it?" called `find_agents`, showed an agents card
 and replied that StayWise fits at 0.04 USDC, within the chat's 0.30 limit, and that booking from

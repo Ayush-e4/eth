@@ -6,19 +6,13 @@ import { type AuthEnv, requireUser } from "../auth/routes";
 import type { Concierge } from "../concierge/concierge";
 import type { Db } from "../db/client";
 import type { Chat, Message } from "../db/schema";
+import { limitUnitsSchema } from "../limits";
 import { chatStore } from "./store";
-
-const MAX_LIMIT_UNITS = 5_000_000n; // a chat's limit can't exceed 5 USDC (the monthly default)
 
 const PatchBody = z.object({
   title: z.string().trim().min(1).max(80).optional(),
   mode: ChatModeSchema.optional(),
-  limitUnits: z
-    .string()
-    .regex(/^\d{1,9}$/)
-    .transform(BigInt)
-    .refine((u) => u <= MAX_LIMIT_UNITS, "at most 5 USDC")
-    .optional(),
+  limitUnits: limitUnitsSchema.optional(),
 });
 
 const chatJson = (c: Chat) => ({
@@ -54,7 +48,7 @@ export function chatRoutes(db: Db, concierge: Concierge | null) {
   );
 
   app.post("/chats", async (c) =>
-    c.json({ chat: chatJson(await store.create(c.get("user").id)) }, 201),
+    c.json({ chat: chatJson(await store.create(c.get("user"))) }, 201),
   );
 
   app.get("/chats/:id", async (c) => {
