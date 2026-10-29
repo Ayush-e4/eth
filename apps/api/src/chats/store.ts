@@ -1,7 +1,7 @@
 import type { Card, ChatMode } from "@eth/shared";
 import { and, asc, desc, eq } from "drizzle-orm";
 import type { Db } from "../db/client";
-import { type Chat, chats, type Message, messages } from "../db/schema";
+import { type Chat, chats, type Message, messages, type User } from "../db/schema";
 
 /** How many earlier turns the concierge sees; older ones stay in the database. */
 export const HISTORY_TURNS = 30;
@@ -14,10 +14,16 @@ const titleFrom = (text: string) => {
 /** Every query is scoped to the owner: someone else's chat id simply isn't found. */
 export function chatStore(db: Db) {
   return {
-    async create(userId: string, firstText?: string): Promise<Chat> {
+    /** A new chat starts with the user's default spending settings. */
+    async create(user: Pick<User, "id" | "defaultMode" | "defaultLimitUnits">): Promise<Chat> {
       const [chat] = await db
         .insert(chats)
-        .values({ userId, title: firstText ? titleFrom(firstText) : "New chat" })
+        .values({
+          userId: user.id,
+          title: "New chat",
+          mode: user.defaultMode,
+          limitUnits: user.defaultLimitUnits,
+        })
         .returning();
       if (!chat) throw new Error("could not create the chat");
       return chat;

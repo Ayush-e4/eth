@@ -1,26 +1,39 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
+/* AgentNet look, from the approved mocks: calm console, warm cards. */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-jetbrains);
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-ink: #182026;
+  --color-ink-2: #344049;
+  --color-ink-3: #4f5a63;
+  --color-muted: #5e676f;
+  --color-side: #f6f4f0;
+  --color-line: #e7e3dc;
+  --color-line-2: #d6d0c6;
+  --color-bubble: #f1eee8;
+  --color-teal: #0e5a64;
+  --color-teal-dark: #0a4850;
+  --color-teal-soft: #e3f0ef;
+  --color-teal-tint: #f3f8f8;
+  --color-saffron: #f2a33a;
+  --color-saffron-soft: #fff3e2;
+  --color-saffron-ink: #8a5300;
+  --color-warm: #fff9f0;
+  --color-warm-line: #f3d7ae;
+  --color-ok: #11734b;
+  --color-ok-soft: #e7f4ec;
+  --color-bad: #b42318;
+  --color-bad-soft: #fdecea;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: #ffffff;
+  color: var(--color-ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-teal);
+  outline-offset: 2px;
 }

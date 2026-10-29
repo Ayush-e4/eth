@@ -10,6 +10,12 @@ export const users = pgTable("users", {
   displayName: text("display_name"),
   homeCity: text("home_city"),
   isDemo: boolean("is_demo").notNull().default(false),
+  // Defaults for new chats, chosen during setup.
+  defaultMode: text("default_mode").$type<ChatMode>().notNull().default("auto"),
+  defaultLimitUnits: bigint("default_limit_units", { mode: "bigint" })
+    .notNull()
+    .default(sql`300000`),
+  onboardedAt: timestamp("onboarded_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

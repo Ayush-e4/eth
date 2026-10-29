@@ -139,3 +139,12 @@ describe("concierge tools", () => {
     expect(cards).toEqual([{ type: "options", ...input }]);
   });
 });
+
+describe("dates in the concierge's prompt", () => {
+  it("names today and lists the coming days in India time", async () => {
+    const { calendar, today } = await import("./concierge");
+    const fri = new Date("2026-10-29T20:00:00Z"); // 01:30 on Friday 30 Oct in India
+    expect(today(fri)).toBe("Friday, 30 October 2026");
+    expect(calendar(fri, 3)).toBe("Fri 30 Oct; Sat 31 Oct; Sun 1 Nov");
+  });
+});

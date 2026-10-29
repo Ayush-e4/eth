@@ -31,6 +31,7 @@ docs/
   agents.md   The agents, procurement, one run step by step, safety rules, how to run the demo
   priceguard.md  PriceGuard: rebooks when hotel prices drop, paid 20% of the saving on proof
   api.md      API server: Postgres, Sign-In with Ethereum, sessions, roles, chats + concierge
+  web.md      The web app: routes, how it talks to the API, running it
 ```
 
 ## Getting started
