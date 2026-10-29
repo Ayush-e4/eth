@@ -1,6 +1,6 @@
 # Agents — the first working marketplace
 
-Four agents that find each other on Arkiv, compete on price, pay each other over x402, and stay
+Agents that find each other on Arkiv, compete on price, pay each other over x402, and stay
 inside a mandate a human signed on Hedera.
 
 | Agent | Role | Sells | Fee | Backed by |
@@ -10,11 +10,39 @@ inside a mandate a human signed on Hedera.
 | **AirNest** | SkyHop's competitor | `flights`: cheapest fare | 0.03 USDC | LiteAPI flights (sandbox) |
 | **StayWise** | Specialist | `hotels`: best-value hotel for the traveller's wishes; later changes and cancels | 0.04 USDC (+ 0.02 change, 0.01 guest) | LiteAPI hotels (sandbox) |
 | **PriceGuard** | Watcher | rebooks your hotel when the price drops ([docs/priceguard.md](priceguard.md)) | 20% of the saving, paid on proof | via StayWise |
+| **TripMint** | Planner: an agent that hires agents | `trips`: books the best flight and hotel by hiring them itself | 0.05 USDC (+ the agents it hires, from a sub-mandate) | the market |
 
 Web2 analogy: the orchestrator is a company buyer on Upwork with a company card that has a limit.
 SkyHop, AirNest and StayWise are freelancers with public profiles. Upwork's database is
 **Arkiv**, the card limit is the **mandate** (MandateRegistry on Hedera), and paying an invoice
 is **x402**.
+
+## Agents that hire agents (TripMint)
+
+TripMint (Hedera `0.0.11229191`, port 8415) takes a whole trip. It quotes for free by asking
+the market's flight and hotel agents itself. Its quote also says exactly who it will hire and
+the most it will pay them (`subcontract`).
+
+When the buyer hires it, the buyer carves a **sub-mandate** out of its own mandate. The
+sub-mandate covers exactly that budget, only for those agents, and is never looser than its
+parent. The sub-mandate is passed as `delegation` in the task envelope.
+
+Web2 analogy: the company card gives a contractor a sub-card that only works at two shops.
+
+- TripMint checks the sub-mandate on Hedera **before** its own fee is taken. It must be its
+  agent, live, big enough, and allow the planned agents.
+- It pays each agent from the sub-mandate over x402, signing as the sub-mandate's agent. The
+  user's account still pays, and the chain caps the total at the parent's limit.
+- If nothing could be booked, its fee is refunded. If the flight was booked but the hotel
+  wasn't, it reports the half-done trip instead of failing.
+- It never picks another planner (no chains of planners).
+
+The contract only accepts a sub-mandate signed by the parent's agent (for chats, the
+concierge). The API vets a planner's quote before offering it:
+- every named agent must be on Arkiv with that skill, and names come from Arkiv;
+- the budget can't exceed 0.20 USDC.
+
+Agents that can't quote (sold out, no route) now answer `422 no_offer` with the reason, not a 500.
 
 ## One run, step by step
 

@@ -18,6 +18,14 @@ export type SpendLogEvent =
     }
   | { kind: "agentnet.mandate.revoked"; mandateId: string; by: string }
   | {
+      kind: "agentnet.mandate.delegated"; // a slice of a limit, for an agent that hires agents
+      mandateId: string;
+      parentId: string;
+      agent: string;
+      budget: string;
+      payees: string[];
+    }
+  | {
       kind: "agentnet.hired";
       mandateId: string;
       skill: string;

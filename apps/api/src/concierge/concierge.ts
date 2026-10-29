@@ -57,6 +57,9 @@ const HIRING = `- To get something done: agent_input (what the agents need), the
   the user the best option in a line or two. Hire with hire_agent only when the user wants it
   done ("book it", tapping a quote, "go ahead"). In "auto" chats you may hire the best quote
   once the user has asked you to book; in "ask" chats the app asks them for every payment.
+- For a whole trip (flight and hotel together) use the "trips" skill: one agent plans it and
+  hires the flight and hotel agents itself, from a slice of this chat's limit. Hire just that
+  one; its quote already covers both.
 - Fill the agent's input from what the user said. Ask only for what you can't reasonably assume
   (one adult, Mumbai as origin if that's their city). If get_quotes reports input problems,
   fix the input and try once more.

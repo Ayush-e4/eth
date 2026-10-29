@@ -107,10 +107,22 @@ rather than its memory, so it doesn't book twice. Turns keep running when the br
 disconnects (an agent may already be paid), the stream sends a ping every 10 s, and the web app
 reloads the saved reply if the stream drops.
 
+**Agents that hire agents.** A planner's quote (e.g. TripMint, skill `trips`) names who it will
+hire and the budget for them.
+- The limit card then lists the planner and those agents, and needs room for the fee plus that
+  budget. An approval card says how much goes to which agents.
+- At hire time the API carves a sub-mandate from the chat's mandate. The concierge signs it,
+  the demo wallet pays the gas, and the API logs it as `agentnet.mandate.delegated`. It is
+  passed to the planner as `delegation`.
+- The planner's own hires are saved under the sub-mandate, so Tasks, Wallet and the chat's
+  limit count all three payments. The hired card shows them nested.
+- If the planner fails after the slice is granted, the slice stays reserved until it expires
+  (at most an hour). The contract doesn't hand unspent slices back.
+
 `GET /chats/:id/mandate` returns the chat's current mandate and what's left on it.
 
 Run the market for hiring: `pnpm --filter @eth/agents serve` (facilitator plus SkyHop, AirNest,
-StayWise and PriceGuard).
+StayWise, PriceGuard and TripMint).
 
 ## Tasks and wallet
 
@@ -134,6 +146,7 @@ Everything goes to one HCS topic, `SPEND_LOG_TOPIC_ID`, as JSON messages:
 | `x402.settled` | the facilitator | every agent payment it settles (mandate, payer, payee, amount, transaction) |
 | `agentnet.mandate.created` | the API | a chat limit is set up (demo wallet or MetaMask) |
 | `agentnet.mandate.revoked` | the API | a demo limit is cancelled |
+| `agentnet.mandate.delegated` | the API | a slice of a limit is granted to an agent that hires agents |
 | `agentnet.hired` | the API | an agent was hired and paid (skill, agent, fee, payment transaction, Arkiv job) |
 
 The operator account holds the topic's submit key. Writes are best-effort: the hire is saved

@@ -80,6 +80,8 @@ export const ApprovalCardSchema = z.object({
 });
 
 /** An agent was paid and did the job. Links are proof anyone can check. */
+const logEntry = z.object({ topic: z.string(), seq: z.number().int() });
+
 export const HiredCardSchema = z.object({
   type: z.literal("hired"),
   skill: z.string(),
@@ -89,7 +91,21 @@ export const HiredCardSchema = z.object({
   hederaTx: z.string(),
   jobKey: z.string(),
   /** Its entry on the public spend log (an HCS topic on Hedera). */
-  log: z.object({ topic: z.string(), seq: z.number().int() }).optional(),
+  log: logEntry.optional(),
+  /** For an agent that hires agents: the slice of the limit it got, and who it paid from it. */
+  subMandateId: z.string().optional(),
+  subHires: z
+    .array(
+      z.object({
+        skill: z.string(),
+        title: z.string(),
+        feeUnits: units,
+        hederaTx: z.string(),
+        jobKey: z.string(),
+        log: logEntry.optional(),
+      }),
+    )
+    .optional(),
 });
 
 export const CardSchema = z.discriminatedUnion("type", [

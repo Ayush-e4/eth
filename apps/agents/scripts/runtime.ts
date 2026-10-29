@@ -3,7 +3,13 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { ARKIV_EXPLORER, arkivReader, arkivWriter } from "@eth/arkiv";
 import { createClient, loadConfig, NETWORKS, transferToken } from "@eth/hedera";
-import { DEPLOYMENTS, hederaTestnet, MandateClient, tokenIdToEvmAddress } from "@eth/mandates";
+import {
+  DEPLOYMENTS,
+  hederaTestnet,
+  MandateClient,
+  mandateRegistryAbi,
+  tokenIdToEvmAddress,
+} from "@eth/mandates";
 import { DuffelClient, LiteApiClient, LiteFlightsClient, LiteHotelBookings } from "@eth/travel";
 import { createPayingFetch, HttpFacilitator, MirrorResolver } from "@eth/x402";
 import { serve } from "@hono/node-server";
@@ -11,14 +17,16 @@ import type { Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { loadIdentities, type SpecialistIdentity } from "../src/identities";
 import type { Explanation } from "../src/orchestrator/explain";
-import type { HireDeps } from "../src/orchestrator/hire";
+import { buy, type HireDeps } from "../src/orchestrator/hire";
 import { fetchInrRates } from "../src/orchestrator/procure";
+import { collectQuotes } from "../src/orchestrator/quotes";
 import { airnest } from "../src/specialists/airnest";
 import { priceGuard, type Watch } from "../src/specialists/priceguard";
 import { createSpecialist } from "../src/specialists/server";
 import { skyhop } from "../src/specialists/skyhop";
 import { staywise } from "../src/specialists/staywise";
 import type { BookingRecord } from "../src/specialists/staywise-manage";
+import { tripmint } from "../src/specialists/tripmint";
 import { JsonStore } from "../src/store";
 
 export function requireEnv(keys: string[]) {
@@ -70,12 +78,13 @@ function refunder(identity: SpecialistIdentity) {
     });
 }
 
-type AgentName = "skyhop" | "airnest" | "staywise" | "priceguard";
+type AgentName = "skyhop" | "airnest" | "staywise" | "priceguard" | "tripmint";
 const PORTS: Record<AgentName, number> = {
   skyhop: 8411,
   staywise: 8412,
   airnest: 8413,
   priceguard: 8414,
+  tripmint: 8415,
 };
 const PRICEGUARD_STORE = fileURLToPath(new URL("../.priceguard.local.json", import.meta.url));
 
@@ -100,6 +109,7 @@ export async function startAgents(
     if (name === "skyhop")
       return createSpecialist(skyhop(new DuffelClient(process.env.DUFFEL_ACCESS_TOKEN ?? "")), ctx);
     if (name === "airnest") return createSpecialist(airnest(new LiteFlightsClient(liteKey)), ctx);
+    if (name === "tripmint") return createSpecialist(tripmintFor(identity), ctx);
     if (name === "priceguard") {
       guard = priceGuard(ctx, {
         store: new JsonStore<Watch>(PRICEGUARD_STORE),
@@ -131,6 +141,65 @@ export async function startAgents(
       for (const { server } of started) server.close();
     },
   };
+}
+
+/** TripMint hires agents itself: it reads mandates and pays under the sub-mandates it's given. */
+function tripmintFor(identity: SpecialistIdentity) {
+  const mc = new MandateClient(DEPLOYMENTS.testnet.mandateRegistry, hederaTestnet);
+  const registry = DEPLOYMENTS.testnet.mandateRegistry;
+  const quoteDeps = async () => ({
+    arkiv: arkivReader(),
+    evm: mc.publicClient,
+    registry,
+    inrRates: await fetchInrRates(),
+    log,
+  });
+  return tripmint({
+    me: identity.evm,
+    quoteDeps,
+    async readMandate(id, payees) {
+      const m = await mc.getMandate(id);
+      const allowed = await Promise.all(
+        payees.map((p) =>
+          mc.publicClient.readContract({
+            address: registry,
+            abi: mandateRegistryAbi,
+            functionName: "isPayeeAllowed",
+            args: [id, p],
+          }),
+        ),
+      );
+      return {
+        agent: m.agent,
+        active: await mc.isActive(id),
+        remaining: await mc.remaining(id),
+        allowed: allowed.every(Boolean),
+      };
+    },
+    async hireDeps(delegation) {
+      const mandateId = BigInt(delegation.mandateId);
+      const writer = arkivWriter(identity.key); // TripMint keeps its own public records
+      return {
+        ...(await quoteDeps()),
+        buyerWriter: writer,
+        platformWriter: writer,
+        payingFetch: createPayingFetch({
+          agent: privateKeyToAccount(identity.key),
+          mandateId,
+          payer: delegation.payer,
+          executor: DEPLOYMENTS.testnet.mandateRegistryId,
+          executorEvm: registry,
+          chainId: hederaTestnet.id,
+          resolver: new MirrorResolver(net.mirrorUrl),
+          maxAmount: 100_000n,
+        }),
+        mandateId,
+        payer: delegation.payer,
+      };
+    },
+    collect: collectQuotes,
+    purchase: buy,
+  });
 }
 
 /** The human gives the orchestrator a budget: a mandate on Hedera, payable only to these agents. */

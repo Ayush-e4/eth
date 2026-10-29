@@ -1,5 +1,5 @@
 import { arkivReader, arkivWriter, findListings, postQuote, publishAgent } from "@eth/arkiv";
-import { TASK_ERRORS, type TaskRequest, TaskRequestSchema } from "@eth/shared";
+import { type Subcontract, TASK_ERRORS, type TaskRequest, TaskRequestSchema } from "@eth/shared";
 import { type Facilitator, paywall } from "@eth/x402";
 import { type Context, Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
@@ -11,6 +11,7 @@ export interface Quoted<Detail> {
   detail: Detail;
   itemTotal: number; // ticket / room price in the provider's currency (signed on Arkiv)
   itemCurrency: string;
+  subcontract?: Subcontract; // for agents that hire others: who, and the budget they need
 }
 
 /** What makes one specialist different from another: what it accepts, how it quotes and works. */
@@ -24,6 +25,8 @@ export interface SpecialistDef<Input, Detail, Result> {
   input: z.ZodType<Input>;
   /** Look up the best option for the request (no side effects). */
   quote(req: TaskRequest<Input>): Promise<Quoted<Detail>>;
+  /** Optional check before the fee is taken (e.g. a delegation is in place); returns a problem. */
+  check?(req: TaskRequest<Input>, detail: Detail): Promise<string | null>;
   /** Do the job for a quote the buyer accepted and paid for. */
   work(req: TaskRequest<Input>, detail: Detail): Promise<Result>;
   /** Extra routes (e.g. managing what was booked), mounted on the same service. */
@@ -114,7 +117,15 @@ export function createSpecialist<I, D, R>(def: SpecialistDef<I, D, R>, ctx: Spec
     const parsed = parseTask(await c.req.json().catch(() => null));
     if (!parsed.req) return c.json({ error: parsed.error, issues: parsed.issues }, parsed.status);
     const body = parsed.req;
-    const { note, detail, itemTotal, itemCurrency } = await def.quote(body);
+    let quoted: Quoted<D>;
+    try {
+      quoted = await def.quote(body);
+    } catch (err) {
+      // A plain "no" the buyer can read (sold out, no route), not a server error.
+      const detail = (err instanceof Error ? err.message : String(err)).slice(0, 300);
+      return c.json({ error: TASK_ERRORS.noOffer, detail }, 422);
+    }
+    const { note, detail, itemTotal, itemCurrency, subcontract } = quoted;
     const { entityKey } = await postQuote(
       writer,
       {
@@ -135,6 +146,7 @@ export function createSpecialist<I, D, R>(def: SpecialistDef<I, D, R>, ctx: Spec
       note,
       itemTotal,
       itemCurrency,
+      subcontract,
     });
   });
 
@@ -144,7 +156,10 @@ export function createSpecialist<I, D, R>(def: SpecialistDef<I, D, R>, ctx: Spec
     async (c, next) => {
       const parsed = parseTask(await c.req.json().catch(() => null));
       if (!parsed.req) return c.json({ error: parsed.error, issues: parsed.issues }, parsed.status);
-      if (!live(parsed.req.quoteKey)) return c.json({ error: TASK_ERRORS.unknownQuote }, 409);
+      const quote = live(parsed.req.quoteKey);
+      if (!quote) return c.json({ error: TASK_ERRORS.unknownQuote }, 409);
+      const problem = await def.check?.(parsed.req, quote.detail);
+      if (problem) return c.json({ error: TASK_ERRORS.invalidInput, detail: problem }, 422);
       await next();
     },
     feeWall(def.priceUnits, def.title),

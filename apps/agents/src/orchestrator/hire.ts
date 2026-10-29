@@ -1,4 +1,5 @@
 import { type ArkivReader, type ArkivWriter, openJob, rateAgent, recordReceipt } from "@eth/arkiv";
+import type { Delegation } from "@eth/shared";
 import type { PaidResponse } from "@eth/x402";
 import type { PublicClient } from "viem";
 import type { Trip } from "../trip";
@@ -52,6 +53,7 @@ export async function buy(
   label: string, // what the job is for, e.g. "hotels for Goa" (public, on Arkiv)
   d: HireDeps,
   choice: string,
+  delegation?: Delegation, // a sub-mandate for an agent that hires others (see TripMint)
 ): Promise<Hire> {
   const { skill, task } = round;
   d.log(`[${skill}] hiring ${pick.title}: "${pick.note}"`);
@@ -59,7 +61,7 @@ export async function buy(
   const { response, paid } = await d.payingFetch(`${pick.endpoint}/work`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ task, skill, input: round.input, quoteKey: pick.key }),
+    body: JSON.stringify({ task, skill, input: round.input, quoteKey: pick.key, delegation }),
   });
   const body = await readJson(response);
   if (!response.ok || !paid) {
