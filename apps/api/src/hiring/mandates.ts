@@ -77,7 +77,7 @@ export async function createDemoMandate(db: Db, env: HiringEnv, chat: Chat, card
     expiresAt: BigInt(card.expiresAt),
     payees: card.payees.map((p) => p.agent as Address),
   });
-  return save(db, chat, card, {
+  return save(db, env, chat, card, {
     mandateId: id,
     owner: owner.address,
     payer: env.demo.account,
@@ -125,7 +125,7 @@ export async function adoptUserMandate(
   const payer = await hederaAccountOf(env.mirrorUrl, getAddress(user.address) as Address);
   if (!payer)
     throw new MandateCheckError("your wallet has no Hedera account yet; get test HBAR first");
-  return save(db, chat, card, {
+  return save(db, env, chat, card, {
     mandateId: id,
     owner: user.address,
     payer,
@@ -138,6 +138,7 @@ export async function adoptUserMandate(
 
 async function save(
   db: Db,
+  env: HiringEnv,
   chat: Chat,
   card: LimitCard,
   m: {
@@ -165,5 +166,17 @@ async function save(
     })
     .returning();
   if (!row) throw new Error("could not save the mandate");
-  return row;
+  const logSeq =
+    (await env.log?.write({
+      kind: "agentnet.mandate.created",
+      mandateId: m.mandateId.toString(),
+      owner: m.owner,
+      budget: m.budget.toString(),
+      payees: m.payees,
+      expiresAt: m.expiresAt,
+      via: m.demo ? "demo" : "wallet",
+    })) ?? null;
+  if (logSeq === null) return row;
+  await db.update(mandates).set({ logSeq }).where(eq(mandates.id, row.id));
+  return { ...row, logSeq };
 }

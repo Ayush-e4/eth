@@ -71,6 +71,12 @@ export const WalletIcon = (p: IconProps) => (
     <path d="M17 14h.01" />
   </Icon>
 );
+export const LedgerIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M6 3h12a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" />
+    <path d="M9 8h6M9 12h6M9 16h3" />
+  </Icon>
+);
 export const ShieldIcon = (p: IconProps) => (
   <Icon {...p}>
     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />

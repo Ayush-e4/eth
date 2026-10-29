@@ -9,6 +9,7 @@ import {
   ChatIcon,
   ExitIcon,
   EyeIcon,
+  LedgerIcon,
   LogoMark,
   MarketIcon,
   PlusIcon,
@@ -21,6 +22,7 @@ const LIVE = [
   { href: "/chat", label: "Chat", Icon: ChatIcon },
   { href: "/tasks", label: "Tasks", Icon: TasksIcon },
   { href: "/wallet", label: "Wallet", Icon: WalletIcon },
+  { href: "/log", label: "Public log", Icon: LedgerIcon },
 ];
 
 // Screens from the mocks that arrive in later PRs: shown so the app's shape is clear.

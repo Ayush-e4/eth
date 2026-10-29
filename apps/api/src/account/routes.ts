@@ -55,8 +55,10 @@ export function accountRoutes(db: Db, env: HiringEnv | null) {
         hederaTx: h.hederaTx,
         jobKey: h.jobKey,
         result: h.result,
+        logSeq: h.logSeq,
         createdAt: h.createdAt.toISOString(),
       })),
+      logTopic: env?.log?.topicId ?? null,
     });
   });
 
@@ -100,6 +102,7 @@ export function accountRoutes(db: Db, env: HiringEnv | null) {
           ),
           expiresAt: m.expiresAt.toISOString(),
           status: onchain?.revoked ? "revoked" : expired ? "expired" : "active",
+          logSeq: m.logSeq,
         };
       }),
     );
@@ -117,8 +120,10 @@ export function accountRoutes(db: Db, env: HiringEnv | null) {
         skill: h.skill,
         feeUnits: fee(h.feeUnits),
         hederaTx: h.hederaTx,
+        logSeq: h.logSeq,
         createdAt: h.createdAt.toISOString(),
       })),
+      logTopic: env?.log?.topicId ?? null,
     });
   });
 
@@ -139,6 +144,7 @@ export function accountRoutes(db: Db, env: HiringEnv | null) {
     if (!row) return c.json({ error: "no such limit" }, 404);
     if (!row.m.demo) return c.json({ error: "cancel this limit from your wallet" }, 409);
     await env.mc.revoke(privateKeyToAccount(env.demo.key), BigInt(id));
+    await env.log?.write({ kind: "agentnet.mandate.revoked", mandateId: id, by: env.demo.evm });
     return c.json({ ok: true });
   });
 

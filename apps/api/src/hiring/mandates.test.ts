@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../app";
 import { loadConfig } from "../config";
 import type { Db } from "../db/client";
-import { users } from "../db/schema";
+import { mandates, users } from "../db/schema";
 import { testDb } from "../test/db";
 import type { HiringEnv } from "./env";
 import { limitCard } from "./mandates";
@@ -24,6 +24,7 @@ const onchain = {
 };
 const getMandate = vi.fn();
 const isPayeeAllowed = vi.fn();
+const logWrite = vi.fn(async () => 5);
 const env = {
   concierge: { key: `0x${"11".repeat(32)}`, evm: CONCIERGE },
   demo: {
@@ -42,6 +43,7 @@ const env = {
   usdc: USDC,
   usdcTokenId: "0.0.429274",
   mirrorUrl: "https://mirror",
+  log: { topicId: "0.0.99", write: logWrite },
 } as unknown as HiringEnv;
 
 let db: Db;
@@ -88,6 +90,21 @@ describe("adopting a wallet user's mandate", () => {
       mandate: unknown;
     };
     expect(now.mandate).toMatchObject({ mandateId: "42", remainingUnits: "270000" });
+  });
+
+  it("writes the new limit to the public spend log", async () => {
+    await req("POST", `/chats/${chatId}/mandate`, { mandateId: "42", card: card() });
+    expect(logWrite).toHaveBeenCalledWith({
+      kind: "agentnet.mandate.created",
+      mandateId: "42",
+      owner: USER,
+      budget: "300000",
+      payees: [AIRNEST],
+      expiresAt: Number(onchain.expiresAt),
+      via: "wallet",
+    });
+    const [row] = await db.select().from(mandates);
+    expect(row?.logSeq).toBe(5);
   });
 
   it.each([

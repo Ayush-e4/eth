@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   ApiError,
   api,
+  hashscanTopic,
   hashscanTx,
   type Limit,
   shortAddress,
@@ -64,7 +65,12 @@ export function WalletView() {
           <h1 className="text-[32px] font-bold tracking-tight">Wallet</h1>
           <p className="text-[15px] leading-relaxed text-ink-3">
             Your money stays in your own Hedera account. Agents are only paid through limits you
-            approved, and you can cancel any limit at once.
+            approved, and you can cancel any limit at once. Every limit and payment is also written
+            to a{" "}
+            <Link href="/log" className="text-teal underline-offset-2 hover:underline">
+              public spending log
+            </Link>{" "}
+            on Hedera that nobody can edit.
           </p>
         </div>
         <a
@@ -161,6 +167,16 @@ export function WalletView() {
                       {l.chatTitle}
                     </Link>
                     <span className="font-mono text-xs text-muted">#{l.mandateId}</span>
+                    {l.logSeq !== null && w.logTopic && (
+                      <a
+                        className="font-mono text-xs text-teal"
+                        href={hashscanTopic(w.logTopic)}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        log #{l.logSeq}
+                      </a>
+                    )}
                     <span
                       className={`rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${STATUS[l.status]}`}
                     >

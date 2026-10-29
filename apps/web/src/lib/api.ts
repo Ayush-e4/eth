@@ -72,6 +72,7 @@ export interface Task {
   hederaTx: string;
   jobKey: string;
   result: unknown;
+  logSeq: number | null;
   createdAt: string;
 }
 
@@ -85,6 +86,7 @@ export interface Limit {
   payees: string[];
   expiresAt: string;
   status: "active" | "expired" | "revoked";
+  logSeq: number | null;
 }
 
 export interface WalletInfo {
@@ -101,11 +103,23 @@ export interface WalletInfo {
     skill: string;
     feeUnits: string;
     hederaTx: string;
+    logSeq: number | null;
     createdAt: string;
   }[];
+  logTopic: string | null;
+}
+
+/** One entry on the public spend log (an HCS topic): written by the facilitator or the app. */
+export interface LogEntry {
+  seq: number;
+  at: string;
+  kind: string;
+  [field: string]: unknown;
 }
 
 export const hashscanTx = (tx: string) => `https://hashscan.io/testnet/transaction/${tx}`;
+/** HashScan has no page per message; the topic page lists every entry by number. */
+export const hashscanTopic = (topic: string) => `https://hashscan.io/testnet/topic/${topic}`;
 export const arkivEntity = (key: string) => `https://tiramisu.explorer.arkiv.network/entity/${key}`;
 export const when = (iso: string) =>
   new Date(iso).toLocaleString("en-IN", {

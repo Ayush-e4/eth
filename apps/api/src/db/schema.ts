@@ -1,6 +1,16 @@
 import type { Card, ChatMode } from "@eth/shared";
 import { sql } from "drizzle-orm";
-import { bigint, boolean, index, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import {
+  bigint,
+  boolean,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+} from "drizzle-orm/pg-core";
 
 /** A person using the app. Wallet users have an address; demo users don't. */
 export const users = pgTable("users", {
@@ -93,6 +103,7 @@ export const mandates = pgTable(
     payeeNames: jsonb("payee_names").$type<Record<string, string>>().notNull().default({}),
     demo: boolean("demo").notNull().default(false),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    logSeq: integer("log_seq"), // its entry on the public spend log (HCS), if written
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("mandates_chat_idx").on(t.chatId, t.createdAt)],
@@ -114,6 +125,7 @@ export const hires = pgTable(
     hederaTx: text("hedera_tx").notNull(),
     jobKey: text("job_key").notNull(),
     result: jsonb("result").$type<unknown>(),
+    logSeq: integer("log_seq"), // its entry on the public spend log (HCS), if written
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("hires_chat_idx").on(t.chatId, t.createdAt)],

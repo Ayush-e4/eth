@@ -10,12 +10,14 @@ import type { Db } from "./db/client";
 import type { HiringEnv } from "./hiring/env";
 import { mandateRoutes } from "./hiring/routes";
 import type { HiringService } from "./hiring/service";
+import { type LogNames, spendLogRoutes } from "./spend-log/routes";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 export interface AppDeps {
   concierge?: Concierge | null;
   hiring?: { env: HiringEnv; service: HiringService } | null;
+  logNames?: LogNames;
 }
 
 export function createApp(db: Db, config: Config, deps: AppDeps = {}) {
@@ -48,6 +50,7 @@ export function createApp(db: Db, config: Config, deps: AppDeps = {}) {
   );
   app.route("/", mandateRoutes(db, hiring?.env ?? null));
   app.route("/", accountRoutes(db, hiring?.env ?? null));
+  app.route("/", spendLogRoutes(hiring?.env ?? null, deps.logNames));
 
   return app;
 }

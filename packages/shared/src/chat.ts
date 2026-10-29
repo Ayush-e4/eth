@@ -88,6 +88,8 @@ export const HiredCardSchema = z.object({
   feeUnits: units,
   hederaTx: z.string(),
   jobKey: z.string(),
+  /** Its entry on the public spend log (an HCS topic on Hedera). */
+  log: z.object({ topic: z.string(), seq: z.number().int() }).optional(),
 });
 
 export const CardSchema = z.discriminatedUnion("type", [

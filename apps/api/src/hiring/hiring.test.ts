@@ -2,7 +2,7 @@ import { buy, collectQuotes } from "@eth/agents/hiring";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { chatStore } from "../chats/store";
 import type { Db } from "../db/client";
-import { chats, mandates, users } from "../db/schema";
+import { chats, hires, mandates, users } from "../db/schema";
 import { testDb } from "../test/db";
 import type { HiringEnv } from "./env";
 import { hiringService } from "./service";
@@ -119,6 +119,34 @@ describe("hiring from a chat", () => {
     });
     expect(vi.mocked(buy).mock.calls[0]?.[3]).toMatchObject({ mandateId: 7n, payer: "0.0.1001" });
     expect((await s.hire(chat, "q1", "again", "flights")).status).toBe("refused"); // quote used up
+  });
+
+  it("writes each hire to the public spend log and links its entry from the card", async () => {
+    await giveMandate([AIRNEST]);
+    const write = vi.fn(async () => 12);
+    const s = hiringService(db, { ...env, log: { topicId: "0.0.99", write } });
+    await s.quotes(chat, "flights", {});
+    const out = await s.hire(chat, "q1", "x", "flights");
+    expect(out.status === "hired" && out.card.log).toEqual({ topic: "0.0.99", seq: 12 });
+    expect(write).toHaveBeenCalledWith({
+      kind: "agentnet.hired",
+      mandateId: "7",
+      skill: "flights",
+      agent: AIRNEST,
+      fee: "30000",
+      payment: "0.0.1001@1.2",
+      job: "0xjob",
+    });
+    expect((await db.select().from(hires))[0]?.logSeq).toBe(12);
+  });
+
+  it("still hires when the log write fails, just without an entry", async () => {
+    await giveMandate([AIRNEST]);
+    const s = hiringService(db, { ...env, log: { topicId: "0.0.99", write: async () => null } });
+    await s.quotes(chat, "flights", {});
+    const out = await s.hire(chat, "q1", "x", "flights");
+    expect(out.status === "hired" && out.card.log).toBeUndefined();
+    expect((await db.select().from(hires))[0]?.logSeq).toBeNull();
   });
 
   it("in an ask chat, needs the user's approval code and spends it once", async () => {
