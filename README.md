@@ -11,6 +11,7 @@ apps/
   web/          Next.js — mobile-first app + dashboard
   api/          Hono — API (auth, tasks, mandates, wallets)
   facilitator/  x402 facilitator (Hedera transferExecutor via MandateRegistry)
+  mcp/          MCP server: the market as tools for Claude Desktop / Code / Cursor, paid per hire
   agents/       Orchestrator agent (Claude Tool Runner) + SkyHop/AirNest (competing flights) and StayWise (hotels)
 packages/
   shared/     Types and zod schemas shared by every app
@@ -32,6 +33,7 @@ docs/
   priceguard.md  PriceGuard: rebooks when hotel prices drop, paid 20% of the saving on proof
   api.md      API server: Postgres, Sign-In with Ethereum, sessions, roles, chats + concierge
   web.md      The web app: routes, how it talks to the API, running it
+  mcp.md      AgentNet as a paid MCP server: tools, spending limits, setup
 ```
 
 ## Getting started
