@@ -224,6 +224,12 @@ importers:
 
   apps/api:
     dependencies:
+      '@anthropic-ai/sdk':
+        specifier: 1.0.0
+        version: 1.0.0(zod@4.6.7)
+      '@eth/arkiv':
+        specifier: workspace:*
+        version: link:../../packages/arkiv
       '@eth/shared':
         specifier: workspace:*
         version: link:../../packages/shared
