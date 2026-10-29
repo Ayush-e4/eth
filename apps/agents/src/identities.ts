@@ -20,7 +20,7 @@ const SpecialistIdentity = z.object({
 });
 
 /** The specialist agents this app runs, by slug. */
-export const AGENT_SLUGS = ["skyhop", "airnest", "staywise", "priceguard"] as const;
+export const AGENT_SLUGS = ["skyhop", "airnest", "staywise", "priceguard", "tripmint"] as const;
 export type AgentSlug = (typeof AGENT_SLUGS)[number];
 
 export const IdentitiesSchema = z.object({
@@ -30,6 +30,7 @@ export const IdentitiesSchema = z.object({
     airnest: SpecialistIdentity,
     staywise: SpecialistIdentity,
     priceguard: SpecialistIdentity,
+    tripmint: SpecialistIdentity,
   }),
 });
 

@@ -12,7 +12,10 @@ vi.mock("@eth/agents/hiring", () => ({
   buy: vi.fn(),
   fetchInrRates: vi.fn(async () => ({ INR: 1, USDC: 94 })),
 }));
-vi.mock("@eth/arkiv", () => ({ arkivReader: vi.fn(() => ({})), arkivWriter: vi.fn(() => ({})) }));
+vi.mock("@eth/arkiv", () => ({
+  arkivReader: vi.fn(() => ({})),
+  arkivWriter: vi.fn(() => ({})),
+}));
 
 const AIRNEST = "0x65F8E30A61635AFEB3F33B5221F05B8A6FCE3E13";
 const env = {

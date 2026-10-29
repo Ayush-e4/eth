@@ -1,5 +1,6 @@
 import { findListings, liveQuotes } from "@eth/arkiv";
 import { mandateRegistryAbi } from "@eth/mandates";
+import { type Subcontract, SubcontractSchema } from "@eth/shared";
 import type { HireDeps } from "./hire";
 
 /** What quoting needs. Without a mandate, every listed agent is asked (the mandate comes later). */
@@ -15,6 +16,7 @@ const QUOTE_TIMEOUT_MS = 25_000;
 export interface QuoteOption extends Candidate {
   endpoint: string; // the agent's service, from its Arkiv listing
   priced?: Priced; // set when the item price could be converted to INR
+  subcontract?: Subcontract; // agents it will hire itself, and the budget it needs for them
 }
 
 /** Everything learned while asking one skill's agents for quotes. */
@@ -63,6 +65,8 @@ export async function collectQuotes(
   if (allowed.length === 0)
     throw new Error(`No ${skill} agent is an allowed payee in mandate #${d.mandateId}`);
 
+  const subcontracts = new Map<string, Subcontract>(); // from the HTTP replies; prices aren't
+
   await Promise.all(
     allowed.map(async (l) => {
       try {
@@ -73,6 +77,9 @@ export async function collectQuotes(
           signal: AbortSignal.timeout(QUOTE_TIMEOUT_MS),
         });
         if (!res.ok) throw new Error(`HTTP ${res.status} ${(await res.text()).slice(0, 300)}`);
+        const reply = (await res.json().catch(() => null)) as { subcontract?: unknown } | null;
+        const sub = SubcontractSchema.safeParse(reply?.subcontract);
+        if (sub.success) subcontracts.set(l.record.agent.toLowerCase(), sub.data);
       } catch (err) {
         skipped.push(`${l.record.title}: no quote (${String(err)})`);
       }
@@ -95,9 +102,13 @@ export async function collectQuotes(
   }));
   const { priced, unpriced } = rankByTotalCost(candidates, d.inrRates);
   const endpointOf = (c: Candidate) => byAgent.get(c.agent.toLowerCase())?.record.endpoint ?? "";
+  const extras = (c: Candidate) => {
+    const sub = subcontracts.get(c.agent.toLowerCase());
+    return { endpoint: endpointOf(c), ...(sub ? { subcontract: sub } : {}) };
+  };
   const options: QuoteOption[] = [
-    ...priced.map((p) => ({ ...p, endpoint: endpointOf(p), priced: p })),
-    ...unpriced.map((u) => ({ ...u, endpoint: endpointOf(u) })),
+    ...priced.map((p) => ({ ...p, ...extras(p), priced: p })),
+    ...unpriced.map((u) => ({ ...u, ...extras(u) })),
   ];
   const winner = priced[0];
   const bestReason = winner

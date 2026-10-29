@@ -185,6 +185,28 @@ export function ApprovalCard({ card, ctx }: { card: Of<"approval">; ctx: CardCtx
 /** An agent was paid and did the job, with proof anyone can check. */
 export function HiredCard({ card }: { card: Of<"hired"> }) {
   return (
+    <div className="flex flex-col gap-2">
+      <HiredRow card={card} />
+      {card.subHires?.length ? (
+        <section
+          aria-label={`Agents ${card.title} hired`}
+          className="ml-6 flex flex-col gap-2 border-l-2 border-line pl-4"
+        >
+          <p className="text-xs text-muted">
+            {card.title} hired {card.subHires.length === 1 ? "this agent" : "these agents"}, paying
+            from limit #{card.subMandateId}, a slice of this chat's limit:
+          </p>
+          {card.subHires.map((s) => (
+            <HiredRow key={s.hederaTx} card={{ ...card, ...s, summary: "", subHires: undefined }} />
+          ))}
+        </section>
+      ) : null}
+    </div>
+  );
+}
+
+function HiredRow({ card }: { card: Of<"hired"> }) {
+  return (
     <section
       aria-label={`${card.title} hired`}
       className="flex flex-wrap items-center gap-3 rounded-2xl border border-line px-4 py-3.5"
@@ -199,7 +221,7 @@ export function HiredCard({ card }: { card: Of<"hired"> }) {
         <span className="text-sm font-semibold">
           {card.title} did the {card.skill} job
         </span>
-        <span className="text-xs text-muted">{card.summary}</span>
+        {card.summary && <span className="text-xs text-muted">{card.summary}</span>}
       </span>
       <span className="flex flex-col items-end gap-0.5 text-xs">
         <a

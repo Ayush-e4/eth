@@ -40,6 +40,11 @@ function describe(
         tag: "New limit",
         what: `Limit #${str(e.mandateId)}: up to ${usdc(str(e.budget))} USDC, only to ${Array.isArray(e.payees) ? e.payees.map(who).join(", ") : "?"}, set by ${who(e.owner)}`,
       };
+    case "agentnet.mandate.delegated":
+      return {
+        tag: "Slice",
+        what: `Limit #${str(e.mandateId)}: up to ${usdc(str(e.budget))} USDC carved from limit #${str(e.parentId)} for ${who(e.agent)}, only to ${Array.isArray(e.payees) ? e.payees.map(who).join(", ") : "?"}`,
+      };
     case "agentnet.mandate.revoked":
       return { tag: "Cancelled", what: `Limit #${str(e.mandateId)} cancelled by ${who(e.by)}` };
     default:
@@ -51,6 +56,7 @@ const TAG: Record<string, string> = {
   Payment: "bg-teal-soft text-teal",
   Hire: "bg-[#EEEAF8] text-[#4E3D8F]",
   "New limit": "bg-ok-soft text-ok",
+  Slice: "bg-saffron-soft text-saffron-ink",
   Cancelled: "bg-bad-soft text-bad",
   Note: "bg-bubble text-ink-3",
 };

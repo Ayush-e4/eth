@@ -10,10 +10,10 @@ import {
 import { arkivReader, arkivWriter } from "@eth/arkiv";
 import type { Card } from "@eth/shared";
 import { createPayingFetch, MirrorResolver } from "@eth/x402";
-import { eq } from "drizzle-orm";
 import { privateKeyToAccount } from "viem/accounts";
 import type { Db } from "../db/client";
-import { type Chat, hires, type MandateRow } from "../db/schema";
+import type { Chat, MandateRow } from "../db/schema";
+import { grantSubMandate, recordSubHires, vetSubcontract } from "./delegate";
 import type { HiringEnv } from "./env";
 import {
   chatRemaining,
@@ -23,11 +23,13 @@ import {
   type Payee,
   PER_PAYMENT_CAP,
 } from "./mandates";
+import { saveHire } from "./record";
 
 /** What hiring needs to know about a chat. */
 export type ChatLike = Pick<Chat, "id" | "mode" | "limitUnits">;
 
-const QUOTE_TTL_MS = 170_000; // agents hold a quote for 3 minutes; stop a little earlier
+const QUOTE_TTL_MS = 170_000;
+const usdc = (u: bigint) => (Number(u) / 1e6).toFixed(2); // agents hold a quote for 3 minutes; stop a little earlier
 
 interface Held {
   ref: string; // "q1": what the user and Claude use; quote keys are long
@@ -69,7 +71,20 @@ export function hiringService(db: Db, env: HiringEnv) {
   return {
     async quotes(chat: ChatLike, skill: string, input: unknown) {
       const task = `chat-${chat.id.slice(0, 8)}-${Date.now().toString(36)}`;
-      const round = await collectQuotes(skill, task, input, await quoteDeps());
+      const qd = await quoteDeps();
+      const round = await collectQuotes(skill, task, input, qd);
+      // Agents that hire others name who they'll pay; only quotes we can vet are offered.
+      const options = [];
+      for (const o of round.options) {
+        if (!o.subcontract) options.push(o);
+        else {
+          const sub = await vetSubcontract(qd.arkiv, o.agent, o.subcontract).catch(() => null);
+          if (sub) options.push({ ...o, subcontract: sub });
+          else round.skipped.push(`${nameOf(o)}: its plan names agents we couldn't verify`);
+          for (const p of sub?.payees ?? []) names.set(p.agent.toLowerCase(), p.name);
+        }
+      }
+      round.options = options;
       const added = round.options.map((option) => ({
         ref: `q${nextRef++}`,
         round,
@@ -92,7 +107,10 @@ export function hiringService(db: Db, env: HiringEnv) {
             `agent ${agent.slice(0, 6)}…${agent.slice(-4)}`,
           agent: agent as `0x${string}`,
         });
-      for (const h of live(chatId)) add(h.option.agent);
+      for (const h of live(chatId)) {
+        add(h.option.agent);
+        for (const p of h.option.subcontract?.payees ?? []) add(p.agent);
+      }
       for (const p of current?.payees ?? []) if (!seen.has(p.toLowerCase())) add(p);
       return [...seen.values()];
     },
@@ -112,10 +130,13 @@ export function hiringService(db: Db, env: HiringEnv) {
           status: "refused",
           reason: `quote ${ref} expired or doesn't exist; get fresh quotes`,
         };
+      const sub = h.option.subcontract;
+      const cost = h.option.feeUnits + BigInt(sub?.budgetUnits ?? 0);
       const mandate = await currentMandate(db, chat.id);
-      if (!covers(mandate, h.option.agent)) {
+      const needed = [h.option.agent, ...(sub?.payees.map((p) => p.agent) ?? [])];
+      if (!needed.every((a) => covers(mandate, a))) {
         const left = await chatRemaining(db, chat);
-        if (left < h.option.feeUnits)
+        if (left < cost)
           return {
             status: "refused",
             reason:
@@ -136,7 +157,9 @@ export function hiringService(db: Db, env: HiringEnv) {
               type: "approval",
               code,
               title: `Hire ${h.option.title.split(" — ")[0]}`,
-              detail: h.option.note,
+              detail: sub
+                ? `${h.option.note}. It also gets up to ${usdc(BigInt(sub.budgetUnits))} USDC from this limit to pay ${sub.payees.map((p) => p.name).join(" and ")}.`
+                : h.option.note,
               feeUnits: h.option.feeUnits.toString(),
             },
           };
@@ -162,44 +185,43 @@ export function hiringService(db: Db, env: HiringEnv) {
         payer: m.payer,
       };
       try {
-        const hire = await buy(h.round, h.option, label, deps, reason);
+        // A planner gets its own slice of this limit, granted on Hedera before it's paid.
+        const delegation = sub ? await grantSubMandate(env, m, h.option.agent, sub) : undefined;
+        if (delegation)
+          await env.log?.write({
+            kind: "agentnet.mandate.delegated",
+            mandateId: delegation.mandateId,
+            parentId: m.mandateId.toString(),
+            agent: h.option.agent,
+            budget: delegation.budget.toString(),
+            payees: delegation.payees,
+          });
+        const hire = await buy(
+          h.round,
+          h.option,
+          label,
+          deps,
+          reason,
+          delegation && { mandateId: delegation.mandateId, payer: delegation.payer }, // sent as JSON
+        );
         held.set(
           chat.id,
           live(chat.id).filter((x) => x.round !== h.round),
         ); // that job is done
-        const [row] = await db
-          .insert(hires)
-          .values({
-            chatId: chat.id,
-            mandateId: m.mandateId,
-            skill: hire.skill,
-            agent: hire.agent,
-            title: hire.agentTitle,
-            feeUnits: hire.feeUnits,
-            hederaTx: hire.hederaTx,
-            jobKey: hire.jobKey,
-            result: hire.result,
-          })
-          .returning({ id: hires.id });
-        // Saved first, so a slow or failed log write can't lose a paid hire.
-        const logSeq =
-          (await env.log?.write({
-            kind: "agentnet.hired",
-            mandateId: m.mandateId.toString(),
-            skill: hire.skill,
-            agent: hire.agent,
-            fee: hire.feeUnits.toString(),
-            payment: hire.hederaTx,
-            job: hire.jobKey,
-          })) ?? null;
-        if (row && logSeq !== null)
-          await db
-            .update(hires)
-            .set({ logSeq })
-            .where(eq(hires.id, row.id))
-            .catch(() => {}); // the entry is on Hedera either way
-        const log =
-          logSeq !== null && env.log ? { topic: env.log.topicId, seq: logSeq } : undefined;
+        const log = await saveHire(db, env, {
+          chatId: chat.id,
+          mandateId: m.mandateId,
+          skill: hire.skill,
+          agent: hire.agent,
+          title: hire.agentTitle,
+          feeUnits: hire.feeUnits,
+          hederaTx: hire.hederaTx,
+          jobKey: hire.jobKey,
+          result: hire.result,
+        });
+        const subHires = delegation
+          ? await recordSubHires(db, env, chat.id, delegation, hire.result)
+          : undefined;
         return {
           status: "hired",
           result: hire.result,
@@ -212,6 +234,8 @@ export function hiringService(db: Db, env: HiringEnv) {
             hederaTx: hire.hederaTx,
             jobKey: hire.jobKey,
             log,
+            subMandateId: delegation?.mandateId,
+            subHires,
           },
         };
       } catch (err) {
