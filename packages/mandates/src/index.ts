@@ -21,6 +21,17 @@ export {
   paymentState,
 } from "./paid";
 export {
+  type Assertion,
+  assertionFromWebAuthn,
+  limitCalls,
+  type PasskeyKey,
+  PasskeyWalletClient,
+  passkeyWalletAbi,
+  passkeyWalletFactoryAbi,
+  revokeCalls,
+  type WalletCall,
+} from "./passkey-wallet";
+export {
   type EscrowAuth,
   encodeX402Authorization,
   encodeX402EscrowAuthorization,
