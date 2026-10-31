@@ -117,6 +117,21 @@ export function ChatThread({ chatId }: { chatId: string }) {
     };
   }, [chatId, send]);
 
+  // Agents finish later (a delivery, a fare drop, a payment to review) and the server posts it
+  // here: look for new messages every few seconds while this chat is open and idle.
+  const busyNow = useRef(false);
+  busyNow.current = busy;
+  useEffect(() => {
+    const t = setInterval(async () => {
+      if (busyNow.current || document.hidden) return;
+      const got = await api<{ messages: ChatMessage[] }>(`/chats/${chatId}`).catch(() => null);
+      if (!got || busyNow.current || got.messages.length <= saved.current) return;
+      setTurns(got.messages.map(fromSaved));
+      saved.current = got.messages.length;
+    }, 6000);
+    return () => clearInterval(t);
+  }, [chatId]);
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: scroll down whenever the conversation changes
   useEffect(() => {
     bottom.current?.scrollIntoView({ block: "end" });
@@ -145,18 +160,18 @@ export function ChatThread({ chatId }: { chatId: string }) {
     );
 
   return (
-    <div className="flex min-h-dvh flex-col">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[#F1EEE8] px-6 py-3">
+    <div className="flex min-h-[calc(100dvh-3.5rem)] flex-col md:min-h-dvh">
+      <header className="sticky top-14 z-20 flex items-center justify-between gap-3 border-b border-[#F1EEE8] bg-white/95 px-4 py-2.5 backdrop-blur sm:px-6 md:top-0 md:py-3">
         <div className="flex min-w-0 items-center gap-2.5">
           <h1 className="truncate text-base font-semibold">
             {chats.find((c) => c.id === chatId)?.title ?? chat?.title ?? "…"}
           </h1>
-          <span className="rounded-full bg-side px-2.5 py-0.5 text-xs font-medium text-ink-3">
+          <span className="flex-none rounded-full bg-side px-2.5 py-0.5 text-xs font-medium text-ink-3">
             {chat?.agent ? `with ${chat.agent.name}` : "Concierge"}
           </span>
         </div>
       </header>
-      <main className="mx-auto flex w-full max-w-[800px] flex-1 flex-col gap-7 px-6 pt-8 pb-6">
+      <main className="mx-auto flex w-full max-w-[800px] flex-1 flex-col gap-6 px-4 pt-6 pb-4 sm:gap-7 sm:px-6 sm:pt-8">
         {chat?.agent && <AgentBanner agent={chat.agent} onUnpin={unpin} />}
         <Messages
           turns={turns}
@@ -165,7 +180,7 @@ export function ChatThread({ chatId }: { chatId: string }) {
           ctx={{ chatId, isDemo: me?.isDemo ?? false, faceId: me?.wallet?.status === "ready" }}
         />
       </main>
-      <div className="sticky bottom-0 mx-auto w-full max-w-[800px] bg-gradient-to-t from-white via-white px-6 pt-4 pb-5">
+      <div className="sticky bottom-0 z-20 mx-auto w-full max-w-[800px] bg-gradient-to-t from-white from-60% to-white/0 px-3 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] sm:px-6 sm:pb-5">
         <Composer
           onSend={send}
           disabled={busy}

@@ -35,19 +35,19 @@ export function Messages({
         t.role === "user" ? (
           <li
             key={t.id}
-            className="max-w-[78%] self-end rounded-[18px_18px_4px_18px] bg-bubble px-4 py-3 text-[15px] leading-relaxed whitespace-pre-wrap"
+            className="max-w-[85%] self-end rounded-[18px_18px_4px_18px] bg-bubble px-4 py-3 text-[15px] leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere] sm:max-w-[78%]"
           >
             {t.text}
           </li>
         ) : (
-          <li key={t.id} className="flex items-start gap-3.5">
+          <li key={t.id} className="flex items-start gap-2.5 sm:gap-3.5">
             <span
               aria-hidden
               className="flex size-8 flex-none items-center justify-center rounded-[9px] bg-ink text-white"
             >
               <LogoMark size={17} />
             </span>
-            <div className="flex min-w-0 flex-1 flex-col gap-4">
+            <div className="flex min-w-0 flex-1 flex-col gap-4 [overflow-wrap:anywhere]">
               <span className="text-[13px] font-semibold">Concierge</span>
               {t.text &&
                 (t.streaming ? (

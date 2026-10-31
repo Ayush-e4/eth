@@ -25,18 +25,18 @@ export function ModePill({
         aria-expanded={open}
         aria-haspopup="dialog"
         onClick={() => setOpen((o) => !o)}
-        className="flex h-10 items-center gap-2 rounded-[10px] border border-[#C9DEE0] bg-teal-tint px-3 text-sm font-medium text-teal-dark"
+        className="flex h-9 items-center gap-1.5 rounded-full border border-[#C9DEE0] bg-teal-tint px-3 text-[13px] font-medium whitespace-nowrap text-teal-dark"
       >
-        <ShieldIcon size={16} />
-        {mode === "auto" ? "Auto" : "Ask first"} · up to{" "}
-        <span className="font-mono text-[13px]">{usdc(limitUnits)} USDC</span>
+        <ShieldIcon size={15} />
+        {mode === "auto" ? "Auto" : "Ask first"} ·<span className="hidden sm:inline"> up to</span>
+        <span className="font-mono text-[12.5px]">{usdc(limitUnits)} USDC</span>
         <ChevronIcon size={14} />
       </button>
       {open && (
         <div
           role="dialog"
           aria-label="Spending for this chat"
-          className="absolute bottom-12 left-0 z-10 flex w-72 flex-col gap-3 rounded-2xl border border-line bg-white p-4 shadow-lg"
+          className="absolute bottom-11 left-0 z-10 flex w-[min(18rem,calc(100vw-2rem))] flex-col gap-3 rounded-2xl border border-line bg-white p-4 shadow-lg"
         >
           <fieldset className="flex flex-col gap-2">
             <legend className="mb-2 text-[13px] font-semibold">Spending in this chat</legend>
