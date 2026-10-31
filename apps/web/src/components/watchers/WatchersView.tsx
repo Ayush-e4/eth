@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { HotelGuardCard } from "../chat/HotelGuardCard";
 import { WatchCard } from "../chat/WatchCard";
+import { AlertsPanel } from "./AlertsPanel";
 
 interface Row {
   watchId: string;
@@ -70,6 +71,7 @@ export function WatchersView() {
           it up.
         </p>
       </div>
+      <AlertsPanel />
       {error && <p className="text-sm text-bad">{error}</p>}
       {rows === null && !error && <p className="text-sm text-muted">Loading your watchers…</p>}
       {rows?.length === 0 && (

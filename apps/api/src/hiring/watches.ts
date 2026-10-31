@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { privateKeyToAccount } from "viem/accounts";
 import type { Db } from "../db/client";
 import { chats, messages, fareWatches as table } from "../db/schema";
+import type { ChatPoster } from "../notify/post";
 import type { HiringEnv } from "./env";
 import { followHotel, type GuardView } from "./hotel-follow";
 import type { HiringService } from "./service";
@@ -41,12 +42,19 @@ const addDay = (d: string) =>
 export function fareWatchFollower(
   db: Db,
   env: HiringEnv,
-  d: { hiring?: () => HiringService | null; fetchImpl?: typeof fetch; simulate?: boolean } = {},
+  d: {
+    hiring?: () => HiringService | null;
+    fetchImpl?: typeof fetch;
+    simulate?: boolean;
+    post?: ChatPoster; // posts in the chat and nudges its owner (default: just posts)
+  } = {},
 ) {
   const concierge = privateKeyToAccount(env.concierge.key);
   const fetchImpl = d.fetchImpl ?? fetch;
-  const say = (chatId: string, text: string, cards: Card[] = []) =>
-    db.insert(messages).values({ chatId, role: "assistant", text, cards });
+  const say: ChatPoster =
+    d.post ??
+    ((chatId, text, cards = []) =>
+      db.insert(messages).values({ chatId, role: "assistant", text, cards }));
 
   async function call(row: typeof table.$inferSelect, action: string, body: unknown = {}) {
     const path = `/watches/${row.watchId}/${action}`;

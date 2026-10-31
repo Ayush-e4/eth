@@ -6,11 +6,12 @@ import {
   recordHire,
 } from "@eth/agents/hiring";
 import { arkivWriter } from "@eth/arkiv";
-import { type Card, decodeJson, encodeJson } from "@eth/shared";
+import { decodeJson, encodeJson } from "@eth/shared";
 import { and, eq } from "drizzle-orm";
 import { privateKeyToAccount } from "viem/accounts";
 import type { Db } from "../db/client";
 import { hires, messages, pendingHires as table } from "../db/schema";
+import type { ChatPoster } from "../notify/post";
 import type { HiringEnv } from "./env";
 import { finishHire, type Granted } from "./record";
 import type { Reputation } from "./reputation";
@@ -42,6 +43,7 @@ export function pendingHires(
     reputation?: Reputation;
     review?: EscrowReviews;
     watches?: FareWatchFollower;
+    post?: ChatPoster; // posts in the chat and nudges its owner (default: just posts)
     read?: typeof readJob;
     wait?: typeof sleep;
   } = {},
@@ -50,8 +52,10 @@ export function pendingHires(
   const read = d.read ?? readJob;
   const wait = d.wait ?? sleep;
   const watching = new Set<string>();
-  const say = (chatId: string, text: string, cards: Card[] = []) =>
-    db.insert(messages).values({ chatId, role: "assistant", text, cards });
+  const say: ChatPoster =
+    d.post ??
+    ((chatId, text, cards = []) =>
+      db.insert(messages).values({ chatId, role: "assistant", text, cards }));
 
   /** The agent delivered: record the hire exactly as the turn would have, then tell the chat. */
   async function delivered(p: Row, job: JobView) {
