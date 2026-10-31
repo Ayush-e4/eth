@@ -156,7 +156,8 @@ function HiredRow({ card, ctx }: { card: Of<"hired">; ctx?: CardCtx }) {
         </span>
         {card.summary && <span className="text-xs text-muted">{card.summary}</span>}
       </span>
-      <span className="flex flex-col items-end gap-0.5 text-xs">
+      {/* Proof links: a row under the title on phones, a column on the right otherwise. */}
+      <span className="flex w-full flex-wrap gap-x-3 gap-y-0.5 pl-[42px] text-xs sm:w-auto sm:flex-col sm:items-end sm:pl-0">
         <a
           className="font-mono text-teal"
           href={`https://hashscan.io/testnet/transaction/${card.hederaTx}`}

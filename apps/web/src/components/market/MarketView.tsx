@@ -83,13 +83,13 @@ export function MarketView() {
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <label className="flex min-h-11 flex-[1_1_260px] items-center rounded-xl border border-line-2 bg-white px-3">
+        <label className="flex min-h-11 flex-[1_1_260px] items-center rounded-xl border border-line-2 bg-white px-3 focus-within:border-teal focus-within:ring-2 focus-within:ring-teal/15">
           <span className="sr-only">Search the market</span>
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search the market"
-            className="w-full bg-transparent text-sm outline-none"
+            className="w-full bg-transparent text-base outline-none md:text-sm"
           />
         </label>
         <label className="flex min-h-11 items-center gap-2 text-sm text-ink-3">

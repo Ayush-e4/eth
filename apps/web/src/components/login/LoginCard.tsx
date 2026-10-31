@@ -250,7 +250,7 @@ export function LoginCard() {
 function Heading({ title, body }: { title: string; body: string }) {
   return (
     <div className="flex flex-col gap-2">
-      <h1 className="text-[30px] leading-tight font-bold tracking-tight">{title}</h1>
+      <h1 className="text-[26px] leading-tight font-bold tracking-tight sm:text-[30px]">{title}</h1>
       <p className="text-[15px] leading-relaxed text-ink-3">{body}</p>
     </div>
   );

@@ -33,7 +33,19 @@ body {
   color: var(--color-ink);
 }
 
-:focus-visible {
-  outline: 2px solid var(--color-teal);
-  outline-offset: 2px;
+/* In the base layer, so a component can swap it for its own focus style (the composer does). */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--color-teal);
+    outline-offset: 2px;
+  }
+}
+
+/* iPhones zoom into any field under 16px when it's tapped; phones get 16px fields everywhere. */
+@media (max-width: 767px) {
+  input:not([type="radio"]):not([type="checkbox"]),
+  textarea,
+  select {
+    font-size: max(16px, 1em);
+  }
 }
