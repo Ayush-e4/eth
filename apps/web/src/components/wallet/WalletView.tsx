@@ -13,6 +13,7 @@ import {
   type WalletInfo,
   when,
 } from "@/lib/api";
+import { cancelled, withFaceId } from "@/lib/passkey";
 import { revokeInWallet } from "@/lib/wallet";
 import { DemoAllowance } from "./DemoAllowance";
 
@@ -38,17 +39,21 @@ export function WalletView() {
     setCancelling(l.id);
     setError(null);
     try {
-      if (l.demo) await api(`/wallet/limits/${l.id}/revoke`, { method: "POST" });
+      const path = `/wallet/limits/${l.id}/revoke`;
+      if (l.via === "face-id") await withFaceId(`${path}/face-id`, {}, path);
+      else if (l.demo) await api(path, { method: "POST" });
       else await revokeInWallet(l.registry, l.mandateId);
       load();
     } catch (err) {
       const code = (err as { code?: number }).code;
       setError(
-        code === 4001
-          ? "You cancelled in MetaMask."
-          : err instanceof ApiError
-            ? err.message
-            : "Couldn't cancel the limit.",
+        cancelled(err)
+          ? "The Face ID prompt was closed."
+          : code === 4001
+            ? "You cancelled in MetaMask."
+            : err instanceof ApiError
+              ? err.message
+              : "Couldn't cancel the limit.",
       );
     } finally {
       setCancelling(null);
@@ -90,7 +95,11 @@ export function WalletView() {
       >
         <div className="flex min-w-0 flex-[1_1_260px] flex-col gap-1">
           <span className="font-mono text-base">
-            {w.shared ? "Shared demo wallet" : w.address ? shortAddress(w.address) : "No wallet"}
+            {w.shared
+              ? "Shared demo wallet"
+              : w.address
+                ? `${w.faceId ? "Face ID wallet · " : ""}${shortAddress(w.address)}`
+                : "No wallet"}
           </span>
           <span className="text-[13px] text-[#BFDCDF]">
             {w.account ? (
@@ -114,7 +123,7 @@ export function WalletView() {
         <dl className="flex flex-wrap gap-7">
           {[
             ["USDC", usdcLeft],
-            ["HBAR, for network fees", hbar],
+            w.faceId ? ["Network fees", "on us"] : ["HBAR, for network fees", hbar],
             ["Agent fees paid", usdc(w.spentUnits)],
           ].map(([k, v]) => (
             <div key={k} className="flex flex-col gap-0.5">
@@ -124,6 +133,17 @@ export function WalletView() {
           ))}
         </dl>
       </section>
+      {w.faceId && (
+        <p className="rounded-xl bg-side px-4 py-3 text-sm leading-relaxed text-ink-3">
+          {w.faceId.status === "ready"
+            ? "This wallet is a contract on Hedera whose only key is your passkey: limits and cancels need your Face ID or fingerprint, and nobody else (AgentNet included) can move its money. We pay its network fees."
+            : w.faceId.status === "creating"
+              ? "Setting up your wallet on Hedera. This takes a few seconds."
+              : "Setting up your wallet didn't work. Reload this page to try again."}
+          {w.faceId.giftUnits &&
+            ` We sent it ${usdc(w.faceId.giftUnits)} test USDC to start you off.`}
+        </p>
+      )}
       {w.shared && <DemoAllowance />}
       {w.shared && (
         <p className="-mt-3 text-[13px] text-ink-3">
@@ -220,9 +240,11 @@ export function WalletView() {
                   >
                     {cancelling === l.id
                       ? "Cancelling…"
-                      : l.demo
-                        ? "Cancel limit"
-                        : "Cancel in MetaMask"}
+                      : l.via === "face-id"
+                        ? "Cancel with Face ID"
+                        : l.demo
+                          ? "Cancel limit"
+                          : "Cancel in MetaMask"}
                   </button>
                 )}
               </li>

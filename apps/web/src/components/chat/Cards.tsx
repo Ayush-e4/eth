@@ -3,7 +3,8 @@
 import type { Card } from "@eth/shared";
 import { shortAddress, usdc } from "@/lib/api";
 import { HotelGuardCard } from "./HotelGuardCard";
-import { ApprovalCard, type CardCtx, HiredCard, LimitCard, QuotesCard } from "./MoneyCards";
+import { LimitCard } from "./LimitCard";
+import { ApprovalCard, type CardCtx, HiredCard, QuotesCard } from "./MoneyCards";
 import { PaymentCard } from "./PaymentCard";
 import { TaskCard } from "./TaskCard";
 import { WatchCard } from "./WatchCard";

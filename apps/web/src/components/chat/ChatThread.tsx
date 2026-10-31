@@ -162,7 +162,7 @@ export function ChatThread({ chatId }: { chatId: string }) {
           turns={turns}
           onReply={send}
           busy={busy}
-          ctx={{ chatId, isDemo: me?.isDemo ?? false }}
+          ctx={{ chatId, isDemo: me?.isDemo ?? false, faceId: me?.wallet?.status === "ready" }}
         />
       </main>
       <div className="sticky bottom-0 mx-auto w-full max-w-[800px] bg-gradient-to-t from-white via-white px-6 pt-4 pb-5">

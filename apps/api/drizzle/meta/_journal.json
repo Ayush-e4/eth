@@ -120,6 +120,13 @@
       "when": 1793479236036,
       "tag": "0016_passkeys",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1793480916068,
+      "tag": "0017_passkey_wallets",
+      "breakpoints": true
     }
   ]
 }

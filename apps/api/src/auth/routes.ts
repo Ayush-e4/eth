@@ -8,6 +8,7 @@ import type { Config } from "../config";
 import type { Db } from "../db/client";
 import { passkeys, type User, users } from "../db/schema";
 import { limitUnitsSchema } from "../limits";
+import type { PasskeyWallets } from "../wallet/service";
 import { passkeyAuth } from "./passkey";
 import { rolesFor } from "./roles";
 import { createSession, endSession, SESSION_COOKIE, SESSION_TTL_MS, userForToken } from "./session";
@@ -59,7 +60,7 @@ export function requireUser(db: Db) {
   });
 }
 
-export function authRoutes(db: Db, config: Config) {
+export function authRoutes(db: Db, config: Config, wallets: PasskeyWallets | null = null) {
   const app = new Hono<AuthEnv>();
 
   const startSession = async (c: Context, user: User) => {
@@ -121,7 +122,11 @@ export function authRoutes(db: Db, config: Config) {
   });
   app.post("/auth/passkey/register", (c) =>
     config.demoMode
-      ? passkeyIn(c, (r) => passkey.register(r))
+      ? passkeyIn(c, async (r) => {
+          const user = await passkey.register(r);
+          void wallets?.ensure(user.id); // their own Face ID wallet, made in the background
+          return user;
+        })
       : c.json({ error: "new accounts need demo mode" }, 403),
   );
   app.post("/auth/passkey/login/options", async (c) =>
@@ -135,15 +140,26 @@ export function authRoutes(db: Db, config: Config) {
     return c.json({ ok: true });
   });
 
-  app.get("/me", requireUser(db), async (c) => {
-    const user = c.get("user");
+  // The signed-in user, plus their passkey wallet (made, or retried, here if it's missing).
+  const meJson = async (user: User) => {
     const keys = await db
       .select({ id: passkeys.id })
       .from(passkeys)
       .where(eq(passkeys.userId, user.id))
       .limit(1);
-    return c.json({ user: { ...publicUser(user, config), passkey: keys.length > 0 } });
-  });
+    const wallet = keys.length > 0 ? ((await wallets?.get(user.id, false)) ?? null) : null;
+    if (keys.length > 0 && wallets && (!wallet || wallet.status === "failed"))
+      void wallets.ensure(user.id);
+    return {
+      user: {
+        ...publicUser(user, config),
+        passkey: keys.length > 0,
+        wallet: wallet && { address: wallet.address, status: wallet.status },
+      },
+    };
+  };
+
+  app.get("/me", requireUser(db), async (c) => c.json(await meJson(c.get("user"))));
 
   app.patch("/me", requireUser(db), async (c) => {
     const body = ProfilePatch.safeParse(await c.req.json().catch(() => null));
@@ -154,7 +170,7 @@ export function authRoutes(db: Db, config: Config) {
       .set({ ...fields, ...(onboarded ? { onboardedAt: new Date() } : {}) })
       .where(eq(users.id, c.get("user").id))
       .returning();
-    return c.json({ user: publicUser(user ?? c.get("user"), config) });
+    return c.json(await meJson(user ?? c.get("user")));
   });
 
   return app;

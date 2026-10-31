@@ -14,7 +14,7 @@ export type SpendLogEvent =
       budget: string;
       payees: string[];
       expiresAt: number;
-      via: "demo" | "wallet";
+      via: "demo" | "wallet" | "face-id";
     }
   | { kind: "agentnet.mandate.revoked"; mandateId: string; registry?: string; by: string }
   | {

@@ -1,10 +1,8 @@
 "use client";
 
 import type { Card } from "@eth/shared";
-import { useEffect, useState } from "react";
-import { ApiError, api, usdc } from "@/lib/api";
-import { createMandateInWallet } from "@/lib/wallet";
-import { CheckIcon, ShieldIcon } from "../icons";
+import { usdc } from "@/lib/api";
+import { CheckIcon } from "../icons";
 import { EscrowSteps } from "./EscrowSteps";
 import { HumanApproval } from "./HumanApproval";
 
@@ -12,6 +10,7 @@ type Of<T extends Card["type"]> = Extract<Card, { type: T }>;
 export interface CardCtx {
   chatId: string;
   isDemo: boolean;
+  faceId?: boolean; // their own passkey wallet is ready: limits are approved with Face ID
   onReply: (text: string) => void;
   busy?: boolean;
 }
@@ -68,100 +67,6 @@ export function QuotesCard({ card, ctx }: { card: Of<"quotes">; ctx: CardCtx }) 
           </article>
         ))}
       </div>
-    </section>
-  );
-}
-
-/**
- * The chat's spending limit on Hedera. Wallet users sign it in MetaMask (two transactions:
- * allow USDC, then create the limit); demo users approve it with the shared test wallet.
- */
-export function LimitCard({ card, ctx }: { card: Of<"limit">; ctx: CardCtx }) {
-  const [state, setState] = useState<"idle" | "working" | "done">("idle");
-  const [error, setError] = useState<string | null>(null);
-  // Reopening the chat: if a live limit already covers these agents, this card was approved.
-  useEffect(() => {
-    let stop = false;
-    api<{ mandate: { payees: string[]; expiresAt: string } | null }>(`/chats/${ctx.chatId}/mandate`)
-      .then(({ mandate: m }) => {
-        const covers =
-          !!m &&
-          new Date(m.expiresAt).getTime() > Date.now() &&
-          card.payees.every((p) => m.payees.some((a) => a.toLowerCase() === p.agent.toLowerCase()));
-        if (covers && !stop) setState((s) => (s === "idle" ? "done" : s));
-      })
-      .catch(() => {});
-    return () => {
-      stop = true;
-    };
-  }, [ctx.chatId, card.payees]);
-  const approve = async () => {
-    setState("working");
-    setError(null);
-    try {
-      const body = ctx.isDemo
-        ? { demo: true, card }
-        : { mandateId: (await createMandateInWallet(card)).toString(), card };
-      await api(`/chats/${ctx.chatId}/mandate`, { method: "POST", body });
-      setState("done");
-      ctx.onReply("I've approved the spending limit. Go ahead.");
-    } catch (err) {
-      setState("idle");
-      const code = (err as { code?: number }).code;
-      setError(
-        code === 4001
-          ? "You cancelled in MetaMask."
-          : err instanceof ApiError
-            ? err.message
-            : "Couldn't set the limit. Try again.",
-      );
-    }
-  };
-  return (
-    <section
-      aria-label="Approve a spending limit"
-      className="flex flex-col gap-3.5 rounded-2xl border border-warm-line bg-warm p-[18px]"
-    >
-      <div className="flex items-center gap-2.5">
-        <span
-          aria-hidden
-          className="flex size-[30px] items-center justify-center rounded-full border border-warm-line bg-saffron-soft text-saffron-ink"
-        >
-          <ShieldIcon size={16} />
-        </span>
-        <span className="text-[15px] font-bold">Set a spending limit for this chat</span>
-      </div>
-      <p className="text-sm leading-relaxed text-[#5C3A00]">
-        Up to <strong className="font-mono">{usdc(card.budgetUnits)} USDC</strong> in agent fees, at
-        most <span className="font-mono">{usdc(card.perPaymentCapUnits)}</span> per payment, only to{" "}
-        <strong>{card.payees.map((p) => p.name).join(", ")}</strong>, for the next 24 hours. Hedera
-        enforces it: nobody can spend past it.
-      </p>
-      {state === "done" ? (
-        <p role="status" className="flex items-center gap-2 text-sm font-semibold text-ok">
-          <CheckIcon size={16} /> Limit set on Hedera
-        </p>
-      ) : (
-        <button
-          type="button"
-          onClick={approve}
-          disabled={state === "working" || ctx.busy}
-          className={`${btn} self-start bg-teal text-white`}
-        >
-          {state === "working"
-            ? ctx.isDemo
-              ? "Setting it on Hedera…"
-              : "Confirm in MetaMask…"
-            : ctx.isDemo
-              ? "Approve with the demo wallet"
-              : "Approve in MetaMask"}
-        </button>
-      )}
-      {error && (
-        <p role="alert" className="text-sm text-bad">
-          {error}
-        </p>
-      )}
     </section>
   );
 }

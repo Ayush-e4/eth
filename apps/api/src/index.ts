@@ -25,6 +25,8 @@ import { telegramBot } from "./notify/telegram";
 import { arkivNames } from "./spend-log/routes";
 import { statusCheck } from "./status/check";
 import { openTaskService } from "./tasks/service";
+import { hederaWalletChain } from "./wallet/chain";
+import { passkeyWallets } from "./wallet/service";
 import { humanChecks } from "./world/checks";
 import { loadWorldConfig, worldClient } from "./world/oidc";
 
@@ -44,6 +46,17 @@ const notify = notifier(db, {
   ntfyUrl: process.env.NTFY_URL || "https://ntfy.sh",
   telegramToken: process.env.TELEGRAM_BOT_TOKEN || undefined,
 });
+// Passkey users' own wallets (Face ID approves their limits). WALLET_GIFT_UNITS of free test
+// USDC each (0.50 by default), for at most WALLET_GIFTS_PER_DAY new wallets a day.
+const wallets = env
+  ? passkeyWallets(db, hederaWalletChain(env), {
+      rpID: new URL(config.appOrigin).hostname,
+      origin: config.appOrigin,
+      giftUnits: BigInt(process.env.WALLET_GIFT_UNITS ?? 500_000),
+      giftsPerDay: Number(process.env.WALLET_GIFTS_PER_DAY ?? 20),
+      log: console.log,
+    })
+  : null;
 const post = chatPoster(db, notify, config.appOrigin);
 const nudge = chatNudge(db, notify, config.appOrigin);
 telegramBot(notify, console.log);
@@ -178,6 +191,7 @@ serve(
       status,
       catalog,
       checkAgent,
+      wallets,
     }).fetch,
     port: config.port,
   },
