@@ -15,7 +15,8 @@ export type Kind =
   | "rating"
   | "invoice"
   | "task"
-  | "claim";
+  | "claim"
+  | "delivery";
 
 const hederaId = z.string().regex(/^0\.0\.\d+$/);
 const address = z.string().regex(/^0x[0-9a-fA-F]{40}$/) as unknown as z.ZodType<`0x${string}`>;
@@ -135,6 +136,22 @@ export const ClaimSchema = z.object({
   agent: address, // who won
 });
 
+/**
+ * The seller's public word on a paid job: delivered (with a hash of what it handed over, which
+ * stays private) or refunded (with the refund transfer). Read-only once written.
+ */
+export const DeliverySchema = z.object({
+  task: slug,
+  agent: address, // the seller; must be $creator
+  quote: entityKey, // the quote the buyer paid for
+  status: z.enum(["delivered", "refunded"]),
+  resultHash: z
+    .string()
+    .regex(/^0x[0-9a-f]{64}$/)
+    .optional(), // sha256 of the result JSON
+  refundTx: z.string().max(80).optional(), // Hedera transaction of the refund
+});
+
 export type Agent = z.infer<typeof AgentSchema>;
 export type Listing = z.infer<typeof ListingSchema>;
 export type Quote = z.infer<typeof QuoteSchema>;
@@ -144,6 +161,7 @@ export type Rating = z.infer<typeof RatingSchema>;
 export type Invoice = z.infer<typeof InvoiceSchema>;
 export type Task = z.infer<typeof TaskSchema>;
 export type Claim = z.infer<typeof ClaimSchema>;
+export type Delivery = z.infer<typeof DeliverySchema>;
 
 /** JSON payloads can't hold bigint; store them as decimal strings. */
 export function toPayloadJson(record: object): Record<string, unknown> {

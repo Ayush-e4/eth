@@ -1,11 +1,12 @@
 import { and, eq, lte } from "@arkiv-network/sdk/query";
-import { addr, str, u64 } from "@arkiv-network/sdk/schema";
+import { addr, key, str, u64 } from "@arkiv-network/sdk/schema";
 import { hexToBytes, isHex } from "viem";
 import type { ArkivReader } from "./config";
 import { type Decoded, decodeEntity, type RawEntity } from "./decode";
 import type {
   Agent,
   Claim,
+  Delivery,
   Invoice,
   Job,
   Kind,
@@ -136,6 +137,14 @@ export function openTasks(r: ArkivReader, opts: { skill?: string } = {}) {
 /** Every live task (open or awarded), newest first as Arkiv returns them. */
 export function liveTasks(r: ArkivReader) {
   return query(r, "task", []) as Promise<Decoded<Task>[]>;
+}
+
+/** How the agent says a paid job ended, trusted only if that agent wrote it. */
+export async function deliveryFor(r: ArkivReader, quote: `0x${string}`, agent: `0x${string}`) {
+  const [d] = (await query(r, "delivery", [eq("quote", key(quote))], {
+    createdBy: agent,
+  })) as Decoded<Delivery>[];
+  return d ?? null;
 }
 
 /** The award for a task, trusted only if the task's poster wrote it. */

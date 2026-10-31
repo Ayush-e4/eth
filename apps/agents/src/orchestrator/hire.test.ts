@@ -1,4 +1,5 @@
 import { findListings, liveQuotes, openJob, rateAgent, recordReceipt } from "@eth/arkiv";
+import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Trip } from "../trip";
 import { type HireDeps, hire } from "./hire";
@@ -14,7 +15,8 @@ vi.mock("@eth/arkiv", () => ({
 const A = "0x00000000000000000000000000000000000000aa";
 const B = "0x00000000000000000000000000000000000000bb";
 const C = "0x00000000000000000000000000000000000000cc"; // not in the mandate
-const BUYER = "0x0000000000000000000000000000000000000b0b";
+const buyerAccount = privateKeyToAccount(generatePrivateKey()); // signs /work
+const BUYER = buyerAccount.address;
 const trip: Trip = {
   origin: "BOM",
   destination: "GOI",
@@ -55,7 +57,7 @@ const quote = (agent: string, priceUnits: bigint, itemTotal?: number, itemCurren
 function deps(over: Partial<HireDeps> = {}): HireDeps {
   return {
     arkiv: {} as never,
-    buyerWriter: { account: { address: BUYER } } as never,
+    buyerWriter: { account: buyerAccount } as never,
     platformWriter: {} as never,
     payingFetch: vi.fn(async () => ({
       response: Response.json({ result: { orderId: "ord_1" } }),

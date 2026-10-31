@@ -2,6 +2,7 @@ import type { z } from "zod";
 import {
   AgentSchema,
   ClaimSchema,
+  DeliverySchema,
   InvoiceSchema,
   JobSchema,
   type Kind,
@@ -38,6 +39,7 @@ const SCHEMAS = {
   invoice: InvoiceSchema,
   task: TaskSchema,
   claim: ClaimSchema,
+  delivery: DeliverySchema,
 } as const;
 
 /** Indexed attribute name → record field. Attributes win over the payload: they are what queries matched. */
@@ -90,6 +92,7 @@ const ATTR_FIELDS: Record<Kind, Record<string, string>> = {
     status: "status",
   },
   claim: { task: "task", poster: "poster", quote: "quote", agent: "agent" },
+  delivery: { task: "task", agent: "agent", quote: "quote", status: "status" },
 };
 
 /** Fields stored as bigint in records (decimal strings in JSON payloads). */

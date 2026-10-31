@@ -213,7 +213,7 @@ Live (13–15 Nov trip, Park Inn Candolim, refundable):
 - **Pay-first, not pay-on-delivery.** If an agent takes the fee and its booking then fails, it
   refunds the fee itself — a promise, not a guarantee. Planned fix: escrow in MandateRegistry,
   released when the booking is confirmed (LiteAPI webhooks `booking.book`, `flight.book.confirmed`).
-- Quotes live in the specialist's memory, so restarting it forgets them (Arkiv still has them).
+- Paid jobs survive crashes and restarts: see [agent-jobs.md](agent-jobs.md).
 - Agents run on `localhost`; deploying them gives them public endpoints in their listings.
 - Sandbox data: Duffel test mode books "Duffel Airways" (ZZ) at made-up prices; LiteAPI's flight
   sandbox is limited (its test airline is Nuitee Air). A supplier with no results simply doesn't

@@ -13,7 +13,7 @@ Before SDK 1.0, every entity carried two attributes, and every query filtered on
 named schema now does this job):
 
 - `project` — `str("eth-agentnet-mumbai26")`, our project tag
-- `kind` — `str("agent" | "listing" | "quote" | "job" | "receipt" | "rating" | "invoice" | "task" | "claim")`
+- `kind` — `str("agent" | "listing" | "quote" | "job" | "receipt" | "rating" | "invoice" | "task" | "claim" | "delivery")`
 
 Payloads are `application/json` (`jsonToPayload`); `bigint` fields are decimal strings in the
 payload and `u64` in attributes. **Indexed attributes win over the payload** when decoding,
@@ -173,6 +173,20 @@ award can't be quietly changed later; kept 7 days.
 | `quote` | entityKey | the winning bid |
 | `agent` | addr | who won |
 
+## Entity: `delivery`
+
+The agent's word on how a paid job ended. Written by the agent, **read-only**, kept 90 days. The
+result itself stays private; its sha256 is public, so the buyer can prove what was handed over.
+
+| Attribute | Type | Notes |
+|---|---|---|
+| `task` | str | the task |
+| `agent` | addr | must equal `$creator` |
+| `quote` | entityKey | the quote that was paid for |
+| `status` | str | `delivered` or `refunded` |
+
+Payload adds `resultHash` (delivered) or `refundTx` (refunded).
+
 ## Queries the app runs
 
 All from `packages/arkiv/src/read.ts`. Common prefix:
@@ -194,6 +208,7 @@ reader
 | `ratingsFor` | `eq("agent", addr(agent))` | verify rater, dedupe per job, average |
 | `openTasks` | `eq("status", str("open"))` (+ `eq("skill", …)`) | verify `poster == $creator` |
 | `liveTasks` | — | verify poster; the public board |
+| `deliveryFor` | `eq("quote", key(quote))` + `.createdBy(agent)` | trust only the agent that was paid |
 | `claimFor` | `eq("task", str(task))` + `.createdBy(poster)` | trust only the task's poster |
 
 Sorting is client-side (Arkiv returns newest first). `ne`/`exists` are not used (not supported

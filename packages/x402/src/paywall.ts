@@ -16,6 +16,20 @@ import {
   X402_VERSION,
 } from "./types";
 
+/** The buyer's payment in a request's PAYMENT-SIGNATURE header, or null if absent/unreadable. */
+export function readPaymentHeader(header: string | undefined): PaymentPayload | null {
+  if (!header) return null;
+  try {
+    return decodePaymentSignatureHeader(header) as PaymentPayload;
+  } catch {
+    return null;
+  }
+}
+
+/** The PAYMENT-RESPONSE header value for a settlement (for routes that build their own reply). */
+export const paymentResponseHeader = (settled: Parameters<typeof encodePaymentResponseHeader>[0]) =>
+  encodePaymentResponseHeader(settled);
+
 export interface PaywallOptions {
   network: HederaCaip;
   asset: string; // HTS token id, e.g. USDC "0.0.429274"

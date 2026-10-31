@@ -3,6 +3,7 @@ import { PROJECT } from "./config";
 import type {
   Agent,
   Claim,
+  Delivery,
   Invoice,
   Job,
   Kind,
@@ -94,6 +95,13 @@ export const ARKIV_SCHEMAS = {
     agent: addr().indexed(),
     body,
   }),
+  delivery: defineSchema(named("delivery"), {
+    task: str().indexed(),
+    agent: addr().indexed(),
+    quote: key().indexed(),
+    status: str().indexed(),
+    body,
+  }),
 } as const;
 
 /** Typed values for each kind's indexed columns (the `body` column is added by the writer). */
@@ -160,5 +168,11 @@ export const attributesFor = {
     poster: addr(c.poster),
     quote: key(c.quote),
     agent: addr(c.agent),
+  }),
+  delivery: (d: Delivery) => ({
+    task: str(d.task),
+    agent: addr(d.agent),
+    quote: key(d.quote),
+    status: str(d.status),
   }),
 } as const;

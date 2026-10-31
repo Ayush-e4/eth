@@ -1,8 +1,10 @@
 import { type ArkivReader, type ArkivWriter, openJob, rateAgent, recordReceipt } from "@eth/arkiv";
 import type { Delegation } from "@eth/shared";
 import type { PaidResponse } from "@eth/x402";
-import type { PublicClient } from "viem";
+import type { LocalAccount, PublicClient } from "viem";
+import { signedHeaders } from "../auth";
 import type { Trip } from "../trip";
+import { awaitJob, HireFailed, HirePending, readJob } from "./job-client";
 import type { InrRates } from "./procure";
 import { collectQuotes, otherOptions, type QuoteOption, type QuoteRound } from "./quotes";
 
@@ -17,6 +19,7 @@ export interface HireDeps {
   payer: string; // mandate owner's Hedera account
   inrRates: InrRates; // to compare quotes in different currencies
   log: (line: string) => void;
+  jobWaitMs?: number; // how long to wait on an agent that's still working (default 2 min)
 }
 
 export interface Hire {
@@ -46,7 +49,30 @@ export async function hire(skill: string, task: string, trip: Trip, d: HireDeps)
   return buy(round, best, `${skill} for ${trip.destinationName}`, d, round.bestReason);
 }
 
-/** Pay the chosen agent's /work endpoint over x402, then record job, receipt and rating on Arkiv. */
+/** What came back from a paid job: the result, and where the payment is on Hedera. */
+export interface Delivered {
+  result: unknown;
+  hederaTx: string;
+  payTo: string; // the agent's Hedera account
+}
+
+const failure = (skill: string, status: number | string, body: WorkReply) => {
+  const refund = body.refund?.transaction
+    ? ` — fee refunded: ${body.refund.transaction}`
+    : body.refund?.failed
+      ? ` — refund failed: ${body.refund.failed}`
+      : "";
+  return new HireFailed(
+    `[${skill}] hire failed: HTTP ${status} ${body.error ?? ""} ${body.detail ?? ""}${refund}`,
+  );
+};
+
+/**
+ * Pay the chosen agent's /work endpoint over x402, then record job, receipt and rating on Arkiv.
+ * /work is signed by our buyer key, so if the answer is "still working" (or the call breaks after
+ * paying) we read the job back instead of paying again; if it outlasts `jobWaitMs`, HirePending
+ * says where to read it later.
+ */
 export async function buy(
   round: QuoteRound,
   pick: QuoteOption,
@@ -58,24 +84,59 @@ export async function buy(
   const { skill, task } = round;
   d.log(`[${skill}] hiring ${pick.title}: "${pick.note}"`);
   d.log(`[${skill}] because: ${choice}`);
-  const { response, paid } = await d.payingFetch(`${pick.endpoint}/work`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ task, skill, input: round.input, quoteKey: pick.key, delegation }),
-  });
-  const body = await readJson(response);
-  if (!response.ok || !paid) {
-    const refund = body.refund?.transaction
-      ? ` — fee refunded: ${body.refund.transaction}`
-      : body.refund?.failed
-        ? ` — refund failed: ${body.refund.failed}`
-        : "";
-    throw new Error(
-      `[${skill}] hire failed: HTTP ${response.status} ${body.error ?? ""} ${body.detail ?? ""}${refund}`,
-    );
+  const url = `${pick.endpoint}/work`;
+  const body = JSON.stringify({ task, skill, input: round.input, quoteKey: pick.key, delegation });
+  const signer = d.buyerWriter.account as LocalAccount;
+  const signed = await signedHeaders(signer, "POST", new URL(url).pathname, body);
+  const later = async (broke?: unknown): Promise<Delivered> => {
+    if (broke) {
+      // The call broke. No job at the agent → nothing was paid; agent unreachable → can't tell.
+      const first = await readJob(pick.endpoint, pick.key, signer).catch(() => undefined);
+      if (first === null) throw broke;
+      if (first === undefined) throw new HirePending(pick.endpoint, pick.key, null);
+    }
+    const view = await awaitJob(pick.endpoint, pick.key, signer, { timeoutMs: d.jobWaitMs });
+    if (view?.status === "delivered")
+      return { result: view.result, hederaTx: view.paymentTx ?? "", payTo: view.payTo };
+    if (view?.status === "failed") throw failure(skill, "job failed", view);
+    throw new HirePending(pick.endpoint, pick.key, view);
+  };
+
+  let done: Delivered;
+  try {
+    const { response, paid } = await d.payingFetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...signed },
+      body,
+    });
+    const reply = await readJson(response);
+    if (response.status === 202) done = await later();
+    else if (!response.ok || !paid) throw failure(skill, response.status, reply);
+    else
+      done = {
+        result: reply.result,
+        hederaTx: paid.settlement.transaction,
+        payTo: paid.requirements.payTo,
+      };
+  } catch (err) {
+    if (err instanceof HirePending || err instanceof HireFailed) throw err;
+    done = await later(err); // the call broke: we may have paid, so ask the agent
   }
-  const hederaTx = paid.settlement.transaction;
-  d.log(`[${skill}] paid ${Number(pick.feeUnits) / 1e6} USDC via mandate → ${hederaTx}`);
+  d.log(`[${skill}] paid ${Number(pick.feeUnits) / 1e6} USDC via mandate → ${done.hederaTx}`);
+  return recordHire(round, pick, label, d, choice, done);
+}
+
+/** The public records of a paid, delivered hire (also used when a hire is read back later). */
+export async function recordHire(
+  round: QuoteRound,
+  pick: QuoteOption,
+  label: string,
+  d: Pick<HireDeps, "buyerWriter" | "platformWriter" | "mandateId" | "payer" | "log">,
+  choice: string,
+  done: Delivered,
+): Promise<Hire> {
+  const { skill, task } = round;
+  const { hederaTx } = done;
 
   // From here the agent is paid and the job done. The public records below must never lose that:
   // if Arkiv refuses one, log it and still return the hire (the payment is proof on Hedera).
@@ -103,7 +164,7 @@ export async function buy(
         task,
         mandateId: d.mandateId,
         payer: d.payer,
-        payTo: paid.requirements.payTo,
+        payTo: done.payTo,
         amountUnits: pick.feeUnits,
         hederaTx,
       }),
@@ -131,7 +192,7 @@ export async function buy(
     choice,
     hederaTx,
     jobKey: job?.entityKey ?? "0x", // "0x": paid, but Arkiv didn't take the job record
-    result: body.result,
+    result: done.result,
     rejected: otherOptions(round, pick.key),
   };
 }

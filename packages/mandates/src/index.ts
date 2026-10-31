@@ -12,6 +12,12 @@ export {
   reputationAbi,
 } from "./erc8004";
 export {
+  decodeX402Authorization,
+  type PaymentCheckDeps,
+  type PaymentState,
+  paymentState,
+} from "./paid";
+export {
   encodeX402Authorization,
   hashPayees,
   mandateDomain,

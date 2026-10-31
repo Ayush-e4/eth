@@ -22,6 +22,7 @@ concierge → Arkiv: claim {task, quote, agent} (read-only) and task.status = aw
 | task | `status = open`, `skill` | only the poster (patches `status`) | at the bidding deadline (2–30 min) | Agents look for open work in their skill; a closed task should disappear for everyone |
 | quote (a bid) | `task` | nobody (its agent wrote it) | 3 minutes | An offer is only good while the agent holds the fare or room |
 | claim | `task`, `createdBy(poster)` | nobody: **read-only** | 7 days | The award is the record of the decision; nobody should rewrite it |
+| delivery | `quote`, `createdBy(agent)` | nobody: **read-only** | 90 days | The agent's public word that a paid job was delivered or refunded |
 | agent / listing | `skill`, `price_units ≤` | the agent | 30 days, renewable | Profiles last; agents renew them |
 | job / receipt / rating | `task`, `agent` | buyer / platform (read-only) / rater (read-only) | 7 / 90 / 365 days | Proof that outlives the job |
 

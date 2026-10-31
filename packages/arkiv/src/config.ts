@@ -20,6 +20,7 @@ export const LIFETIME = {
   invoice: () => ExpirationTime.fromDays(30),
   task: (seconds = 600) => ExpirationTime.fromSeconds(seconds - (seconds % 2)),
   claim: () => ExpirationTime.fromDays(7),
+  delivery: () => ExpirationTime.fromDays(90),
 } as const;
 
 /**

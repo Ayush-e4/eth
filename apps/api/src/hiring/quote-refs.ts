@@ -1,7 +1,7 @@
 import type { QuoteOption, QuoteRound } from "@eth/agents/hiring";
+import { decodeJson, encodeJson } from "@eth/shared";
 import { and, asc, eq, gt } from "drizzle-orm";
 import type { Db } from "../db/client";
-import { decodeJson, encodeJson } from "../db/json";
 import { quoteRefs as table } from "../db/schema";
 
 export interface Held {

@@ -7,11 +7,14 @@ import {
   publishAgent,
   type Task,
 } from "@eth/arkiv";
+import type { PaymentState } from "@eth/mandates";
 import { type Subcontract, TASK_ERRORS, type TaskRequest, TaskRequestSchema } from "@eth/shared";
 import { type Facilitator, paywall } from "@eth/x402";
 import { type Context, Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 import type { SpecialistIdentity } from "../identities";
+import { type JobStore, jobStore, type Refund } from "./jobs";
+import { workRoutes } from "./work";
 
 /** A specialist's answer to /quote: what it found, and what the item itself costs. */
 export interface Quoted<Detail> {
@@ -51,7 +54,7 @@ export interface SpecialistKit {
   refundPaid(c: Context, units: bigint, memo: string): Promise<Refund | undefined>;
 }
 
-export type Refund = { transaction: string } | { failed: string };
+export type { Refund };
 
 const QUOTE_TTL_SECONDS = 180;
 
@@ -63,13 +66,23 @@ export interface SpecialistContext {
   executorId: string; // MandateRegistry contract id admitted for payments
   /** Sends a fee back from the agent's own account (paid, then couldn't deliver). Returns the tx id. */
   refund?: (to: string, units: bigint, memo: string) => Promise<string>;
+  /** Its quotes and paid jobs (a file in production; in memory when omitted, e.g. tests). */
+  jobs?: JobStore;
+  /** Asks the chain whether a payment happened (recovering jobs after a crash). */
+  paymentState?: (p: {
+    mandateId: bigint;
+    nonce: bigint;
+    validBefore: bigint;
+  }) => Promise<PaymentState>;
+  log?: (line: string) => void;
 }
 
 /**
  * A specialist agent as an HTTP service:
  *   GET  /        → profile
  *   POST /quote   → free; finds the best option and posts a 3-minute quote on Arkiv
- *   POST /work    → x402-paywalled (agent fee via MandateRegistry); does the job
+ *   POST /work    → x402-paywalled (agent fee via MandateRegistry); does the job (see work.ts)
+ *   GET  /jobs/:q → the buyer reads its job back
  */
 export function createSpecialist<I, D, R>(def: SpecialistDef<I, D, R>, ctx: SpecialistContext) {
   // Same envelope for every agent; the skill must be ours and `input` must fit our schema.
@@ -85,12 +98,8 @@ export function createSpecialist<I, D, R>(def: SpecialistDef<I, D, R>, ctx: Spec
   };
   const inputSchema = z.toJSONSchema(def.input, { unrepresentable: "any" });
   const writer = arkivWriter(ctx.identity.key);
-  // quote key → detail, so /work does exactly what was quoted (and only while the quote is live)
-  const quotes = new Map<string, { detail: D; expiresAt: number }>();
-  const live = (key: string | undefined) => {
-    const q = key ? quotes.get(key) : undefined;
-    return q && q.expiresAt > Date.now() ? q : undefined;
-  };
+  // quote key → detail, so /work does exactly what was quoted; saved, so a restart keeps it
+  const jobs = ctx.jobs ?? jobStore();
   const app = new Hono();
   const feeWall = (units: bigint, description: string) =>
     paywall({
@@ -138,7 +147,7 @@ export function createSpecialist<I, D, R>(def: SpecialistDef<I, D, R>, ctx: Spec
       },
       QUOTE_TTL_SECONDS,
     );
-    quotes.set(entityKey, { detail, expiresAt: Date.now() + QUOTE_TTL_SECONDS * 1000 });
+    jobs.saveQuote(entityKey, req.task, detail, Date.now() + QUOTE_TTL_SECONDS * 1000);
     return { entityKey, quoted };
   }
 
@@ -164,35 +173,15 @@ export function createSpecialist<I, D, R>(def: SpecialistDef<I, D, R>, ctx: Spec
     });
   });
 
-  app.post(
-    "/work",
-    // Check the quote BEFORE the paywall, so nobody pays for a quote we can't honour.
-    async (c, next) => {
-      const parsed = parseTask(await c.req.json().catch(() => null));
-      if (!parsed.req) return c.json({ error: parsed.error, issues: parsed.issues }, parsed.status);
-      const quote = live(parsed.req.quoteKey);
-      if (!quote) return c.json({ error: TASK_ERRORS.unknownQuote }, 409);
-      const problem = await def.check?.(parsed.req, quote.detail);
-      if (problem) return c.json({ error: TASK_ERRORS.invalidInput, detail: problem }, 422);
-      await next();
-    },
-    feeWall(def.priceUnits, def.title),
-    async (c) => {
-      const body = parseTask(await c.req.json()).req as TaskRequest<I>; // checked above
-      const quote = live(body.quoteKey);
-      if (!quote) return c.json({ error: TASK_ERRORS.unknownQuote }, 409);
-      quotes.delete(body.quoteKey as string); // one job per quote
-      try {
-        const result = await def.work(body, quote.detail);
-        return c.json({ agent: def.name, result });
-      } catch (err) {
-        // Paid but couldn't deliver → give the fee back (until pay-on-delivery escrow exists).
-        const detail = (err instanceof Error ? err.message : String(err)).slice(0, 500);
-        const refund = await refundPaid(c, def.priceUnits, `refund ${body.task}`);
-        return c.json({ error: TASK_ERRORS.workFailed, detail, refund }, 502);
-      }
-    },
-  );
+  const work = workRoutes(app, {
+    def,
+    ctx,
+    jobs,
+    writer,
+    parseTask,
+    feeWall: feeWall(def.priceUnits, def.title),
+    log: ctx.log,
+  });
 
   def.extend?.(app, { writer, ctx, feeWall, refundPaid });
 
@@ -247,5 +236,13 @@ export function createSpecialist<I, D, R>(def: SpecialistDef<I, D, R>, ctx: Spec
       .catch((err) => log(`${def.name} passed on ${t.record.task}: ${String(err).slice(0, 120)}`));
   }
 
-  return { name: def.name, skill: def.skill, app, publish, considerTask };
+  return {
+    name: def.name,
+    skill: def.skill,
+    app,
+    publish,
+    considerTask,
+    /** After a restart: finish or refund the jobs the last run left half-way. */
+    recover: work.recover,
+  };
 }

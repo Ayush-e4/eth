@@ -163,12 +163,17 @@ describe("specialist agent server", () => {
     await post("/quote", { task: "trip-goi-1", skill: "flights", input: trip });
     const first = await work("0xq1");
     expect(first.response.status).toBe(200);
-    expect(await first.response.json()).toEqual({ agent: "TestHop", result: { booked: "off_1" } });
+    expect(await first.response.json()).toMatchObject({
+      agent: "TestHop",
+      status: "delivered",
+      result: { booked: "off_1" },
+    });
     expect(first.paid?.settlement.transaction).toBe("0.0.9@1.2");
     expect(def.work).toHaveBeenCalledTimes(1);
 
     const again = await work("0xq1");
     expect(again.response.status).toBe(409);
+    expect(await again.response.json()).toEqual({ error: "quote_already_used" });
     expect(again.paid).toBeUndefined(); // refused before any payment
   });
 
@@ -178,7 +183,8 @@ describe("specialist agent server", () => {
     await post("/quote", { task: "trip-goi-1", skill: "flights", input: trip });
     const res = await work("0xq1");
     expect(res.response.status).toBe(502);
-    expect(await res.response.json()).toEqual({
+    expect(await res.response.json()).toMatchObject({
+      status: "failed",
       error: "work_failed",
       detail: "supplier said no",
       refund: { transaction: "0.0.5005@9.9" },
