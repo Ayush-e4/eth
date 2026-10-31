@@ -1,13 +1,13 @@
 // FareWatch as the market runs it: LiteAPI flights (sandbox), its watches in a gitignored file.
 //   FAREWATCH_EVERY_MIN   minutes between checks (default 15)
 //   FAREWATCH_SIMULATE=1  allow made-up drops for demos (always labelled SIMULATED)
-import { fileURLToPath } from "node:url";
 import { arkivReader } from "@eth/arkiv";
 import { LiteFlightsClient } from "@eth/travel";
+import { dataFile } from "../src/data-dir";
 import { farewatch, type Watch } from "../src/specialists/farewatch";
 import { JsonStore } from "../src/store";
 
-const STORE = fileURLToPath(new URL("../.farewatch.local.json", import.meta.url));
+const STORE = dataFile(".farewatch.local.json");
 
 export function farewatchAgent() {
   const flights = new LiteFlightsClient(process.env.LITEAPI_KEY ?? "");

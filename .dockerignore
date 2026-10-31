@@ -1,0 +1,15 @@
+# Never in an image: dependencies (installed inside), build output, secrets, local data.
+**/node_modules
+**/.next
+**/dist
+**/.turbo
+.git
+.claude
+.env
+.env.*
+!.env.example
+**/*.local.json
+**/*.local.db
+**/*.local.db-*
+packages/contracts/out
+packages/contracts/cache

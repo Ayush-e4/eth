@@ -1,4 +1,4 @@
-import { fileURLToPath } from "node:url";
+import { dataFile } from "./data-dir";
 import type { Explanation } from "./orchestrator/explain";
 import type { TripRun } from "./orchestrator/run";
 import { JsonStore } from "./store";
@@ -31,7 +31,7 @@ export interface TripRecord {
   paidInvoices?: string[];
 }
 
-export const TRIPS_PATH = fileURLToPath(new URL("../.trips.local.json", import.meta.url));
+export const TRIPS_PATH = dataFile(".trips.local.json");
 
 export const tripStore = (path: string | undefined = TRIPS_PATH) => new JsonStore<TripRecord>(path);
 

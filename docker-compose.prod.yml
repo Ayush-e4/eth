@@ -1,0 +1,64 @@
+# Production on the Oracle VM through Coolify (docs/deploy.md). Coolify supplies every ${VAR}
+# from its environment settings, routes the public domain to `web`, and adds HTTPS.
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: agentnet
+      POSTGRES_PASSWORD: ${SERVICE_PASSWORD_POSTGRES}
+      POSTGRES_DB: agentnet
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agentnet -d agentnet"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://agentnet:${SERVICE_PASSWORD_POSTGRES}@postgres:5432/agentnet
+      APP_ORIGIN: ${APP_ORIGIN}
+      DEMO_MODE: ${DEMO_MODE:-on}
+      ADMIN_USERS: ${ADMIN_USERS:-}
+      HEDERA_NETWORK: ${HEDERA_NETWORK}
+      HEDERA_ACCOUNT_ID: ${HEDERA_ACCOUNT_ID}
+      HEDERA_PRIVATE_KEY: ${HEDERA_PRIVATE_KEY}
+      HEDERA_EVM_ADDRESS: ${HEDERA_EVM_ADDRESS}
+      SPEND_LOG_TOPIC_ID: ${SPEND_LOG_TOPIC_ID}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      DUFFEL_ACCESS_TOKEN: ${DUFFEL_ACCESS_TOKEN}
+      LITEAPI_KEY: ${LITEAPI_KEY}
+      ARKIV_API_KEY: ${ARKIV_API_KEY}
+      WORLD_ID_ISSUER: ${WORLD_ID_ISSUER:-}
+      WORLD_ID_CLIENT_ID: ${WORLD_ID_CLIENT_ID:-}
+      WORLD_ID_CLIENT_SECRET: ${WORLD_ID_CLIENT_SECRET:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      WALLET_GIFT_UNITS: ${WALLET_GIFT_UNITS:-200000}
+      WALLET_GIFTS_PER_DAY: ${WALLET_GIFTS_PER_DAY:-20}
+      AGENTS_JSON_B64: ${AGENTS_JSON_B64}
+      CUSTOM_AGENTS_JSON_B64: ${CUSTOM_AGENTS_JSON_B64:-}
+    volumes:
+      - agentdata:/data
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.web
+      args:
+        API_URL: http://backend:8787
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  agentdata:

@@ -1,0 +1,13 @@
+# The web app. API_URL is where Next forwards /api/* (fixed at build time), the backend service.
+FROM node:24-slim
+RUN corepack enable
+WORKDIR /app
+COPY . .
+RUN pnpm install --frozen-lockfile
+ARG API_URL=http://backend:8787
+ENV API_URL=$API_URL NEXT_TELEMETRY_DISABLED=1
+RUN pnpm --filter @eth/web build
+ENV NODE_ENV=production
+WORKDIR /app/apps/web
+EXPOSE 3000
+CMD ["npx", "next", "start", "-H", "0.0.0.0", "-p", "3000"]

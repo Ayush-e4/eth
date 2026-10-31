@@ -2,6 +2,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { Hex } from "viem";
+import { dataFile } from "../../src/data-dir";
 
 export interface CustomAgent {
   key: Hex; // signs its Arkiv records and owns its identity; never share it
@@ -10,9 +11,7 @@ export interface CustomAgent {
   port: number;
 }
 
-export const CUSTOM_PATH = fileURLToPath(
-  new URL("../../.custom-agents.local.json", import.meta.url),
-);
+export const CUSTOM_PATH = dataFile(".custom-agents.local.json");
 export const sourceOf = (slug: string) =>
   fileURLToPath(new URL(`../../src/custom/${slug}.ts`, import.meta.url));
 

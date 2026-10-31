@@ -34,4 +34,6 @@ packages/contracts/broadcast/
 # Agents you make with the agent kit stay yours (remove these lines to commit one).
 apps/agents/src/custom/*
 !apps/agents/src/custom/example.ts
+# PackPal (made with the kit) runs on the hosted market, so it ships with the repo.
+!apps/agents/src/custom/packpal.ts
 
