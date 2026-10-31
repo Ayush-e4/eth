@@ -54,30 +54,42 @@ approval as verified. Typing "Approve abc123" without a passed check does nothin
    (`WORLD_ID_ISSUER` defaults to `https://auth.world.org`). Restart the API.
 3. Leave them empty and approvals work as before, without a human check.
 
-## Status (31 Oct 2026)
+## Status (31 Oct 2026): working end to end
 
 | Path | Live? |
 |---|---|
 | Start a check: our app registered, World shows "AgentNet" and the same code as our card | ✅ production and sandbox |
-| **Denied**: "Deny connection" on World's page → card says "You declined in World ID. Nothing was paid.", no hire recorded | ✅ live |
-| Approved → validated → paid | ⏳ blocked on access to a test World ID (below); the server checks are covered by tests with locally signed tokens |
+| **Denied**: "Deny connection" on World's page → card says "You declined in World ID. Nothing was paid.", no hire recorded | ✅ |
+| **Timed out**: check left to expire → "The World ID check timed out. Nothing was paid." | ✅ |
+| **Approved**: scanned with the sandbox World ID app → World: "Connection approved" → our server validated the ID token and linked the World ID to the account → card: "Verified with World ID. Paying…" → AirNest booked (sandbox ref FH-26A-62IE4P3M), paid 0.03 USDC ([tx](https://hashscan.io/testnet/transaction/0.0.11045937@1793442865.734143532)), public log #59 | ✅ |
 
-We run against the **sandbox** issuer (`WORLD_ID_ISSUER=https://sandbox.auth.world.org`). Its
-banner says "Uses fake identities", but completing a proof there still needs World's sandbox app.
+We run against the **sandbox** issuer (`WORLD_ID_ISSUER=https://sandbox.auth.world.org`), with a
+sandbox World ID from the [SANDBOX] World ID app (TestFlight public link; Developer options → v4
+protocol and credential issuance on; Manual verify with the default image).
+
+**One fix the live run needed:** a flight quote lives ~3 minutes, and scanning and approving took
+longer, so the approved quote had lapsed. A human-verified approval now carries over to a fresh
+quote from the **same agent at no higher fee** (still within 5 minutes, still paying once).
 
 ## Integration debrief (for World)
 
-- **Time to first success:** about an hour from reading the docs to a live check started from our
-  app, showing our name and code on World's page, with the denied path working end to end. The
-  approved path is still blocked (see friction).
+- **Time to first success:** about an hour to a live check started from our app with the denied
+  path working; about 4 more hours (mostly access, see below) to the first approved, validated
+  payment.
 - **Friction:**
   1. The portal accepts only work Google accounts ("Personal Gmail accounts are not supported").
      We used a university account.
   2. The production World ID app asks a new user to verify at an Orb before it can approve
      anything, so a hackathon team can't complete a production proof.
-  3. The sandbox needs World's sandbox app. The TestFlight link on the prize page
-     (`testflight.apple.com/join/Tub7zuyD`) says "not found", and the prize page says proofs are
-     mocked and the sandbox app isn't needed, without saying what replaces it.
+  3. The sandbox needs World's sandbox app. Opening the TestFlight app directly shows "a developer
+     has to send you an invitation or redeem code"; it only works by opening the public link
+     (`testflight.apple.com/join/Tub7zuyD`) **after** installing TestFlight. The prize page says
+     proofs are mocked and the sandbox app isn't needed, without saying what replaces it.
+  5. In the sandbox app, Manual verify failed with "v4 protocol and credential issuance must both
+     be enabled for this account" until we turned both on under Developer options. Nothing in
+     the docs mentions these switches.
+  6. The first scan said "failed to share" (the credential wasn't issued yet; the docs' "about
+     an hour" is accurate). The app's message doesn't say that's what's happening.
   4. The web World ID Simulator can't answer Agent Pass requests: its Content Security Policy only
      allows `bridge.worldcoin.org` / `staging-bridge.worldcoin.org`, so fetching the request from
      `sandbox.auth.world.org/bridge/v1` is blocked ("Failed to fetch bridge request data").

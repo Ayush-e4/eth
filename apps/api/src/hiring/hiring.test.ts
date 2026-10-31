@@ -243,4 +243,28 @@ describe("hiring from a chat", () => {
     expect((await s.hire(ask, "q1", "x", "flights")).status).toBe("hired");
     expect(buy).toHaveBeenCalledOnce();
   });
+
+  it("keeps a human-verified approval when the quote lapses and the same agent re-quotes", async () => {
+    await giveMandate([AIRNEST]);
+    const ask = { ...chat, mode: "ask" as const };
+    const s = hiringService(db, env, { requireHuman: true });
+    await s.quotes(ask, "flights", {});
+    const first = await s.hire(ask, "q1", "x", "flights");
+    const code = first.status === "needs_approval" ? first.card.code : "";
+    s.markHuman(chat.id, code);
+    s.noteUserMessage(chat.id, `Approve ${code}`);
+    // the check took a while: fresh quotes (a new quote key, so a new ref), same agent and fee
+    const requote = (key: string) =>
+      vi
+        .mocked(collectQuotes)
+        .mockResolvedValueOnce({ ...round, options: [{ ...option, key }] } as never);
+    requote("0xquote2");
+    await s.quotes(ask, "flights", {});
+    expect((await s.hire(ask, "q2", "x", "flights")).status).toBe("hired");
+    expect(buy).toHaveBeenCalledOnce();
+    // and it paid once: another hire needs a new approval
+    requote("0xquote3");
+    await s.quotes(ask, "flights", {});
+    expect((await s.hire(ask, "q3", "x", "flights")).status).toBe("needs_approval");
+  });
 });
