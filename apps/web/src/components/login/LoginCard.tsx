@@ -13,6 +13,7 @@ import {
   type WalletStep,
 } from "@/lib/wallet";
 import { CheckIcon, InfoIcon, WalletIcon } from "../icons";
+import { PasskeyChoice } from "./PasskeyChoice";
 
 const STEPS = ["Connect", "Network", "Sign"] as const;
 const stepIndex: Record<WalletStep, number> = { connect: 0, "no-wallet": 0, network: 1, sign: 2 };
@@ -85,47 +86,55 @@ export function LoginCard() {
   const at = stepIndex[step];
   return (
     <div className="flex w-full max-w-[440px] flex-col gap-7">
-      <ol aria-label="Sign-in steps" className="flex items-center gap-2.5">
-        {STEPS.map((label, i) => (
-          <li key={label} className="flex flex-1 items-center gap-2.5">
-            <span
-              aria-current={i === at ? "step" : undefined}
-              className={`flex size-[26px] flex-none items-center justify-center rounded-full text-xs font-bold ${
-                i < at
-                  ? "bg-teal text-white"
-                  : i === at
-                    ? "border-2 border-teal text-teal"
-                    : "border border-line-2 text-muted"
-              }`}
-            >
-              {i < at ? <CheckIcon size={14} /> : i + 1}
-            </span>
-            <span className={`text-[13px] ${i <= at ? "font-semibold" : "text-muted"}`}>
-              {label}
-            </span>
-            {i < STEPS.length - 1 && <span aria-hidden className="h-px min-w-4 flex-1 bg-line-2" />}
-          </li>
-        ))}
-      </ol>
+      {step !== "connect" && (
+        <ol aria-label="MetaMask sign-in steps" className="flex items-center gap-2.5">
+          {STEPS.map((label, i) => (
+            <li key={label} className="flex flex-1 items-center gap-2.5">
+              <span
+                aria-current={i === at ? "step" : undefined}
+                className={`flex size-[26px] flex-none items-center justify-center rounded-full text-xs font-bold ${
+                  i < at
+                    ? "bg-teal text-white"
+                    : i === at
+                      ? "border-2 border-teal text-teal"
+                      : "border border-line-2 text-muted"
+                }`}
+              >
+                {i < at ? <CheckIcon size={14} /> : i + 1}
+              </span>
+              <span className={`text-[13px] ${i <= at ? "font-semibold" : "text-muted"}`}>
+                {label}
+              </span>
+              {i < STEPS.length - 1 && (
+                <span aria-hidden className="h-px min-w-4 flex-1 bg-line-2" />
+              )}
+            </li>
+          ))}
+        </ol>
+      )}
 
       {step === "connect" && (
         <div className="flex flex-col gap-6">
           <Heading
             title="Sign in to AgentNet"
-            body="Your wallet is your login. No password, nothing to remember."
+            body="No password and no app to install: your passkey is your login."
           />
+          <PasskeyChoice onDone={done} />
+          <div className="flex items-center gap-3 text-xs text-muted">
+            <span aria-hidden className="h-px flex-1 bg-line-2" /> or use your own wallet
+            <span aria-hidden className="h-px flex-1 bg-line-2" />
+          </div>
           <div className="flex flex-col gap-3">
-            <button type="button" className={primary} onClick={start} disabled={busy}>
-              <WalletIcon size={20} /> Connect MetaMask
+            <button type="button" className={secondary} onClick={start} disabled={busy}>
+              <WalletIcon size={20} /> <span className="ml-2">Connect MetaMask</span>
             </button>
             <button
               type="button"
               onClick={demo}
               disabled={busy}
-              className="flex min-h-[52px] w-full flex-col items-center justify-center gap-0.5 rounded-xl border border-line-2 bg-white px-5 py-2"
+              className="self-center text-sm font-medium text-teal"
             >
-              <span className="text-[15px] font-semibold">Try the demo</span>
-              <span className="text-xs text-muted">No wallet needed. Nothing real is spent.</span>
+              Just looking? Try it without an account
             </button>
           </div>
         </div>
@@ -230,8 +239,8 @@ export function LoginCard() {
 
       <div className="flex flex-col gap-2.5 border-t border-line pt-5 text-[13px] leading-relaxed text-ink-3">
         <p>
-          You only need to sign in to chat and hire agents. Signing is free and never sends a
-          transaction.
+          You only need to sign in to chat and hire agents. Signing in is free and never moves
+          money.
         </p>
       </div>
     </div>

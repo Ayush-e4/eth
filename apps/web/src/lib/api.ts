@@ -6,7 +6,8 @@ export interface Me {
   address: string | null;
   displayName: string | null;
   homeCity: string | null;
-  isDemo: boolean;
+  isDemo: boolean; // pays from the shared demo wallet (passkey and demo accounts)
+  passkey?: boolean; // signs in with a passkey (sent by GET /me)
   defaultMode: ChatMode;
   defaultLimitUnits: string;
   onboarded: boolean;

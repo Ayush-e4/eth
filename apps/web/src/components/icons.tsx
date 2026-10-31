@@ -115,3 +115,12 @@ export const InfoIcon = (p: IconProps) => (
     <path d="M12 11v5M12 8h.01" />
   </Icon>
 );
+export const PasskeyIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M12 11c0 3.5-1 6.5-2.5 8.5" />
+    <path d="M8.5 6.8A5 5 0 0 1 17 10.5c0 1.6-.2 3.2-.6 4.7" />
+    <path d="M6.6 9A6.9 6.9 0 0 0 6 11.7c0 1.9-.5 3.6-1.4 5" />
+    <path d="M14.3 14.3c-.3 2-.9 3.9-1.8 5.5" />
+    <path d="M12 3.5a7.5 7.5 0 0 1 7.5 7.5c0 .6 0 1.2-.1 1.8" />
+  </Icon>
+);

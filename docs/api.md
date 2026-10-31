@@ -31,8 +31,28 @@ Web2 analogy: a password login where the "password" is a signature only your wal
 Only a SHA-256 hash of the session token is stored, so a database leak doesn't hand out logins.
 Writes from any origin other than `APP_ORIGIN` are refused, and cookies are `SameSite=Lax`.
 
-`POST /auth/demo` ("Try the demo") creates a fresh demo user with no wallet. Turn it off with
-`DEMO_MODE=off`.
+## Sign-in with a passkey
+
+Web2 analogy: "Sign in with Apple", without an Apple account. A passkey is a key pair made by the
+person's device (Face ID, a fingerprint, or a phone held up to a laptop). The private key never
+leaves the device; we store only the public key (`passkeys` table) and check a signature on a
+one-time challenge at each sign-in.
+
+1. `POST /auth/passkey/register/options` gives the browser what it needs to make a passkey for
+   this site, including a one-time challenge (5 minutes, stored in `auth_nonces`).
+2. `POST /auth/passkey/register {response}` checks the device's answer (right site, right
+   challenge, used up once), creates the account and signs in.
+3. `POST /auth/passkey/login/options` then `POST /auth/passkey/login {response}` sign back in
+   with any passkey this site made; the device asks which one.
+
+A passkey only works on the site that made it (`APP_ORIGIN`'s hostname), so a look-alike site
+can't use it. We ask for P-256 keys only, the kind phones and laptops use, so the same passkey
+can later control an on-chain wallet. New passkey accounts pay from the demo wallet (with the demo
+quotas) and keep their chats across visits; making one needs `DEMO_MODE=on`, signing back in
+doesn't. `GET /me` says `passkey: true` for them.
+
+`POST /auth/demo` ("Just looking? Try it without an account") creates a throwaway demo user with
+no wallet and no passkey: it's gone once the cookie is. Turn it off with `DEMO_MODE=off`.
 
 ## Roles
 
