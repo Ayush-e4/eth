@@ -76,6 +76,7 @@ const giveMandate = (payees: string[]) =>
   db.insert(mandates).values({
     chatId: chat.id,
     mandateId: 7n,
+    registry: env.registry.toLowerCase(),
     owner: env.demo.evm,
     payer: "0.0.1001",
     budgetUnits: 300_000n,
@@ -108,6 +109,15 @@ describe("hiring from a chat", () => {
 
   it("won't pay an agent the mandate doesn't allow", async () => {
     await giveMandate(["0x1111111111111111111111111111111111111111"]);
+    const s = hiringService(db, env);
+    await s.quotes(chat, "flights", {});
+    expect((await s.hire(chat, "q1", "x", "flights")).status).toBe("needs_limit");
+    expect(buy).not.toHaveBeenCalled();
+  });
+
+  it("ignores a limit left on an older registry: it asks for a new one", async () => {
+    await giveMandate([AIRNEST.toLowerCase()]);
+    await db.update(mandates).set({ registry: "0x00000000000000000000000000000000000000aa" });
     const s = hiringService(db, env);
     await s.quotes(chat, "flights", {});
     expect((await s.hire(chat, "q1", "x", "flights")).status).toBe("needs_limit");

@@ -51,6 +51,7 @@ beforeEach(async () => {
     db.insert(hires).values({
       chatId: chat.id,
       mandateId: 1n,
+      registry: "0xreg",
       skill: "flights",
       agent: a,
       title: "x",

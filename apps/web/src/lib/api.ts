@@ -78,7 +78,11 @@ export interface Task {
 }
 
 export interface Limit {
+  id: string;
   mandateId: string;
+  registry: string;
+  /** On an older MandateRegistry: no new hires use it, but it can still be cancelled. */
+  retired: boolean;
   chatId: string;
   chatTitle: string;
   demo: boolean;

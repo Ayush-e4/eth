@@ -29,7 +29,10 @@ export async function saveHire(
   env: HiringEnv,
   h: PaidHire,
 ): Promise<{ topic: string; seq: number } | undefined> {
-  const [row] = await db.insert(hires).values(h).returning({ id: hires.id });
+  const [row] = await db
+    .insert(hires)
+    .values({ ...h, registry: env.registry.toLowerCase() })
+    .returning({ id: hires.id });
   const seq =
     (await env.log?.write({
       kind: "agentnet.hired",

@@ -8,7 +8,7 @@ import { NETWORKS } from "@eth/hedera";
 import { DEPLOYMENTS, hederaTestnet, MandateClient, tokenIdToEvmAddress } from "@eth/mandates";
 import { type Hex, parseEther } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { CONFIG_PATH, loadConfig, saveConfig } from "../src/config";
+import { CONFIG_PATH, readSavedConfig, saveConfig } from "../src/config";
 import { listedAgents } from "../src/deps";
 
 const PER_PAYMENT_CAP = 100_000n; // 0.10 USDC
@@ -24,7 +24,7 @@ if (!raw || !payer) throw new Error("HEDERA_PRIVATE_KEY and HEDERA_ACCOUNT_ID mu
 const owner = privateKeyToAccount((raw.startsWith("0x") ? raw : `0x${raw}`) as Hex);
 
 // Keep the MCP server's key if it already has one, so its Arkiv history stays together.
-const agentKey = loadConfig()?.agentKey ?? generatePrivateKey();
+const agentKey = readSavedConfig()?.agentKey ?? generatePrivateKey();
 const agent = privateKeyToAccount(agentKey);
 console.log(`MCP server key: ${agent.address} (stays in ${CONFIG_PATH})`);
 
@@ -74,6 +74,7 @@ saveConfig({
   payer,
   perPaymentCapUnits: PER_PAYMENT_CAP.toString(),
   expiresAt,
+  registry: DEPLOYMENTS.testnet.mandateRegistry,
 });
 
 const tsx = fileURLToPath(new URL("../node_modules/.bin/tsx", import.meta.url));

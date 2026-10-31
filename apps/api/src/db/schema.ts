@@ -110,6 +110,7 @@ export const mandates = pgTable(
       .notNull()
       .references(() => chats.id, { onDelete: "cascade" }),
     mandateId: bigint("mandate_id", { mode: "bigint" }).notNull(),
+    registry: text("registry").notNull(), // the MandateRegistry it lives on (ids restart per registry)
     owner: text("owner").notNull(), // EVM address that signed it (the user, or the demo wallet)
     payer: text("payer").notNull(), // the owner's Hedera account, where fees come from
     budgetUnits: bigint("budget_units", { mode: "bigint" }).notNull(),
@@ -132,6 +133,7 @@ export const hires = pgTable(
       .notNull()
       .references(() => chats.id, { onDelete: "cascade" }),
     mandateId: bigint("mandate_id", { mode: "bigint" }).notNull(),
+    registry: text("registry").notNull(), // with mandateId, which limit paid it
     skill: text("skill").notNull(),
     agent: text("agent").notNull(),
     title: text("title").notNull(),

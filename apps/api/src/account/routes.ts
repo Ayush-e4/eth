@@ -4,10 +4,11 @@ import { privateKeyToAccount } from "viem/accounts";
 import { type AuthEnv, requireUser } from "../auth/routes";
 import type { Db } from "../db/client";
 import { chats, hires, mandates } from "../db/schema";
-import { type HiringEnv, hederaAccountOf } from "../hiring/env";
+import { type HiringEnv, hederaAccountOf, mandateClientFor } from "../hiring/env";
 import { balances } from "./balances";
 
 const fee = (units: bigint) => units.toString();
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** What the signed-in user's agents did (Tasks) and what they spent through (Wallet). */
 export function accountRoutes(db: Db, env: HiringEnv | null) {
@@ -70,11 +71,19 @@ export function accountRoutes(db: Db, env: HiringEnv | null) {
     );
     const limits = await Promise.all(
       rows.map(async ({ m, chatTitle }) => {
-        const onchain = env ? await env.mc.getMandate(m.mandateId).catch(() => null) : null;
+        const onchain = env
+          ? await mandateClientFor(env, m.registry)
+              .getMandate(m.mandateId)
+              .catch(() => null)
+          : null;
         const expired =
           (onchain ? Number(onchain.expiresAt) * 1000 : m.expiresAt.getTime()) <= Date.now();
         return {
+          id: m.id,
           mandateId: m.mandateId.toString(),
+          registry: m.registry,
+          // on an older registry: it can't pay for new hires, but can still be cancelled
+          retired: !!env && m.registry !== env.registry.toLowerCase(),
           chatId: m.chatId,
           chatTitle,
           demo: m.demo,
@@ -117,20 +126,28 @@ export function accountRoutes(db: Db, env: HiringEnv | null) {
    * Cancel a demo limit (the demo wallet owns it, so the server signs). Wallet users own their
    * limits and cancel them in MetaMask; the chain is the record either way.
    */
-  app.post("/wallet/limits/:mandateId/revoke", async (c) => {
+  app.post("/wallet/limits/:id/revoke", async (c) => {
     if (!env) return c.json({ error: "hiring is not configured on this server" }, 503);
-    const id = c.req.param("mandateId");
-    if (!/^\d{1,30}$/.test(id)) return c.json({ error: "no such limit" }, 404);
+    const id = c.req.param("id");
+    if (!UUID.test(id)) return c.json({ error: "no such limit" }, 404);
     // Someone else's limit is simply "not found".
     const [row] = await db
       .select({ m: mandates })
       .from(mandates)
       .innerJoin(chats, eq(chats.id, mandates.chatId))
-      .where(and(eq(mandates.mandateId, BigInt(id)), eq(chats.userId, c.get("user").id)));
+      .where(and(eq(mandates.id, id), eq(chats.userId, c.get("user").id)));
     if (!row) return c.json({ error: "no such limit" }, 404);
     if (!row.m.demo) return c.json({ error: "cancel this limit from your wallet" }, 409);
-    await env.mc.revoke(privateKeyToAccount(env.demo.key), BigInt(id));
-    await env.log?.write({ kind: "agentnet.mandate.revoked", mandateId: id, by: env.demo.evm });
+    await mandateClientFor(env, row.m.registry).revoke(
+      privateKeyToAccount(env.demo.key),
+      row.m.mandateId,
+    );
+    await env.log?.write({
+      kind: "agentnet.mandate.revoked",
+      mandateId: row.m.mandateId.toString(),
+      registry: row.m.registry,
+      by: env.demo.evm,
+    });
     return c.json({ ok: true });
   });
 

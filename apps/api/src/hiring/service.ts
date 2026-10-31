@@ -158,7 +158,7 @@ export function hiringService(
         };
       const sub = h.option.subcontract;
       const cost = h.option.feeUnits + BigInt(sub?.budgetUnits ?? 0);
-      const mandate = await currentMandate(db, chat.id);
+      const mandate = await currentMandate(db, env, chat.id);
       const needed = [h.option.agent, ...(sub?.payees.map((p) => p.agent) ?? [])];
       if (!needed.every((a) => covers(mandate, a))) {
         const left = await chatRemaining(db, chat);

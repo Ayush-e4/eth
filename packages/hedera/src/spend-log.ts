@@ -16,7 +16,7 @@ export type SpendLogEvent =
       expiresAt: number;
       via: "demo" | "wallet";
     }
-  | { kind: "agentnet.mandate.revoked"; mandateId: string; by: string }
+  | { kind: "agentnet.mandate.revoked"; mandateId: string; registry?: string; by: string }
   | {
       kind: "agentnet.mandate.delegated"; // a slice of a limit, for an agent that hires agents
       mandateId: string;

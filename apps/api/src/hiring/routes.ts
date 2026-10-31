@@ -43,7 +43,7 @@ export function mandateRoutes(db: Db, env: HiringEnv | null, demo: DemoQuotaChec
   app.get("/chats/:id/mandate", async (c) => {
     const chat = await store.get(c.get("user").id, c.req.param("id")).catch(() => null);
     if (!chat) return c.json({ error: "chat not found" }, 404);
-    const m = await currentMandate(db, chat.id);
+    const m = env ? await currentMandate(db, env, chat.id) : null;
     if (!m || !env) return c.json({ mandate: null });
     const remaining = await env.mc.remaining(m.mandateId).catch(() => undefined);
     return c.json({ mandate: mandateJson(m, remaining) });

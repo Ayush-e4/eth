@@ -71,8 +71,14 @@ token service precompile once (`associate(USDC)`; `deploy-registry` does it). Th
 
 ## Deployment (Hedera testnet)
 
-- `MandateRegistry` v2 (pay on delivery): `0xc854860e659d5e70fd4e47146643abec6db634b6` (`0.0.11254658`)
-- `MandateRegistry` v1: `0x2f30e8F1804Fe163C76918db493a441D44394D5d` (`0.0.11102395`)
+- `MandateRegistry` v2 (pay on delivery), **in use**: `0xc854860e659d5e70fd4e47146643abec6db634b6` (`0.0.11254658`)
+- `MandateRegistry` v1, retired: `0x2f30e8F1804Fe163C76918db493a441D44394D5d` (`0.0.11102395`)
+
+Each registry numbers its limits from 1, so the app saves every limit and hire with the registry
+it lives on. Limits made on v1 still show on the Wallet page (marked "older contract") and can
+still be cancelled there, but new hires only use limits on v2: a chat whose limit is on v1 is
+simply asked for a new one. The MCP server's limit lives on one registry too: after the switch
+it says so on start; run `pnpm --filter @eth/mcp setup-mandate` again.
 - Admin key is the contract itself — no external party can modify it.
 
 ## Live pay-on-delivery result (testnet, v2)

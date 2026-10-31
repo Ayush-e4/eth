@@ -1,5 +1,6 @@
 import { chmodSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { DEPLOYMENTS } from "@eth/mandates";
 import { z } from "zod";
 
 /**
@@ -13,6 +14,8 @@ export const McpConfigSchema = z.object({
   payer: z.string().regex(/^0\.0\.\d+$/),
   perPaymentCapUnits: z.string().regex(/^\d+$/),
   expiresAt: z.number().int(),
+  /** The MandateRegistry the mandate lives on; configs from before v2 were on v1. */
+  registry: z.string().default(DEPLOYMENTS.testnet.previous[0]?.mandateRegistry ?? ""),
 });
 
 export type McpConfig = z.infer<typeof McpConfigSchema>;
@@ -20,13 +23,24 @@ export type McpConfig = z.infer<typeof McpConfigSchema>;
 export const CONFIG_PATH =
   process.env.AGENTNET_MCP_CONFIG ?? fileURLToPath(new URL("../.mcp.local.json", import.meta.url));
 
-/** Null when there's no mandate yet: the market can still be browsed, nothing can be paid. */
-export function loadConfig(path = CONFIG_PATH): McpConfig | null {
+/** Whatever was saved, even a mandate on an older registry (setup reuses its key). */
+export function readSavedConfig(path = CONFIG_PATH): McpConfig | null {
   try {
     return McpConfigSchema.parse(JSON.parse(readFileSync(path, "utf8")));
   } catch {
     return null;
   }
+}
+
+/**
+ * Null when there's no usable mandate: none yet, or one on an older registry (run setup again).
+ * The market can still be browsed; nothing can be paid.
+ */
+export function loadConfig(path = CONFIG_PATH): McpConfig | null {
+  const c = readSavedConfig(path);
+  return c && c.registry.toLowerCase() === DEPLOYMENTS.testnet.mandateRegistry.toLowerCase()
+    ? c
+    : null;
 }
 
 export function saveConfig(config: McpConfig, path = CONFIG_PATH) {

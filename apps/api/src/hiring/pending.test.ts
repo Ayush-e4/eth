@@ -159,7 +159,13 @@ describe("hires followed after the turn lost sight of them", () => {
   });
 
   it("doesn't record a hire twice when the turn already did", async () => {
-    await db.insert(hires).values({ ...hire, chatId, mandateId: 7n, title: "AirNest" });
+    await db.insert(hires).values({
+      ...hire,
+      chatId,
+      mandateId: 7n,
+      registry: env.registry.toLowerCase(),
+      title: "AirNest",
+    });
     const p = pendingHires(db, env, { read: async () => job({}), wait: async () => {} });
     p.follow(await begin(p));
     await vi.waitFor(async () => expect(await left()).toBe(0));
@@ -173,6 +179,7 @@ describe("a turn whose hire outlasts it", () => {
     await db.insert(mandates).values({
       chatId,
       mandateId: 7n,
+      registry: env.registry.toLowerCase(),
       owner: env.demo.evm,
       payer: "0.0.1001",
       budgetUnits: 300_000n,
