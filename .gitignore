@@ -31,3 +31,7 @@ packages/contracts/broadcast/
 .idea/
 *.local.db
 *.local.db-*
+# Agents you make with the agent kit stay yours (remove these lines to commit one).
+apps/agents/src/custom/*
+!apps/agents/src/custom/example.ts
+

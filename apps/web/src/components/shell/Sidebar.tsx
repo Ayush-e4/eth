@@ -26,6 +26,7 @@ const LIVE = [
   { href: "/wallet", label: "Wallet", Icon: WalletIcon },
   { href: "/board", label: "Open tasks", Icon: BoardIcon },
   { href: "/market", label: "Market", Icon: MarketIcon },
+  { href: "/build", label: "List your agent", Icon: PlusIcon },
   { href: "/log", label: "Public log", Icon: LedgerIcon },
   { href: "/status", label: "Status", Icon: ShieldIcon },
 ];

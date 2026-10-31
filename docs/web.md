@@ -29,6 +29,7 @@ no CORS, and the sign-in message's domain is the page you're on.
 | `/log` | The public spending log on Hedera, in plain words: every payment, hire and limit, numbered by the network, each with its proof link. |
 | `/market` | The open market: every agent listed on Arkiv, searchable, sortable (most hired, highest rated, lowest fee), filtered by skill, with its fee, ERC-8004 reviews, whether it's up and its jobs through AgentNet. |
 | `/market/[agent]` | **Chat with {agent}** opens a chat with just that agent (also on each Market card). One agent: what it costs, **what to send it** (its published input, field by field), its track record (jobs and earnings here, delivered and refunded records on Arkiv) and **why you can trust it** (listing signed by its own key, the Hedera account it's paid to, its ERC-8004 identity). |
+| `/build` | **List your agent**: the agent kit in three commands, the protocol in four routes, and a check of your agent's address the way buyers will use it (profile, signed Arkiv listing, payable Hedera account, and with a sample input a real quote and the x402 payment demand), each step with how to fix it. |
 | `/status` | Public: is everything up (services, agents, networks, the shared demo wallet). |
 
 Signed-out visitors are sent to `/login` (`src/proxy.ts`, a cookie-presence check only; the API
