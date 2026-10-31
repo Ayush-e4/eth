@@ -3,7 +3,7 @@ pragma solidity ^0.8.28;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {MandateSignatures} from "./mandate/MandateSignatures.sol";
+import {MandateEscrow} from "./mandate/MandateEscrow.sol";
 
 /// @title MandateRegistry
 /// @notice Onchain spending mandates for AI agents. An owner approves this contract to spend
@@ -11,19 +11,14 @@ import {MandateSignatures} from "./mandate/MandateSignatures.sol";
 ///   by signature. Every payment is checked here — signer, expiry, revocation (including
 ///   ancestors), single-use nonce, per-payment cap, budget, payee allowlist — before the
 ///   registry pulls exactly that amount from the owner to the payee.
-/// @dev Funds never sit in this contract. Not upgradeable and no admin, so the rules cannot
-///   change under users. Implements the x402 Hedera `transferExecutor` interface
-///   (`executeTransfer`, selector 0xea8f19fd) so an x402 facilitator can settle through it.
-contract MandateRegistry is MandateSignatures {
+///   Payments go straight to the payee, or (v2) wait in escrow until the job is delivered
+///   (see MandateEscrow).
+/// @dev Funds only sit here while escrowed, and only escrow rules move them. Not upgradeable and
+///   no admin, so the rules cannot change under users. Implements the x402 Hedera
+///   `transferExecutor` interface (`executeTransfer`, selector 0xea8f19fd) so an x402
+///   facilitator can settle through it.
+contract MandateRegistry is MandateEscrow {
     using SafeERC20 for IERC20;
-
-    /// Root is depth 0; sub-mandates can nest this deep.
-    uint8 public constant MAX_DEPTH = 3;
-
-    uint256 public mandateCount;
-    mapping(uint256 id => Mandate) internal _mandates;
-    mapping(uint256 id => mapping(address payee => bool)) public isPayeeAllowed;
-    mapping(uint256 id => mapping(uint256 nonce => bool)) public nonceUsed;
 
     // ─── Create ─────────────────────────────────────────────────────────
 
@@ -115,20 +110,9 @@ contract MandateRegistry is MandateSignatures {
     }
 
     function _pay(PaymentAuth memory a, bytes memory signature) internal {
-        Mandate storage m = _requireActive(a.mandateId);
-        _useNonce(a.mandateId, a.nonce, a.validBefore);
-        _requireSignedBy(m.agent, paymentDigest(a), signature);
-
-        if (a.amount == 0) revert InvalidParams();
-        if (a.amount > m.perPaymentCap) revert OverPaymentCap();
-        if (a.amount > _remaining(m)) revert OverBudget();
-        if (m.restrictPayees && !isPayeeAllowed[a.mandateId][a.payTo]) revert PayeeNotAllowed();
-
-        // Effects before the external call. amount <= perPaymentCap (uint128), so the cast is safe.
-        // forge-lint: disable-next-line(unsafe-typecast)
-        m.spent += uint128(a.amount);
-        emit Paid(a.mandateId, a.payTo, a.amount, a.nonce);
-
+        Mandate storage m = _authorize(
+            a.mandateId, a.payTo, a.amount, a.nonce, a.validBefore, paymentDigest(a), signature
+        );
         // `from` is the mandate owner, who approved this contract; every rule above bounds it.
         // forge-lint: disable-next-line(arbitrary-send-erc20)
         // slither-disable-next-line arbitrary-send-erc20
@@ -147,56 +131,5 @@ contract MandateRegistry is MandateSignatures {
         if (!allowed) revert NotAuthorized();
         m.revoked = true;
         emit Revoked(id, msg.sender);
-    }
-
-    // ─── Views ──────────────────────────────────────────────────────────
-
-    function getMandate(uint256 id) external view returns (Mandate memory) {
-        return _mandates[id];
-    }
-
-    /// @notice Budget still available to spend or delegate.
-    function remaining(uint256 id) external view returns (uint256) {
-        return _remaining(_mandates[id]);
-    }
-
-    /// @notice False if this mandate or any ancestor is revoked or expired.
-    function isActive(uint256 id) public view returns (bool) {
-        if (_mandates[id].owner == address(0)) return false;
-        for (uint256 cur = id; cur != 0; cur = _mandates[cur].parentId) {
-            Mandate storage m = _mandates[cur];
-            if (m.revoked || m.expiresAt <= block.timestamp) return false;
-        }
-        return true;
-    }
-
-    // ─── Internals ──────────────────────────────────────────────────────
-
-    function _store(Mandate memory m, address[] calldata payees) internal returns (uint256 id) {
-        id = ++mandateCount;
-        _mandates[id] = m;
-        for (uint256 i; i < payees.length; ++i) {
-            if (payees[i] == address(0)) revert InvalidParams();
-            isPayeeAllowed[id][payees[i]] = true;
-        }
-        emit MandateCreated(
-            id, m.parentId, m.owner, m.agent, m.budget, m.perPaymentCap, m.expiresAt
-        );
-    }
-
-    function _requireActive(uint256 id) internal view returns (Mandate storage m) {
-        m = _mandates[id];
-        if (m.owner == address(0)) revert UnknownMandate();
-        if (!isActive(id)) revert MandateInactive();
-    }
-
-    function _useNonce(uint256 mandateId, uint256 nonce, uint256 validBefore) internal {
-        if (block.timestamp >= validBefore) revert AuthExpired();
-        if (nonceUsed[mandateId][nonce]) revert NonceUsed();
-        nonceUsed[mandateId][nonce] = true;
-    }
-
-    function _remaining(Mandate storage m) internal view returns (uint256) {
-        return uint256(m.budget) - m.spent - m.delegated;
     }
 }

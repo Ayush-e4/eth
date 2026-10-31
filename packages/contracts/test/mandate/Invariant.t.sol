@@ -7,14 +7,16 @@ import {IMandateRegistry} from "../../src/mandate/IMandateRegistry.sol";
 import {MockUSDC} from "../mocks/MockUSDC.sol";
 import {MandateBase} from "./MandateBase.t.sol";
 
-/// @dev Drives random sequences of payments, sub-mandates and revokes.
+/// @dev Drives random sequences of payments, escrows, sub-mandates and revokes.
 contract MandateHandler is Test {
     MandateRegistry public registry;
     MockUSDC public usdc;
     uint256[] public keys; // agent key per mandate index (id - 1)
     address[] public payees;
     uint256 public nonce = 1;
-    uint256 public totalPaid;
+    uint256 public totalPaid; // reached a payee
+    uint256 public held; // sitting in open escrows
+    bytes32[] public escrows;
 
     constructor(MandateRegistry r, MockUSDC u, uint256 rootKey, address[] memory p) {
         registry = r;
@@ -36,6 +38,53 @@ contract MandateHandler is Test {
             IMandateRegistry.PaymentAuth(id, to, amount, nonce++, block.timestamp + 60);
         try registry.pay(a, _sign(keys[id - 1], registry.paymentDigest(a))) {
             totalPaid += amount;
+        } catch {}
+    }
+
+    /// Pay on delivery: into escrow, then delivered, released or refunded in any order.
+    function hold(uint256 idSeed, uint256 payeeSeed, uint256 amount) external {
+        uint256 id = bound(idSeed, 1, keys.length);
+        address to = payees[bound(payeeSeed, 0, payees.length - 1)];
+        amount = bound(amount, 1, 20e6);
+        IMandateRegistry.EscrowAuth memory a = IMandateRegistry.EscrowAuth(
+            id, to, amount, nonce++, block.timestamp + 60, uint64(block.timestamp + 1 hours), 60
+        );
+        try registry.payIntoEscrow(a, _sign(keys[id - 1], registry.escrowDigest(a))) returns (
+            bytes32 eid
+        ) {
+            escrows.push(eid);
+            held += amount;
+        } catch {}
+    }
+
+    function _pick(uint256 seed) internal view returns (bytes32, IMandateRegistry.Escrow memory) {
+        bytes32 eid = escrows[bound(seed, 0, escrows.length - 1)];
+        return (eid, registry.getEscrow(eid));
+    }
+
+    function deliver(uint256 seed) external {
+        if (escrows.length == 0) return;
+        (bytes32 eid, IMandateRegistry.Escrow memory e) = _pick(seed);
+        vm.prank(e.payee);
+        try registry.markDelivered(eid, keccak256("done")) {} catch {}
+    }
+
+    function release(uint256 seed) external {
+        if (escrows.length == 0) return;
+        (bytes32 eid, IMandateRegistry.Escrow memory e) = _pick(seed);
+        vm.prank(vm.addr(keys[e.mandateId - 1]));
+        try registry.release(eid) {
+            held -= e.amount;
+            totalPaid += e.amount;
+        } catch {}
+    }
+
+    function refund(uint256 seed) external {
+        if (escrows.length == 0) return;
+        (bytes32 eid, IMandateRegistry.Escrow memory e) = _pick(seed);
+        vm.prank(e.payee);
+        try registry.refund(eid) {
+            held -= e.amount;
         } catch {}
     }
 
@@ -93,15 +142,15 @@ contract MandateInvariantTest is MandateBase {
         }
     }
 
-    /// The owner loses exactly what was paid, and never more than the root budget.
+    /// The owner loses exactly what was paid or is still held, never more than the root budget.
     function invariant_ownerLosesExactlyWhatWasPaid() public view {
-        assertEq(1000e6 - usdc.balanceOf(owner), handler.totalPaid());
-        assertLe(handler.totalPaid(), BUDGET);
+        assertEq(1000e6 - usdc.balanceOf(owner), handler.totalPaid() + handler.held());
+        assertLe(handler.totalPaid() + handler.held(), BUDGET);
     }
 
-    /// Funds never sit in the registry.
-    function invariant_registryHoldsNothing() public view {
-        assertEq(usdc.balanceOf(address(registry)), 0);
+    /// The registry holds exactly what's in open escrows, nothing more (and nothing gets stuck).
+    function invariant_registryHoldsOnlyOpenEscrows() public view {
+        assertEq(usdc.balanceOf(address(registry)), handler.held());
     }
 
     /// Only allowed payees ever receive funds.
@@ -118,6 +167,12 @@ contract MandateInvariantTest is MandateBase {
         assertEq(handler.count(), 2);
         handler.pay(2, 0, 3e6);
         assertEq(handler.totalPaid(), 8e6);
+        handler.hold(1, 1, 2e6);
+        assertEq(handler.held(), 2e6);
+        handler.deliver(0);
+        handler.release(0);
+        assertEq(handler.held(), 0);
+        assertEq(handler.totalPaid(), 10e6);
     }
 
     /// Fuzz: any single payment above the cap is rejected.

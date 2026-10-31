@@ -35,6 +35,24 @@ export const subMandateAuthTypes = {
   ],
 } as const;
 
+export const escrowAuthTypes = {
+  EscrowAuth: [
+    { name: "mandateId", type: "uint256" },
+    { name: "payTo", type: "address" },
+    { name: "amount", type: "uint256" },
+    { name: "nonce", type: "uint256" },
+    { name: "validBefore", type: "uint256" },
+    { name: "deliverBy", type: "uint64" },
+    { name: "reviewSeconds", type: "uint32" },
+  ],
+} as const;
+
+/** A payment that waits in escrow until delivered (see MandateEscrow.sol). */
+export interface EscrowAuth extends PaymentAuth {
+  deliverBy: bigint; // unix seconds
+  reviewSeconds: number;
+}
+
 export interface PaymentAuth {
   mandateId: bigint;
   payTo: Address;
@@ -98,3 +116,35 @@ export function encodeX402Authorization(auth: PaymentAuth, signature: Hex): Hex 
     [auth.mandateId, auth.nonce, auth.validBefore, signature],
   );
 }
+
+export function signEscrowAuth(
+  agent: LocalAccount,
+  domain: ReturnType<typeof mandateDomain>,
+  message: EscrowAuth,
+): Promise<Hex> {
+  return agent.signTypedData({
+    domain,
+    types: escrowAuthTypes,
+    primaryType: "EscrowAuth",
+    message,
+  });
+}
+
+/** The `authorization` bytes `executeEscrowTransfer` expects. */
+export function encodeX402EscrowAuthorization(auth: EscrowAuth, signature: Hex): Hex {
+  return encodeAbiParameters(
+    [
+      { type: "uint256" },
+      { type: "uint256" },
+      { type: "uint256" },
+      { type: "uint64" },
+      { type: "uint32" },
+      { type: "bytes" },
+    ],
+    [auth.mandateId, auth.nonce, auth.validBefore, auth.deliverBy, auth.reviewSeconds, signature],
+  );
+}
+
+/** Same as `escrowIdOf(mandateId, nonce)` in the contract. */
+export const escrowIdOf = (mandateId: bigint, nonce: bigint): Hex =>
+  keccak256(encodeAbiParameters([{ type: "uint256" }, { type: "uint256" }], [mandateId, nonce]));

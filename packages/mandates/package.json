@@ -10,7 +10,9 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "demo": "tsx --env-file=../../.env scripts/demo.ts"
+    "demo": "tsx --env-file=../../.env scripts/demo.ts",
+    "deploy-registry": "tsx --env-file=../../.env scripts/deploy-registry.ts",
+    "escrow-demo": "tsx --env-file=../../.env scripts/escrow-demo.ts"
   },
   "dependencies": {
     "@eth/hedera": "workspace:*",

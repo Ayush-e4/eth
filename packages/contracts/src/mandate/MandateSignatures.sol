@@ -16,7 +16,28 @@ abstract contract MandateSignatures is EIP712, IMandateRegistry {
         "SubMandateAuth(uint256 parentId,address agent,uint128 budget,uint128 perPaymentCap,uint64 expiresAt,bytes32 payeesHash,uint256 nonce,uint256 validBefore)"
     );
 
+    bytes32 public constant ESCROW_AUTH_TYPEHASH = keccak256(
+        "EscrowAuth(uint256 mandateId,address payTo,uint256 amount,uint256 nonce,uint256 validBefore,uint64 deliverBy,uint32 reviewSeconds)"
+    );
+
     constructor() EIP712("MandateRegistry", "1") {}
+
+    function escrowDigest(EscrowAuth memory a) public view returns (bytes32) {
+        return _hashTypedDataV4(
+            keccak256(
+                abi.encode(
+                    ESCROW_AUTH_TYPEHASH,
+                    a.mandateId,
+                    a.payTo,
+                    a.amount,
+                    a.nonce,
+                    a.validBefore,
+                    a.deliverBy,
+                    a.reviewSeconds
+                )
+            )
+        );
+    }
 
     function paymentDigest(PaymentAuth memory a) public view returns (bytes32) {
         return _hashTypedDataV4(
