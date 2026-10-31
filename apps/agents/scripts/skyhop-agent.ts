@@ -1,14 +1,14 @@
 // SkyHop as the market runs it: Duffel test mode, with booking management (its records in a
 // gitignored file, like StayWise's).
-import { fileURLToPath } from "node:url";
 import { arkivReader } from "@eth/arkiv";
 import { DuffelClient, DuffelOrders } from "@eth/travel";
+import { dataFile } from "../src/data-dir";
 import type { SpecialistIdentity } from "../src/identities";
 import { skyhop } from "../src/specialists/skyhop";
 import type { FlightRecord } from "../src/specialists/skyhop-manage";
 import { JsonStore } from "../src/store";
 
-const STORE = fileURLToPath(new URL("../.skyhop.local.json", import.meta.url));
+const STORE = dataFile(".skyhop.local.json");
 
 export function skyhopAgent(identity: SpecialistIdentity) {
   const duffel = new DuffelClient(process.env.DUFFEL_ACCESS_TOKEN ?? "");

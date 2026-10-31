@@ -1,6 +1,5 @@
 // What a running agent needs for money: its refunds, its job database, and a way to ask the
 // chain whether a payment happened. Kept apart from runtime.ts, which wires up the market.
-import { fileURLToPath } from "node:url";
 import { createClient, executeContract, NETWORKS, transferToken } from "@eth/hedera";
 import {
   DEPLOYMENTS,
@@ -12,6 +11,7 @@ import {
   revertName,
 } from "@eth/mandates";
 import { encodeFunctionData, type Hex } from "viem";
+import { dataFile } from "../src/data-dir";
 import type { SpecialistIdentity } from "../src/identities";
 import type { EscrowMoves } from "../src/specialists/escrow";
 
@@ -38,8 +38,7 @@ export function refunder(identity: SpecialistIdentity) {
 }
 
 /** Each agent's own database of quotes and paid jobs (gitignored; survives restarts). */
-export const jobsFile = (name: string) =>
-  fileURLToPath(new URL(`../.${name}.local.db`, import.meta.url));
+export const jobsFile = (name: string) => dataFile(`.${name}.local.db`);
 
 /** Asks MandateRegistry whether a payment happened (agents recovering after a crash). */
 export function paymentChecker() {

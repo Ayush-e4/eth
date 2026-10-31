@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { z } from "zod";
+import { dataFile } from "./data-dir";
 
 /**
  * Local agent identities created by `pnpm --filter @eth/agents identities`.
@@ -45,7 +45,7 @@ export const IdentitiesSchema = z.object({
 export type Identities = z.infer<typeof IdentitiesSchema>;
 export type SpecialistIdentity = z.infer<typeof SpecialistIdentity>;
 
-export const IDENTITIES_PATH = fileURLToPath(new URL("../.agents.local.json", import.meta.url));
+export const IDENTITIES_PATH = dataFile(".agents.local.json");
 
 export function loadIdentities(): Identities {
   let raw: string;

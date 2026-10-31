@@ -22,6 +22,7 @@ import { createPayingFetch, HttpFacilitator, MirrorResolver } from "@eth/x402";
 import { serve } from "@hono/node-server";
 import type { Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
+import { dataFile } from "../src/data-dir";
 import { loadIdentities, type SpecialistIdentity } from "../src/identities";
 import type { Explanation } from "../src/orchestrator/explain";
 import { buy, type HireDeps } from "../src/orchestrator/hire";
@@ -56,12 +57,12 @@ export const tx = (id: string) => `${net.hashscanUrl}/transaction/${id}`;
 const redact = (s: string) => s.replace(/ark_(live|test)_[A-Za-z0-9]+/g, "ark_$1_…");
 export const log = (line: string) => console.log(`  · ${redact(line)}`);
 // StayWise's own records of what it booked and for whom (gitignored, survives restarts).
-const STAYWISE_STORE = fileURLToPath(new URL("../.staywise.local.json", import.meta.url));
+const STAYWISE_STORE = dataFile(".staywise.local.json");
 
 /** The x402 facilitator, as its own process (as in production). */
 export async function startFacilitator() {
   const cwd = fileURLToPath(new URL("../../facilitator", import.meta.url));
-  const child = spawn("npx", ["tsx", "--env-file=../../.env", "src/index.ts"], {
+  const child = spawn("npx", ["tsx", "--env-file-if-exists=../../.env", "src/index.ts"], {
     cwd,
     stdio: "ignore",
   });

@@ -1,12 +1,12 @@
 // PriceGuard as the market runs it: its watches in a gitignored file, checked on a schedule.
 //   PRICEGUARD_EVERY_MIN  minutes between rounds (default 60; each check locks a hotel rate)
-import { fileURLToPath } from "node:url";
+import { dataFile } from "../src/data-dir";
 import { fetchInrRates } from "../src/orchestrator/procure";
 import { priceGuard, type Watch } from "../src/specialists/priceguard";
 import type { SpecialistContext } from "../src/specialists/server";
 import { JsonStore } from "../src/store";
 
-const STORE = fileURLToPath(new URL("../.priceguard.local.json", import.meta.url));
+const STORE = dataFile(".priceguard.local.json");
 
 export function priceguardAgent(ctx: SpecialistContext) {
   const guard = priceGuard(ctx, {
