@@ -49,9 +49,20 @@ export type HireOutcome =
  * chat's mandate on Hedera, and in "ask" chats a one-time approval code the user sent. Those
  * rules live here in code: the concierge can ask for a hire, it can't skip them.
  */
-export function hiringService(db: Db, env: HiringEnv) {
+interface Approval {
+  ref: string;
+  approved: boolean;
+  humanAt?: number; // when a World ID check for this exact approval passed
+}
+
+const HUMAN_FRESH_MS = 5 * 60_000; // a human check unlocks its payment for 5 minutes
+
+/** `requireHuman`: approvals in "ask" chats need a fresh World ID check (when configured). */
+export function hiringService(db: Db, env: HiringEnv, opts: { requireHuman?: boolean } = {}) {
   const held = new Map<string, Held[]>(); // chatId → quotes, newest last
-  const approvals = new Map<string, Map<string, { ref: string; approved: boolean }>>();
+  const approvals = new Map<string, Map<string, Approval>>();
+  const human = (a: Approval) =>
+    !opts.requireHuman || (!!a.humanAt && Date.now() - a.humanAt < HUMAN_FRESH_MS);
   const names = new Map<string, string>(); // agent address → name, for limit cards
   let nextRef = 1;
   const nameOf = (o: QuoteOption) => o.title.split(" — ")[0] ?? o.title;
@@ -115,11 +126,24 @@ export function hiringService(db: Db, env: HiringEnv) {
       return [...seen.values()];
     },
 
+    /** True while an approval card's code is waiting for the user's answer. */
+    pendingApproval(chatId: string, code: string) {
+      const a = approvals.get(chatId)?.get(code);
+      return !!a && !a.approved;
+    },
+
+    /** A World ID check for this approval passed (validated server-side). */
+    markHuman(chatId: string, code: string) {
+      const a = approvals.get(chatId)?.get(code);
+      if (a) a.humanAt = Date.now();
+    },
+
     /** Reads "Approve abc123" / "Decline abc123" in what the user sent. */
     noteUserMessage(chatId: string, text: string) {
       for (const m of text.matchAll(/\b(approve|decline)\s+([a-z0-9]{6})\b/gi)) {
         const entry = approvals.get(chatId)?.get((m[2] ?? "").toLowerCase());
-        if (entry) entry.approved = (m[1] ?? "").toLowerCase() === "approve";
+        // "Approve" only counts once the human check passed; "Decline" always counts.
+        if (entry) entry.approved = (m[1] ?? "").toLowerCase() === "approve" && human(entry);
       }
     },
 
@@ -147,7 +171,7 @@ export function hiringService(db: Db, env: HiringEnv) {
       if (chat.mode === "ask") {
         const mine = approvals.get(chat.id) ?? new Map();
         approvals.set(chat.id, mine);
-        const ok = [...mine.entries()].find(([, a]) => a.ref === ref && a.approved);
+        const ok = [...mine.entries()].find(([, a]) => a.ref === ref && a.approved && human(a));
         if (!ok) {
           const code = randomBytes(3).toString("hex");
           mine.set(code, { ref, approved: false });
@@ -161,6 +185,7 @@ export function hiringService(db: Db, env: HiringEnv) {
                 ? `${h.option.note}. It also gets up to ${usdc(BigInt(sub.budgetUnits))} USDC from this limit to pay ${sub.payees.map((p) => p.name).join(" and ")}.`
                 : h.option.note,
               feeUnits: h.option.feeUnits.toString(),
+              ...(opts.requireHuman ? { human: true } : {}),
             },
           };
         }

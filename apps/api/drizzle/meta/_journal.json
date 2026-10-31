@@ -43,6 +43,13 @@
       "when": 1793308404600,
       "tag": "0005_spend_log",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793433310695,
+      "tag": "0006_world_id",
+      "breakpoints": true
     }
   ]
 }

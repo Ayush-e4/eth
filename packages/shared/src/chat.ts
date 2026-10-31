@@ -77,6 +77,8 @@ export const ApprovalCardSchema = z.object({
   title: z.string(), // e.g. "Hire AirNest to book your flights"
   detail: z.string(),
   feeUnits: units,
+  /** Approving needs a fresh World ID check first (a present, unique human), validated server-side. */
+  human: z.boolean().optional(),
 });
 
 /** An agent was paid and did the job. Links are proof anyone can check. */

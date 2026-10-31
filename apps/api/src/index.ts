@@ -7,6 +7,8 @@ import { connectDb } from "./db/client";
 import { loadHiringEnv } from "./hiring/env";
 import { hiringService } from "./hiring/service";
 import { arkivNames } from "./spend-log/routes";
+import { humanChecks } from "./world/checks";
+import { loadWorldConfig, worldClient } from "./world/oidc";
 
 const config = loadConfig();
 const { db } = await connectDb(config.databaseUrl);
@@ -14,7 +16,14 @@ const { db } = await connectDb(config.databaseUrl);
 // The concierge needs a Claude key; without one, chats work but messages get a clear 503.
 // Hiring needs the demo wallet (operator) and the concierge's own key; without them it stays off.
 const env = loadHiringEnv();
-const hiring = env ? { env, service: hiringService(db, env) } : null;
+// World ID (optional): "Ask first" approvals then need a fresh human check before paying.
+const world = loadWorldConfig();
+const hiring = env ? { env, service: hiringService(db, env, { requireHuman: !!world }) } : null;
+const checks =
+  world && hiring
+    ? humanChecks(db, worldClient(world), (chatId, code) => hiring.service.markHuman(chatId, code))
+    : null;
+if (!world) console.warn("World ID is off: set WORLD_ID_CLIENT_ID and WORLD_ID_CLIENT_SECRET");
 if (!hiring)
   console.warn(
     "hiring is off: set HEDERA_* in .env and run `pnpm --filter @eth/agents identities`",
@@ -26,7 +35,8 @@ if (!concierge) console.warn("ANTHROPIC_API_KEY not set: the concierge is off");
 
 serve(
   {
-    fetch: createApp(db, config, { concierge, hiring, logNames: arkivNames() }).fetch,
+    fetch: createApp(db, config, { concierge, hiring, logNames: arkivNames(), humanChecks: checks })
+      .fetch,
     port: config.port,
   },
   (info) => {

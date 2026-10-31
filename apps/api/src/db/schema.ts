@@ -9,25 +9,33 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
 /** A person using the app. Wallet users have an address; demo users don't. */
-export const users = pgTable("users", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  // Checksummed EVM address (MetaMask on Hedera testnet). Null for demo users.
-  address: text("address").unique(),
-  displayName: text("display_name"),
-  homeCity: text("home_city"),
-  isDemo: boolean("is_demo").notNull().default(false),
-  // Defaults for new chats, chosen during setup.
-  defaultMode: text("default_mode").$type<ChatMode>().notNull().default("auto"),
-  defaultLimitUnits: bigint("default_limit_units", { mode: "bigint" })
-    .notNull()
-    .default(sql`300000`),
-  onboardedAt: timestamp("onboarded_at", { withTimezone: true }),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+export const users = pgTable(
+  "users",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // Checksummed EVM address (MetaMask on Hedera testnet). Null for demo users.
+    address: text("address").unique(),
+    displayName: text("display_name"),
+    homeCity: text("home_city"),
+    isDemo: boolean("is_demo").notNull().default(false),
+    // Defaults for new chats, chosen during setup.
+    defaultMode: text("default_mode").$type<ChatMode>().notNull().default("auto"),
+    defaultLimitUnits: bigint("default_limit_units", { mode: "bigint" })
+      .notNull()
+      .default(sql`300000`),
+    onboardedAt: timestamp("onboarded_at", { withTimezone: true }),
+    // Their World ID, linked on the first human check: (issuer, private subject). One account each.
+    worldIss: text("world_iss"),
+    worldSub: text("world_sub"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("users_world_idx").on(t.worldIss, t.worldSub)],
+);
 
 /** One-time codes handed out for Sign-In with Ethereum. Each can be used once. */
 export const authNonces = pgTable("auth_nonces", {

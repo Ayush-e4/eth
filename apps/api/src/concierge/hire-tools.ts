@@ -103,7 +103,9 @@ export function hireTools(
       if (out.status === "needs_limit")
         return "Not paid yet: the user must approve a spending limit for this chat (card shown). Stop here and wait; when they say it's approved, call hire_agent again.";
       if (out.status === "needs_approval")
-        return `Not paid yet: this chat asks before every payment. The user sees an approval card (code ${out.card.code}). Stop and wait for "Approve ${out.card.code}".`;
+        return out.card.human
+          ? `Not paid yet: this chat asks before every payment, and approving needs a World ID check on the card (code ${out.card.code}). Tell the user to tap "Approve with World ID" on the card; typing "Approve" alone isn't enough. Stop and wait.`
+          : `Not paid yet: this chat asks before every payment. The user sees an approval card (code ${out.card.code}). Stop and wait for "Approve ${out.card.code}".`;
       return `Not hired: ${out.reason}`;
     },
   });
