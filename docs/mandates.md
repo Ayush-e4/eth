@@ -127,6 +127,42 @@ pnpm --filter @eth/mandates demo
 | Sub-mandate #2 for flights agent (0.4 carved from #1), pays 0.2 | ✅ |
 | Owner revokes #1 → flights agent pays | ❌ `MandateInactive` |
 
+## Passkey wallets (Face ID controls the wallet)
+
+Web2 analogy: a bank account whose only "password" is your face. A passkey (Face ID, a
+fingerprint, a phone) is a P-256 key pair kept by the device. `PasskeyWallet` is a small contract
+that holds USDC and runs a batch of calls only with that passkey's signature over exactly that
+batch, this wallet, chain 296, its current nonce and a deadline. Anyone can submit the batch (our
+server does and pays the gas); nobody can change it. So a spending limit is "approve USDC +
+`createMandate`" signed with Face ID: the wallet becomes the mandate's owner, and the registry
+pulls fees from it like from any owner. The registry didn't change.
+
+- **On-chain WebAuthn check** (`src/wallet/PasskeySignature.sol`): type is `webauthn.get`, the
+  challenge is the batch digest, user present and verified (biometric, not just a tap), P-256
+  signature. Hedera has no P-256 precompile (RIP-7212), so it calls OpenZeppelin's
+  pure-Solidity verifier directly (`P256.verifySolidity`; `P256.verify` would probe 0x100
+  first). The app flips a high `s` to low before sending.
+- **`PasskeyWalletFactory`** makes one wallet per passkey at a CREATE2 address derived from the
+  public key, and opts it in to USDC through the HTS precompile (Hedera accounts must associate
+  a token before holding it). Permissionless: the wallet answers only to its passkey.
+- **ERC-1271** `isValidSignature`, so contracts can accept the passkey's signature as the wallet's.
+- No admin, not upgradeable, no recovery yet (a second passkey would be the fix).
+- Client: `PasskeyWalletClient`, `assertionFromWebAuthn`, `limitCalls`, `revokeCalls` in
+  `packages/mandates/src/passkey-wallet.ts`.
+
+Deployed: factory `0x8ab68603de289c90b577d58b28f52365529347d1`
+(`pnpm --filter @eth/mandates deploy-wallet-factory`; override with `PASSKEY_WALLET_FACTORY`).
+
+Live run (`pnpm --filter @eth/mandates passkey-wallet-demo`, a software passkey standing in for
+Face ID), 2026-11-01:
+
+| Step | Result |
+|---|---|
+| Make the wallet, opted in to USDC | [0xC034A996…6462](https://hashscan.io/testnet/contract/0xC034A9969D87EF422728F8661115C069719F6462) |
+| Passkey sets a 0.05 USDC limit (approve + create, one batch) | [mandate #9, owner = wallet](https://hashscan.io/testnet/transaction/0x846d2f45fe95223c15daf90b8493bc023769163b2a723e27ae8d41910c0263fa) (≈1.2M gas) |
+| Agent paid 0.01 USDC out of the wallet | [tx](https://hashscan.io/testnet/transaction/0xd2565ebe82e686235b57c27caa66288d5e8ab1958b8de89e1eac01c8a946248f) |
+| Passkey cancels the limit | [tx](https://hashscan.io/testnet/transaction/0x6fe2b86770cd0e5c1d761a2dcfd97318a0771b2a2a6a940eeb2bc1d4d27cb6ee) (≈0.3M gas) |
+
 ## Known limits (by design, for now)
 
 - Budget is permission, not reserved money: if the owner spends the USDC elsewhere, payments fail.

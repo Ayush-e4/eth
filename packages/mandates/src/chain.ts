@@ -21,6 +21,9 @@ export const DEPLOYMENTS = {
     mandateRegistry: (env.MANDATE_REGISTRY_ADDRESS ||
       "0xc854860e659d5e70fd4e47146643abec6db634b6") as `0x${string}`,
     mandateRegistryId: env.MANDATE_REGISTRY_ID || "0.0.11254658",
+    /** Makes passkey wallets (Face ID controls them). */
+    passkeyWalletFactory: (env.PASSKEY_WALLET_FACTORY ||
+      "0x8ab68603de289c90b577d58b28f52365529347d1") as `0x${string}`,
     /** Registries we used before, oldest first: nothing new goes there. */
     previous: [
       {
