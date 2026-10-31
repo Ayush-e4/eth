@@ -12,6 +12,7 @@ import { demoQuotas, loadDemoQuotas } from "./demo/quotas";
 import { loadHiringEnv } from "./hiring/env";
 import { pendingHires } from "./hiring/pending";
 import { reputation } from "./hiring/reputation";
+import { escrowReviews } from "./hiring/review";
 import { hiringService } from "./hiring/service";
 import { undoWindows } from "./hiring/undo";
 import { marketCatalog } from "./market/catalog";
@@ -32,9 +33,16 @@ const world = loadWorldConfig();
 // Undo windows (Hedera scheduled payments) for "Auto" chats; UNDO_SECONDS=0 turns them off.
 const undoSeconds = Number(process.env.UNDO_SECONDS ?? 60);
 const undo = env && undoSeconds > 0 ? undoWindows(db, env, undoSeconds) : null;
+// Pay on delivery: a delivered fee waits this long for the user to pay now or dispute (0 = paid
+// out at once).
+const reviewSeconds = Number(process.env.ESCROW_REVIEW_SECONDS ?? 120);
+const review =
+  env?.escrow && reviewSeconds > 0 ? escrowReviews(db, env.escrow, reviewSeconds) : null;
 // Hires written down before paying, read back from the agent if a turn couldn't finish them.
 const rate = env ? reputation(env) : undefined;
-const pending = env ? pendingHires(db, env, { reputation: rate }) : null;
+const pending = env
+  ? pendingHires(db, env, { reputation: rate, review: review ?? undefined })
+  : null;
 // The open market on Arkiv, shared by the concierge and the status page.
 const market = arkivMarket(undefined, env ? [env.demo.evm] : []);
 // Is everything up? Services, networks and the shared demo wallet (public at GET /status).
@@ -61,6 +69,7 @@ const hiring = env
         requireHuman: !!world,
         reputation: rate,
         undo: undo ?? undefined,
+        review: review ?? undefined,
         pending: pending ?? undefined,
         demo: demo ?? undefined,
       }),
@@ -79,6 +88,7 @@ void closeInterruptedTurns(db)
   )
   .catch((err) => console.error("closing interrupted turns failed:", err));
 void checks?.resume().catch((err) => console.error("resuming World ID checks failed:", err));
+void review?.resume().catch((err) => console.error("resuming escrow reviews failed:", err));
 void pending
   ?.resume()
   .then((n) => n && console.log(`following ${n} hire(s) the last run didn't see finish`))
@@ -102,6 +112,7 @@ serve(
       humanChecks: checks,
       tasks,
       undo,
+      review,
       demo,
       status,
       catalog,

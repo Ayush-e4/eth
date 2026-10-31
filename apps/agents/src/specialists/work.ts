@@ -15,7 +15,7 @@ import type { Job, JobStore, Refund } from "./jobs";
 import type { SpecialistContext, SpecialistDef } from "./server";
 
 const RECHECK_MS = 10_000;
-const SWEEP_MS = 120_000; // escrows left open: retry deliveries and refunds, claim after review
+const SWEEP_MS = 60_000; // open escrows: retry, refund disputes, claim after the review window
 
 type Parsed<I> =
   | { req: TaskRequest<I>; error?: undefined }

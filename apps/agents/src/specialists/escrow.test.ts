@@ -181,4 +181,16 @@ describe("pay on delivery, the agent's side", () => {
     expect(moves.claim).not.toHaveBeenCalled();
     expect(jobs.job("0xq1")?.escrow?.closed).toBe("paid");
   });
+
+  it("disputed by the buyer: the agent gives the fee back", async () => {
+    await agent().hire();
+    moves.read.mockResolvedValue({ state: "disputed", deliveredAt: 1n, reviewSeconds: 900 });
+    await escrowJobs(moves as unknown as EscrowMoves, jobs, () => {}).sweep();
+    expect(moves.refund).toHaveBeenCalledWith(jobs.job("0xq1")?.escrow?.id);
+    expect(jobs.job("0xq1")).toMatchObject({
+      status: "delivered",
+      refund: { transaction: "0.0.5005@8.8" },
+      escrow: { closed: "refunded" },
+    });
+  });
 });

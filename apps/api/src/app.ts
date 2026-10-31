@@ -13,6 +13,7 @@ import type { DemoQuotaCheck } from "./demo/quotas";
 import { demoRoutes } from "./demo/routes";
 import type { HiringEnv } from "./hiring/env";
 import { paymentRoutes } from "./hiring/payment-routes";
+import type { EscrowReviews } from "./hiring/review";
 import { mandateRoutes } from "./hiring/routes";
 import type { HiringService } from "./hiring/service";
 import type { UndoWindows } from "./hiring/undo";
@@ -35,6 +36,7 @@ export interface AppDeps {
   humanChecks?: HumanChecks | null;
   tasks?: OpenTaskService | null;
   undo?: UndoWindows | null;
+  review?: EscrowReviews | null;
   demo?: DemoQuotaCheck | null;
   status?: StatusCheck | null;
   catalog?: MarketCatalog | null;
@@ -94,7 +96,7 @@ export function createApp(db: Db, config: Config, deps: AppDeps = {}) {
   app.route("/", spendLogRoutes(hiring?.env ?? null, deps.logNames));
   app.route("/", humanCheckRoutes(db, deps.humanChecks ?? null, hiring?.service ?? null));
   app.route("/", openTaskRoutes(db, deps.tasks ?? null));
-  app.route("/", paymentRoutes(db, deps.undo ?? null));
+  app.route("/", paymentRoutes(db, deps.undo ?? null, deps.review ?? null));
 
   return app;
 }

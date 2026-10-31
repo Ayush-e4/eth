@@ -14,6 +14,7 @@ import { hires, messages, pendingHires as table } from "../db/schema";
 import type { HiringEnv } from "./env";
 import { finishHire, type Granted } from "./record";
 import type { Reputation } from "./reputation";
+import type { EscrowReviews } from "./review";
 
 type Row = typeof table.$inferSelect;
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -36,7 +37,12 @@ const readable = (detail = "it failed") =>
 export function pendingHires(
   db: Db,
   env: HiringEnv,
-  d: { reputation?: Reputation; read?: typeof readJob; wait?: typeof sleep } = {},
+  d: {
+    reputation?: Reputation;
+    review?: EscrowReviews;
+    read?: typeof readJob;
+    wait?: typeof sleep;
+  } = {},
 ) {
   const concierge = privateKeyToAccount(env.concierge.key);
   const read = d.read ?? readJob;
@@ -69,7 +75,7 @@ export function pendingHires(
         mandateId: p.mandateId,
         payer: p.payer,
         log: () => {},
-        ...(env.release ? { release: env.release } : {}),
+        ...(env.escrow && !d.review ? { release: env.escrow.release } : {}),
       },
       p.reason,
       {
@@ -85,6 +91,7 @@ export function pendingHires(
       hire,
       delegation,
       reputation: d.reputation,
+      review: d.review,
     });
     await say(
       p.chatId,

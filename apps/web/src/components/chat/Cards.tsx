@@ -39,7 +39,7 @@ export function CardView({ card, ctx }: { card: Card; ctx: CardCtx }) {
     case "task":
       return <TaskCard card={card} ctx={ctx} />;
     case "hired":
-      return <HiredCard card={card} />;
+      return <HiredCard card={card} ctx={ctx} />;
     case "payment":
       return <PaymentCard card={card} ctx={ctx} />;
   }

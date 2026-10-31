@@ -250,3 +250,19 @@ export type Chat = typeof chats.$inferSelect;
 export type Message = typeof messages.$inferSelect;
 export type MandateRow = typeof mandates.$inferSelect;
 export type HireRow = typeof hires.$inferSelect;
+
+/**
+ * Pay on delivery: a delivered job's fee waits out the user's review window before the concierge
+ * releases it; until then the user can pay now or dispute. Kept here so a restart still releases.
+ * Status: holding → released | disputed (then released if the user pays anyway) | failed.
+ */
+export const escrowReviews = pgTable("escrow_reviews", {
+  escrowId: text("escrow_id").primaryKey(),
+  chatId: chatRef(),
+  title: text("title").notNull(), // the agent's name, for messages
+  releaseAt: at("release_at").notNull(),
+  status: text("status").notNull().default("holding"),
+  releasedTx: text("released_tx"),
+  error: text("error"),
+  createdAt: at("created_at").notNull().defaultNow(),
+});

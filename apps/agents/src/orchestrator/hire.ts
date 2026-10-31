@@ -218,13 +218,13 @@ export async function recordHire(
   };
 }
 
-/** We have the result: pay the held fee out to the agent. */
+/** We have the result: pay the held fee out to the agent (if this buyer pays out at once). */
 async function releaseEscrow(
   e: NonNullable<Delivered["escrow"]>,
   d: Pick<HireDeps, "release" | "log">,
   skill: string,
 ): Promise<HireEscrow> {
-  if (!d.release) return { ...e, releaseFailed: "this buyer doesn't release; the agent claims it" };
+  if (!d.release) return { ...e }; // released later (after a review), or claimed by the agent
   try {
     const releasedTx = await d.release(e.id);
     d.log(`[${skill}] released the escrowed fee → ${releasedTx}`);

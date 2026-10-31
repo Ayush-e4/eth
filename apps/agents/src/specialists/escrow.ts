@@ -65,8 +65,9 @@ export function escrowJobs(
   }
 
   /**
-   * Every few minutes: deliveries that weren't marked (we crashed) and refunds that failed are
-   * tried again, and fees the buyer left unreleased past its review window are claimed.
+   * Every minute: deliveries that weren't marked (we crashed) and refunds that failed are tried
+   * again, disputed fees are refunded, and fees the buyer left unreleased past its review window
+   * are claimed.
    */
   async function sweep(now = Date.now()) {
     if (!moves) return;
@@ -80,9 +81,14 @@ export function escrowJobs(
       if (!onChain) continue;
       if (onChain.state === "released") update(j, { closed: "paid" });
       else if (onChain.state === "refunded") update(j, { closed: "refunded" });
-      else if (j.status === "failed") {
+      else if (j.status === "failed" || onChain.state === "disputed") {
+        // Failed, or the buyer disputed what we delivered: our policy is to give the fee back.
         const r = await refund(j);
         if ("transaction" in r) jobs.update(j.quoteKey, { refund: r });
+        if (onChain.state === "disputed")
+          log(
+            `${j.task}: the buyer disputed it; refunded (${"transaction" in r ? r.transaction : r.failed})`,
+          );
       } else if (
         onChain.state === "delivered" &&
         now / 1000 >= Number(onChain.deliveredAt) + onChain.reviewSeconds
@@ -94,7 +100,6 @@ export function escrowJobs(
           log(`${j.task}: claim failed: ${short(err)}`);
         }
       }
-      // "disputed": stays until the buyer releases it or we refund (see docs/agent-jobs.md)
     }
   }
 
