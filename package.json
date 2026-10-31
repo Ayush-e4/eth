@@ -13,6 +13,7 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "db:up": "docker compose up -d --wait postgres",
+    "setup:testnet": "pnpm --filter @eth/agents setup-testnet",
     "db:down": "docker compose down"
   },
   "devDependencies": {
