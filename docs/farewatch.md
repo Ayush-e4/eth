@@ -24,6 +24,12 @@ undo window, pay on delivery. Web2 analogy: a price alert on a travel site, run 
   chat: it asks the flight agents for quotes and hires the cheapest fare at or under the target
   through the normal hire (limit, approvals, undo window, escrow). Never on a simulated drop.
 
+## The Watchers page
+
+`/watchers` (sidebar) lists every watch the user hired, from all their chats (`GET /watches`):
+the ones still running first, then earlier ones, each with the same live card and a link to its
+chat.
+
 ## Sandbox demos
 
 Sandbox fares barely move, so `FAREWATCH_SIMULATE=1` (in both the market's and the API's env)
