@@ -1,5 +1,5 @@
 import { cancelMessage, HttpFacilitator } from "@eth/x402";
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { privateKeyToAccount } from "viem/accounts";
 import type { Db } from "../db/client";
 import { scheduledPayments as table } from "../db/schema";
@@ -101,24 +101,6 @@ export function undoWindows(
       const out = await cancelSigned(scheduleId);
       if (out.ok) await settle(scheduleId, "cancelled");
       return out;
-    },
-
-    /**
-     * At startup: payments still in their window were waiting on a hire this process was running.
-     * That hire is gone, so the agent's work would never reach the chat: cancel them. If the
-     * facilitator restarted too, it has already deleted them; Hedera's record says so.
-     */
-    async recover() {
-      const open = await db
-        .select()
-        .from(table)
-        .where(and(eq(table.status, "scheduled"), gt(table.executesAt, new Date())));
-      for (const p of open) {
-        const out = await cancelSigned(p.scheduleId).catch(() => ({ ok: false }));
-        const status = out.ok ? "cancelled" : await onHedera(p.scheduleId);
-        if (status && status !== "scheduled") await settle(p.scheduleId, status);
-      }
-      return open.length;
     },
   };
 }

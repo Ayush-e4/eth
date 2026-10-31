@@ -95,21 +95,4 @@ describe("undo windows across a restart", () => {
       status: "executed",
     });
   });
-
-  it("recover() cancels payments left in their window by the last run", async () => {
-    const f = fakeFacilitator();
-    await undo(f).watch(chatA, "0xkey", () => {});
-    expect(await undo(f).recover()).toBe(1);
-    expect(f.cancels.map((c) => c.id)).toEqual(["0.0.700"]);
-    expect(await undo(f).status(chatA, "0.0.700")).toMatchObject({ status: "cancelled" });
-    expect(await undo(f).recover()).toBe(0); // nothing left open
-  });
-
-  it("recover() takes Hedera's word when the facilitator already deleted it", async () => {
-    const f = fakeFacilitator();
-    await undo(f).watch(chatA, "0xkey", () => {});
-    f.forgot = true;
-    await undo(f, mirror({ deleted: true })).recover();
-    expect(await undo(f).status(chatA, "0.0.700")).toMatchObject({ status: "cancelled" });
-  });
 });

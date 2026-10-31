@@ -100,7 +100,7 @@ export function hireTools(
         show(card); // the payment waits out its undo window; the user can cancel it
         emit({ type: "status", label: "Paying when the undo window ends" });
       });
-      if (out.status !== "refused") show(out.card);
+      if ("card" in out) show(out.card);
       if (out.status === "hired" && held) await afterHire(held).catch(() => {}); // e.g. award an open task
       if (out.status === "hired")
         return JSON.stringify({
@@ -114,6 +114,10 @@ export function hireTools(
         return out.card.human
           ? `Not paid yet: this chat asks before every payment, and approving needs a World ID check on the card (code ${out.card.code}). Tell the user to tap "Approve with World ID" on the card; typing "Approve" alone isn't enough. Stop and wait.`
           : `Not paid yet: this chat asks before every payment. The user sees an approval card (code ${out.card.code}). Stop and wait for "Approve ${out.card.code}".`;
+      if (out.status === "pending")
+        return `Paid, or being paid: ${out.reason}. Tell the user in one line; don't hire again for this.`;
+      if (/unknown_or_expired_quote/.test(out.reason))
+        return "Not hired, nothing paid: the agent no longer holds that quote (it expired, or the agent restarted). Call get_quotes again; if the same agent quotes the same fee or less for the same thing, hire that new quote without asking again.";
       if (/payment_cancelled_in_undo_window/.test(out.reason))
         return "Not hired: the user cancelled the payment in its undo window. Nothing was paid and the agent did no work. Say so in one line; don't retry unless they ask.";
       return `Not hired: ${out.reason}`;

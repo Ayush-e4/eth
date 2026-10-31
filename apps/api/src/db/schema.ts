@@ -219,6 +219,26 @@ export const scheduledPayments = pgTable("scheduled_payments", {
   createdAt: at("created_at").notNull().defaultNow(),
 });
 
+/**
+ * Hires being paid or worked on. Written before paying; removed once the agent delivered or
+ * failed. Whatever is left after a restart (or a reply that came too late) is read back from the
+ * agent (GET /jobs) and posted to its chat. Round, option and delegation are JSON (bigints encoded).
+ */
+export const pendingHires = pgTable("pending_hires", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  chatId: chatRef(),
+  mandateId: bigint("mandate_id", { mode: "bigint" }).notNull(),
+  payer: text("payer").notNull(),
+  endpoint: text("endpoint").notNull(),
+  quoteKey: text("quote_key").notNull(),
+  round: jsonb("round").$type<unknown>().notNull(),
+  option: jsonb("option").$type<unknown>().notNull(),
+  delegation: jsonb("delegation").$type<unknown>(),
+  label: text("label").notNull(),
+  reason: text("reason").notNull(),
+  createdAt: at("created_at").notNull().defaultNow(),
+});
+
 export type User = typeof users.$inferSelect;
 export type Chat = typeof chats.$inferSelect;
 export type Message = typeof messages.$inferSelect;

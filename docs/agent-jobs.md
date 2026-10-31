@@ -42,6 +42,22 @@ The buyer's `buy()` (`src/orchestrator/hire.ts`) does both. If the agent answers
 or working), or the call breaks after paying, it reads the job back instead of paying again. If
 the job takes longer than `jobWaitMs`, it throws `HirePending` with where to read the job later.
 
+## The API follows every hire to the end
+
+The concierge writes each hire to `pending_hires` before paying (`apps/api/src/hiring/pending.ts`).
+If the turn sees the job through, the row is removed. If not (the API restarted, the connection
+dropped, or the agent is still working when `buy()` stops waiting), the API keeps reading the job
+back:
+
+- **delivered**: recorded exactly as a normal hire (Arkiv job, receipt and rating, `hires`, spend
+  log, ERC-8004 review), then posted to the chat as "X finished the job from earlier", with its card;
+- **failed**: posted with the refund;
+- **no job at the agent**: the payment never reached it, so nothing was paid; dropped silently.
+
+It checks every 10 s for 5 minutes, then every minute for an hour, then every 10 minutes for a day.
+When an agent no longer holds a quote (expired, or another team's agent restarted), the concierge
+gets fresh quotes and hires the same agent again if its fee is the same or less.
+
 ## After a crash: the chain is the judge
 
 On start, each agent runs `recover()` on the jobs the last run left unfinished:

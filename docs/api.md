@@ -184,8 +184,9 @@ picks up where it left off:
 | "Ask first" approvals | `approvals` | the card can still be approved; taking one is a single `DELETE … RETURNING`, so it pays once |
 | World ID checks | `human_checks` (device code stays server-side) | waiting checks resume polling; ones that ran out are marked expired |
 | Open tasks | `open_tasks` | bids, refs and the award carry on; the award is a conditional update, so it's recorded once |
-| Undo-window payments | `scheduled_payments` | still in their window: **cancelled** (the hire waiting on them is gone); later: status from Hedera |
-| A turn in progress | (replies are saved when a turn ends) | the chat gets a short note that it was cut off, so the page stops waiting |
+| Hires being paid | `pending_hires` (written before paying) | followed to the end: read back from the agent (`GET /jobs`, signed by the concierge), recorded, and posted to the chat with its card, or with the refund |
+| Undo-window payments | `scheduled_payments` | run when their window ends; card status from the facilitator, or Hedera's mirror if it restarted (it adopts pending schedules, so Cancel still works) |
+| A turn in progress | (replies are saved when a turn ends) | the chat gets a short note that it was cut off, so the page stops waiting; the hire's result follows as its own message |
 
 Only caches stay in memory (bid reads, INR rates). Startup work is in `src/index.ts`.
 

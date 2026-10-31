@@ -5,7 +5,7 @@ import { messages } from "../db/schema";
 const RECENT_MS = 15 * 60_000;
 
 export const INTERRUPTED_NOTE =
-  "The server restarted while I was working on this, so I stopped there. Any payment still in its undo window was cancelled, so nothing was paid for it; anything already paid is in Tasks. Ask again and I'll carry on.";
+  "The server restarted while I was working on this, so I stopped there. If an agent was already being paid, it still does the job, and I'll post its result here; otherwise nothing was paid. Ask again and I'll carry on.";
 
 /**
  * At startup: a chat whose last message is the user's, sent in the last few minutes, had its

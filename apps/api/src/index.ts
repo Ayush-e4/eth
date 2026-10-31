@@ -6,6 +6,7 @@ import { arkivMarket } from "./concierge/market";
 import { loadConfig } from "./config";
 import { connectDb } from "./db/client";
 import { loadHiringEnv } from "./hiring/env";
+import { pendingHires } from "./hiring/pending";
 import { reputation } from "./hiring/reputation";
 import { hiringService } from "./hiring/service";
 import { undoWindows } from "./hiring/undo";
@@ -25,13 +26,17 @@ const world = loadWorldConfig();
 // Undo windows (Hedera scheduled payments) for "Auto" chats; UNDO_SECONDS=0 turns them off.
 const undoSeconds = Number(process.env.UNDO_SECONDS ?? 60);
 const undo = env && undoSeconds > 0 ? undoWindows(db, env, undoSeconds) : null;
+// Hires written down before paying, read back from the agent if a turn couldn't finish them.
+const rate = env ? reputation(env) : undefined;
+const pending = env ? pendingHires(db, env, { reputation: rate }) : null;
 const hiring = env
   ? {
       env,
       service: hiringService(db, env, {
         requireHuman: !!world,
-        reputation: reputation(env),
+        reputation: rate,
         undo: undo ?? undefined,
+        pending: pending ?? undefined,
       }),
     }
   : null;
@@ -48,10 +53,10 @@ void closeInterruptedTurns(db)
   )
   .catch((err) => console.error("closing interrupted turns failed:", err));
 void checks?.resume().catch((err) => console.error("resuming World ID checks failed:", err));
-void undo
-  ?.recover()
-  .then((n) => n && console.log(`cancelled ${n} payment(s) left waiting by the last run`))
-  .catch((err) => console.error("recovering undo windows failed:", err));
+void pending
+  ?.resume()
+  .then((n) => n && console.log(`following ${n} hire(s) the last run didn't see finish`))
+  .catch((err) => console.error("resuming pending hires failed:", err));
 if (!world) console.warn("World ID is off: set WORLD_ID_CLIENT_ID and WORLD_ID_CLIENT_SECRET");
 if (!hiring)
   console.warn(
