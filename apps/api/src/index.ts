@@ -7,6 +7,7 @@ import { connectDb } from "./db/client";
 import { loadHiringEnv } from "./hiring/env";
 import { reputation } from "./hiring/reputation";
 import { hiringService } from "./hiring/service";
+import { undoWindows } from "./hiring/undo";
 import { arkivNames } from "./spend-log/routes";
 import { openTaskService } from "./tasks/service";
 import { humanChecks } from "./world/checks";
@@ -20,8 +21,18 @@ const { db } = await connectDb(config.databaseUrl);
 const env = loadHiringEnv();
 // World ID (optional): "Ask first" approvals then need a fresh human check before paying.
 const world = loadWorldConfig();
+// Undo windows (Hedera scheduled payments) for "Auto" chats; UNDO_SECONDS=0 turns them off.
+const undoSeconds = Number(process.env.UNDO_SECONDS ?? 60);
+const undo = env && undoSeconds > 0 ? undoWindows(env, undoSeconds) : null;
 const hiring = env
-  ? { env, service: hiringService(db, env, { requireHuman: !!world, reputation: reputation(env) }) }
+  ? {
+      env,
+      service: hiringService(db, env, {
+        requireHuman: !!world,
+        reputation: reputation(env),
+        undo: undo ?? undefined,
+      }),
+    }
   : null;
 const checks =
   world && hiring
@@ -52,6 +63,7 @@ serve(
       logNames: arkivNames(),
       humanChecks: checks,
       tasks,
+      undo,
     }).fetch,
     port: config.port,
   },

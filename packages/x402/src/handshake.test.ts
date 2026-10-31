@@ -9,7 +9,7 @@ import { createPayingFetch } from "./client";
 import type { Facilitator } from "./facilitator-client";
 import { paywall } from "./paywall";
 import { MirrorResolver } from "./resolve";
-import type { PaymentPayload, PaymentRequirements } from "./types";
+import { type PaymentPayload, type PaymentRequirements, paymentKey } from "./types";
 
 const REGISTRY = "0.0.11102395";
 const REGISTRY_EVM = "0x2f30e8F1804Fe163C76918db493a441D44394D5d";
@@ -117,6 +117,34 @@ describe("x402 handshake", () => {
     const { response } = await setup(failing).pay("http://x/plan");
     expect(response.status).toBe(402);
     expect(((await response.json()) as { error?: string }).error).toBe("simulation_reverted");
+  });
+
+  it("asks for an undo window and reports the payment's key once signed", async () => {
+    const facilitator = new FakeFacilitator();
+    const { app } = setup(facilitator);
+    const keys: string[] = [];
+    const pay = createPayingFetch(
+      {
+        agent,
+        mandateId: 7n,
+        payer: "0.0.1",
+        executor: REGISTRY,
+        executorEvm: REGISTRY_EVM,
+        chainId: 296,
+        resolver: new MirrorResolver("https://mirror", (async () =>
+          Response.json({ account: SHOP, evm_address: SHOP_EVM })) as unknown as typeof fetch),
+        maxAmount: 100_000n,
+        undoSeconds: 45,
+        onSigned: (k) => keys.push(k),
+      },
+      ((u: string, i?: RequestInit) => app.request(u, i)) as typeof fetch,
+    );
+    await pay("http://x/plan");
+    const sent = facilitator.seen[0] as PaymentPayload;
+    expect(sent.extensions).toEqual({ undoWindow: { seconds: 45 } });
+    expect(keys).toEqual([
+      paymentKey("hedera:testnet", REGISTRY, "0.0.1", sent.payload.authorization as `0x${string}`),
+    ]);
   });
 
   it("refuses to sign above the agent's per-call limit", async () => {

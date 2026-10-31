@@ -1,18 +1,29 @@
 import { mandateRegistryAbi, revertName } from "@eth/mandates";
 import { type Client, ContractExecuteTransaction } from "@hiero-ledger/sdk";
 import type { SettleResponse, VerifyResponse } from "@x402/core/types";
-import { encodeFunctionData, type Hex, keccak256, type PublicClient, toHex } from "viem";
+import {
+  decodeAbiParameters,
+  encodeFunctionData,
+  type Hex,
+  type PublicClient,
+  recoverMessageAddress,
+} from "viem";
 import { checkSettlement, type MirrorTx } from "../record-checks";
 import { assetToEvm, longZero, type MirrorResolver } from "../resolve";
 import {
+  cancelMessage,
   ERR,
   type HederaCaip,
   type PaymentPayload,
   type PaymentRequirements,
+  paymentKey,
   SCHEME,
   TRANSFER_EXECUTOR,
+  UNDO_EXTENSION,
+  UndoWindowSchema,
   X402_VERSION,
 } from "../types";
+import type { PaymentScheduler } from "./scheduled";
 import { validateExecutorPayment } from "./validate";
 
 export interface ExecutorFacilitatorDeps {
@@ -26,7 +37,22 @@ export interface ExecutorFacilitatorDeps {
   mirror: MirrorResolver;
   fetchRecords: (transactionId: string) => Promise<MirrorTx[]>;
   onSettled?: (info: SettledInfo) => Promise<void>;
+  /** Payments that ask for an undo window are scheduled on Hedera (see scheduled.ts). */
+  scheduler?: PaymentScheduler;
+  onScheduled?: (info: {
+    scheduleId: string;
+    mandateId: string;
+    payTo: string;
+    amount: string;
+    executesAt: number;
+  }) => Promise<void>;
 }
+
+const mandateOf = (authorization: Hex) =>
+  decodeAbiParameters(
+    [{ type: "uint256" }, { type: "uint256" }, { type: "uint256" }, { type: "bytes" }],
+    authorization,
+  )[0].toString();
 
 export interface SettledInfo {
   transaction: string;
@@ -84,13 +110,48 @@ export class ExecutorFacilitator {
     }
     this.inFlight.add(key);
     try {
-      const res = await new ContractExecuteTransaction()
-        .setContractId(executor)
-        .setGas(Number(this.d.gas))
-        .setFunctionParameters(Buffer.from(data.slice(2), "hex"))
-        .execute(this.d.hedera);
-      const transaction = res.transactionId.toString();
-      await res.getReceipt(this.d.hedera).catch(() => undefined); // record check is the real proof
+      const undo = UndoWindowSchema.safeParse(p.extensions?.[UNDO_EXTENSION]);
+      let transaction: string;
+      if (undo.success && this.d.scheduler) {
+        // Undo window: Hedera runs the same call when it ends, unless it's cancelled first.
+        const pending = await this.d.scheduler.create({
+          key,
+          executor,
+          gas: this.d.gas,
+          data,
+          seconds: undo.data.seconds,
+          mandateId: mandateOf(authorization),
+        });
+        await this.d.onScheduled?.({
+          scheduleId: pending.scheduleId,
+          mandateId: pending.mandateId,
+          payTo: req.payTo,
+          amount: req.amount,
+          executesAt: pending.executesAt,
+        });
+        const outcome = await this.d.scheduler.outcome(pending);
+        if (outcome !== "executed") {
+          const cancelled = outcome === "cancelled";
+          return {
+            ...base,
+            payer,
+            success: false,
+            errorReason: cancelled ? ERR.paymentCancelled : ERR.scheduleNotRun,
+            errorMessage: cancelled
+              ? `cancelled in the undo window (schedule ${pending.scheduleId}); nothing was paid`
+              : `the scheduled payment ${pending.scheduleId} didn't run`,
+          };
+        }
+        transaction = pending.scheduledTxId;
+      } else {
+        const res = await new ContractExecuteTransaction()
+          .setContractId(executor)
+          .setGas(Number(this.d.gas))
+          .setFunctionParameters(Buffer.from(data.slice(2), "hex"))
+          .execute(this.d.hedera);
+        transaction = res.transactionId.toString();
+        await res.getReceipt(this.d.hedera).catch(() => undefined); // record check is the real proof
+      }
 
       const records = await this.d.fetchRecords(transaction);
       const verdict = checkSettlement(records, {
@@ -186,8 +247,37 @@ export class ExecutorFacilitator {
     } catch (err) {
       return this.fail(ERR.simulationReverted, revertName(err), payer);
     }
-    const key = keccak256(toHex(`${this.d.network}|${executor}|${payer}|${authorization}`));
+    const key = paymentKey(this.d.network, executor, payer, authorization);
     return { ok: true as const, key, executor, data, payer, authorization: authorization as Hex };
+  }
+
+  /** A payment waiting out its undo window, by payment key. */
+  scheduled(key: string) {
+    return this.d.scheduler?.byKey(key) ?? null;
+  }
+
+  /**
+   * Cancel a payment in its undo window. Only the mandate's agent (who signed the payment) may:
+   * it signs `cancelMessage(scheduleId)`, and we check that against the mandate on-chain.
+   */
+  async cancelScheduled(
+    scheduleId: string,
+    signature: Hex,
+  ): Promise<{ ok: boolean; reason?: string }> {
+    const p = this.d.scheduler?.byId(scheduleId);
+    if (!p) return { ok: false, reason: "no such scheduled payment" };
+    if (p.status !== "scheduled") return { ok: false, reason: `it's already ${p.status}` };
+    const signer = await recoverMessageAddress({ message: cancelMessage(scheduleId), signature });
+    const m = (await this.d.evm.readContract({
+      address: longZero(p.executor),
+      abi: mandateRegistryAbi,
+      functionName: "getMandate",
+      args: [BigInt(p.mandateId)],
+    })) as { agent: string };
+    if (m.agent.toLowerCase() !== signer.toLowerCase())
+      return { ok: false, reason: "only the mandate's agent can cancel its payments" };
+    const ok = await this.d.scheduler?.cancel(scheduleId);
+    return ok ? { ok: true } : { ok: false, reason: "too late to cancel" };
   }
 
   private fail(invalidReason: string, invalidMessage: string, payer?: string) {

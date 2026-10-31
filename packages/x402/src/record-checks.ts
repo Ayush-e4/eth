@@ -14,6 +14,7 @@ export const MirrorTxSchema = z.object({
   result: z.string(),
   charged_tx_fee: z.number().optional().default(0),
   nonce: z.number().optional().default(0),
+  scheduled: z.boolean().optional().default(false),
   transfers: z.array(z.object({ account: z.string(), amount: z.number() })).default([]),
   token_transfers: z
     .array(z.object({ token_id: z.string(), account: z.string(), amount: z.number() }))

@@ -1,4 +1,5 @@
 import type { PaymentPayload, PaymentRequirements } from "@x402/core/types";
+import { keccak256, toHex } from "viem";
 import { z } from "zod";
 
 export type { PaymentPayload, PaymentRequirements };
@@ -58,4 +59,24 @@ export const ERR = {
   unexpectedTransfer: "settlement_unexpected_transfer",
   settlementPending: "settlement_pending",
   unexpectedSettle: "unexpected_settle_error",
+  paymentCancelled: "payment_cancelled_in_undo_window",
+  scheduleNotRun: "scheduled_payment_not_run",
 } as const;
+
+/**
+ * Our x402 extension: settle this payment after an undo window instead of now. The facilitator
+ * schedules it on Hedera; the buyer's agent may cancel it until the window ends.
+ */
+export const UNDO_EXTENSION = "undoWindow";
+export const UndoWindowSchema = z.object({ seconds: z.number().int().min(10).max(600) });
+
+/** The message a mandate's agent signs to cancel one of its scheduled payments. */
+export const cancelMessage = (scheduleId: string) => `agentnet:cancel-payment:${scheduleId}`;
+
+/** The key a payment is tracked by; the buyer can compute it too (to find its schedule). */
+export const paymentKey = (
+  network: string,
+  executor: string,
+  payer: string,
+  authorization: string,
+) => keccak256(toHex(`${network}|${executor}|${payer}|${authorization}`));

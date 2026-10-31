@@ -129,6 +129,15 @@ export const TaskCardSchema = z.object({
   closesAt: z.string(), // ISO time the task leaves Arkiv
 });
 
+/** A payment waiting out its undo window on Hedera: it runs at `executesAt` unless cancelled. */
+export const PaymentCardSchema = z.object({
+  type: z.literal("payment"),
+  scheduleId: z.string(), // the Hedera schedule (0.0.x)
+  executesAt: z.string(), // ISO
+  title: z.string(), // who gets paid
+  feeUnits: units,
+});
+
 export const CardSchema = z.discriminatedUnion("type", [
   AgentsCardSchema,
   OptionsCardSchema,
@@ -137,6 +146,7 @@ export const CardSchema = z.discriminatedUnion("type", [
   ApprovalCardSchema,
   HiredCardSchema,
   TaskCardSchema,
+  PaymentCardSchema,
 ]);
 export type Card = z.infer<typeof CardSchema>;
 

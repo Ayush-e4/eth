@@ -103,7 +103,7 @@ export function chatRoutes(
         `${h.title.split(" — ")[0]} did the ${h.skill} job, paid ${(Number(h.feeUnits) / 1e6).toFixed(2)} USDC (tx ${h.hederaTx}); result: ${JSON.stringify(h.result ?? null).slice(0, 600)}`,
     );
 
-    return streamSSE(c, async (sse) => {
+    const res = streamSSE(c, async (sse) => {
       // The browser may go away mid-turn. We keep going anyway: an agent may already have been
       // paid, so the turn must finish and be saved. We just stop writing to a closed stream.
       let open = true;
@@ -134,6 +134,10 @@ export function chatRoutes(
         clearInterval(ping);
       }
     });
+    // no-transform: a proxy (Next's /api rewrite) must not gzip, and so hold back, live events.
+    // (Set after streamSSE, which sets its own; Hono copies these onto the response.)
+    c.header("Cache-Control", "no-cache, no-transform");
+    return res;
   });
 
   return app;

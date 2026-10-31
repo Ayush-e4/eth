@@ -119,6 +119,7 @@ export interface LogEntry {
 
 export const hashscanTx = (tx: string) => `https://hashscan.io/testnet/transaction/${tx}`;
 /** HashScan has no page per message; the topic page lists every entry by number. */
+export const hashscanSchedule = (id: string) => `https://hashscan.io/testnet/schedule/${id}`;
 export const hashscanTopic = (topic: string) => `https://hashscan.io/testnet/topic/${topic}`;
 export const arkivEntity = (key: string) => `https://rabdi.explorer.arkiv.network/entity/${key}`;
 export const when = (iso: string) =>

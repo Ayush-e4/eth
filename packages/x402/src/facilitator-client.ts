@@ -35,4 +35,26 @@ export class HttpFacilitator implements Facilitator {
   settle(p: PaymentPayload, r: PaymentRequirements) {
     return this.post<SettleResponse>("/settle", p, r);
   }
+
+  /** A payment waiting out its undo window, by payment key (null if none). */
+  async scheduled(key: string) {
+    const res = await this.fetchImpl(`${this.baseUrl}/schedules/${key}`);
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`facilitator /schedules → HTTP ${res.status}`);
+    return (await res.json()) as {
+      scheduleId: string;
+      executesAt: number;
+      status: "scheduled" | "executed" | "cancelled" | "failed";
+    };
+  }
+
+  /** Cancel it; `signature` is the mandate agent's signature of cancelMessage(scheduleId). */
+  async cancelScheduled(scheduleId: string, signature: string) {
+    const res = await this.fetchImpl(`${this.baseUrl}/schedules/${scheduleId}/cancel`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ signature }),
+    });
+    return (await res.json()) as { ok: boolean; reason?: string };
+  }
 }

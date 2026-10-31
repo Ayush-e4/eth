@@ -4,6 +4,12 @@ export {
   type ExecutorFacilitatorDeps,
   type SettledInfo,
 } from "./facilitator/executor-facilitator";
+export {
+  type PaymentScheduler,
+  type PendingPayment,
+  paymentScheduler,
+  type ScheduleStatus,
+} from "./facilitator/scheduled";
 export { validateExecutorPayment } from "./facilitator/validate";
 export { type Facilitator, HttpFacilitator } from "./facilitator-client";
 export { mirrorRecordFetcher, toMirrorTxId } from "./mirror-records";

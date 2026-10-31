@@ -17,7 +17,9 @@ import {
   HEADERS,
   type PaymentPayload,
   type PaymentRequirements,
+  paymentKey,
   SCHEME,
+  UNDO_EXTENSION,
   X402_VERSION,
 } from "./types";
 
@@ -31,6 +33,10 @@ export interface MandateWallet {
   resolver: MirrorResolver;
   /** Client-side guard on top of the onchain mandate: never sign more than this per call. */
   maxAmount?: bigint;
+  /** Ask the facilitator to settle after this many seconds, cancellable until then. */
+  undoSeconds?: number;
+  /** Told the payment's key as soon as it's signed (to find and cancel its schedule). */
+  onSigned?: (key: string) => void;
 }
 
 export interface PaidResponse {
@@ -69,7 +75,12 @@ export function createPayingFetch(w: MandateWallet, fetchImpl: typeof fetch = fe
       payTo,
       amount,
       nonce: randomNonce(),
-      validBefore: BigInt(Math.floor(Date.now() / 1000) + Math.min(offer.maxTimeoutSeconds, 120)),
+      // With an undo window the payment runs later: keep the authorization valid until then.
+      validBefore: BigInt(
+        Math.floor(Date.now() / 1000) +
+          Math.min(offer.maxTimeoutSeconds, 120) +
+          (w.undoSeconds ?? 0),
+      ),
     };
     const signature = await signPaymentAuth(w.agent, mandateDomain(w.chainId, w.executorEvm), auth);
 
@@ -82,7 +93,11 @@ export function createPayingFetch(w: MandateWallet, fetchImpl: typeof fetch = fe
         executor: w.executor,
         authorization: encodeX402Authorization(auth, signature),
       },
+      ...(w.undoSeconds ? { extensions: { [UNDO_EXTENSION]: { seconds: w.undoSeconds } } } : {}),
     };
+    w.onSigned?.(
+      paymentKey(offer.network, w.executor, w.payer, payment.payload.authorization as string),
+    );
     const headers = new Headers(init.headers);
     headers.set(HEADERS.signature, encodePaymentSignatureHeader(payment));
     const response = await fetchImpl(url, { ...init, headers });

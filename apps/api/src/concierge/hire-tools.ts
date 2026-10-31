@@ -96,7 +96,10 @@ export function hireTools(
     run: async ({ quote, reason }) => {
       emit({ type: "status", label: "Hiring" });
       const held = hiring.held(chat.id, quote); // a hire drops its refs, so read it first
-      const out = await hiring.hire(chat, quote, reason, `booked from an AgentNet chat`);
+      const out = await hiring.hire(chat, quote, reason, `booked from an AgentNet chat`, (card) => {
+        show(card); // the payment waits out its undo window; the user can cancel it
+        emit({ type: "status", label: "Paying when the undo window ends" });
+      });
       if (out.status !== "refused") show(out.card);
       if (out.status === "hired" && held) await afterHire(held).catch(() => {}); // e.g. award an open task
       if (out.status === "hired")
@@ -111,6 +114,8 @@ export function hireTools(
         return out.card.human
           ? `Not paid yet: this chat asks before every payment, and approving needs a World ID check on the card (code ${out.card.code}). Tell the user to tap "Approve with World ID" on the card; typing "Approve" alone isn't enough. Stop and wait.`
           : `Not paid yet: this chat asks before every payment. The user sees an approval card (code ${out.card.code}). Stop and wait for "Approve ${out.card.code}".`;
+      if (/payment_cancelled_in_undo_window/.test(out.reason))
+        return "Not hired: the user cancelled the payment in its undo window. Nothing was paid and the agent did no work. Say so in one line; don't retry unless they ask.";
       return `Not hired: ${out.reason}`;
     },
   });
