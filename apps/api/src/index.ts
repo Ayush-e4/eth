@@ -19,6 +19,9 @@ import { type HiringService, hiringService } from "./hiring/service";
 import { undoWindows } from "./hiring/undo";
 import { type FareWatchFollower, fareWatchFollower } from "./hiring/watches";
 import { marketCatalog } from "./market/catalog";
+import { notifier } from "./notify/notifier";
+import { chatNudge, chatPoster } from "./notify/post";
+import { telegramBot } from "./notify/telegram";
 import { arkivNames } from "./spend-log/routes";
 import { statusCheck } from "./status/check";
 import { openTaskService } from "./tasks/service";
@@ -36,16 +39,36 @@ const world = loadWorldConfig();
 // Undo windows (Hedera scheduled payments) for "Auto" chats; UNDO_SECONDS=0 turns them off.
 const undoSeconds = Number(process.env.UNDO_SECONDS ?? 60);
 const undo = env && undoSeconds > 0 ? undoWindows(db, env, undoSeconds) : null;
+// Alerts outside the app (ntfy, Telegram): each user links their own channels.
+const notify = notifier(db, {
+  ntfyUrl: process.env.NTFY_URL || "https://ntfy.sh",
+  telegramToken: process.env.TELEGRAM_BOT_TOKEN || undefined,
+});
+const post = chatPoster(db, notify, config.appOrigin);
+const nudge = chatNudge(db, notify, config.appOrigin);
+telegramBot(notify, console.log);
 // Pay on delivery: a delivered fee waits this long for the user to pay now or dispute (0 = paid
 // out at once).
 const reviewSeconds = Number(process.env.ESCROW_REVIEW_SECONDS ?? 120);
 const review =
-  env?.escrow && reviewSeconds > 0 ? escrowReviews(db, env.escrow, reviewSeconds) : null;
+  env?.escrow && reviewSeconds > 0
+    ? escrowReviews(
+        db,
+        env.escrow,
+        reviewSeconds,
+        (chatId, title) =>
+          void nudge(
+            chatId,
+            `${title} delivered. It gets paid in ${Math.round(reviewSeconds / 60)} min unless you dispute: have a look.`,
+          ),
+      )
+    : null;
 // Fare watches the user hired: their alerts are posted in the chat (and booked, if asked).
 const watches: FareWatchFollower | null = env
   ? fareWatchFollower(db, env, {
       hiring: (): HiringService | null => hiring?.service ?? null,
       simulate: process.env.FAREWATCH_SIMULATE === "1",
+      post,
     })
   : null;
 // Hires written down before paying, read back from the agent if a turn couldn't finish them.
@@ -55,6 +78,7 @@ const pending = env
       reputation: rate,
       review: review ?? undefined,
       watches: watches ?? undefined,
+      post,
     })
   : null;
 // The open market on Arkiv, shared by the concierge and the status page.
@@ -149,6 +173,7 @@ serve(
       review,
       watches,
       limitOffers: guard ? (chatId, card) => guard.offered(chatId, card) : undefined,
+      notify,
       demo,
       status,
       catalog,

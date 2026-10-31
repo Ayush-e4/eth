@@ -253,9 +253,8 @@ export type MandateRow = typeof mandates.$inferSelect;
 export type HireRow = typeof hires.$inferSelect;
 
 /**
- * Pay on delivery: a delivered job's fee waits out the user's review window before the concierge
- * releases it; until then the user can pay now or dispute. Kept here so a restart still releases.
- * Status: holding → released | disputed (then released if the user pays anyway) | failed.
+ * Pay on delivery: a delivered fee waits out the user's review (pay now / dispute), then the
+ * concierge releases it. Status: holding → released | disputed (→ released) | refunded | failed.
  */
 export const escrowReviews = pgTable("escrow_reviews", {
   escrowId: text("escrow_id").primaryKey(),
@@ -283,3 +282,18 @@ export const fareWatches = pgTable("fare_watches", {
   status: text("status").notNull().default("watching"), // watching | ended | stopped | booked
   createdAt: at("created_at").notNull().defaultNow(),
 });
+
+/** Where a user gets alerts outside the app: an ntfy topic (private random name) or Telegram. */
+export const notifyChannels = pgTable(
+  "notify_channels",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    channel: text("channel").notNull(), // ntfy | telegram
+    address: text("address").notNull(), // the topic, or the Telegram chat id
+    linkCode: text("link_code"), // Telegram: the one-time /start code, until linked
+    createdAt: at("created_at").notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.channel] })],
+);

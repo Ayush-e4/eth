@@ -22,7 +22,13 @@ const short = (err: unknown) => String(err).slice(0, 200);
  * (ours do), or the user pays anyway. Web2 analogy: "confirm receipt" on a marketplace order.
  * Each change is claimed with one conditional UPDATE, so a click and the timer can't both act.
  */
-export function escrowReviews(db: Db, buyer: EscrowBuyer, seconds: number) {
+export function escrowReviews(
+  db: Db,
+  buyer: EscrowBuyer,
+  seconds: number,
+  /** Told when a fee starts waiting for the user's review (to nudge them). */
+  onHold?: (chatId: string, title: string, releaseAt: Date) => void,
+) {
   const timers = new Map<string, NodeJS.Timeout>();
 
   const arm = (escrowId: string, at: Date) => {
@@ -78,6 +84,7 @@ export function escrowReviews(db: Db, buyer: EscrowBuyer, seconds: number) {
       const releaseAt = new Date(Date.now() + seconds * 1000);
       await db.insert(table).values({ escrowId, chatId, title, releaseAt }).onConflictDoNothing();
       arm(escrowId, releaseAt);
+      onHold?.(chatId, title, releaseAt);
       return releaseAt;
     },
 

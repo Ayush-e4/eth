@@ -21,6 +21,8 @@ import { watchRoutes } from "./hiring/watch-routes";
 import type { FareWatchFollower } from "./hiring/watches";
 import type { MarketCatalog } from "./market/catalog";
 import { marketRoutes } from "./market/routes";
+import type { Notifier } from "./notify/notifier";
+import { notifyRoutes } from "./notify/routes";
 import { type LogNames, spendLogRoutes } from "./spend-log/routes";
 import type { StatusCheck } from "./status/check";
 import { statusRoutes } from "./status/routes";
@@ -39,6 +41,7 @@ export interface AppDeps {
   tasks?: OpenTaskService | null;
   undo?: UndoWindows | null;
   review?: EscrowReviews | null;
+  notify?: Notifier | null;
   /** One-off limits the server offered for a single payment (PriceGuard's fee). */
   limitOffers?: (chatId: string, card: Extract<Card, { type: "limit" }>) => boolean;
   watches?: FareWatchFollower | null;
@@ -106,6 +109,7 @@ export function createApp(db: Db, config: Config, deps: AppDeps = {}) {
   app.route("/", openTaskRoutes(db, deps.tasks ?? null));
   app.route("/", paymentRoutes(db, deps.undo ?? null, deps.review ?? null));
   app.route("/", watchRoutes(db, deps.watches ?? null));
+  app.route("/", notifyRoutes(db, deps.notify ?? null));
 
   return app;
 }
