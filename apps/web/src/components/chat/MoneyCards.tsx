@@ -1,7 +1,7 @@
 "use client";
 
 import type { Card } from "@eth/shared";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ApiError, api, usdc } from "@/lib/api";
 import { createMandateInWallet } from "@/lib/wallet";
 import { CheckIcon, ShieldIcon } from "../icons";
@@ -77,6 +77,22 @@ export function QuotesCard({ card, ctx }: { card: Of<"quotes">; ctx: CardCtx }) 
 export function LimitCard({ card, ctx }: { card: Of<"limit">; ctx: CardCtx }) {
   const [state, setState] = useState<"idle" | "working" | "done">("idle");
   const [error, setError] = useState<string | null>(null);
+  // Reopening the chat: if a live limit already covers these agents, this card was approved.
+  useEffect(() => {
+    let stop = false;
+    api<{ mandate: { payees: string[]; expiresAt: string } | null }>(`/chats/${ctx.chatId}/mandate`)
+      .then(({ mandate: m }) => {
+        const covers =
+          !!m &&
+          new Date(m.expiresAt).getTime() > Date.now() &&
+          card.payees.every((p) => m.payees.some((a) => a.toLowerCase() === p.agent.toLowerCase()));
+        if (covers && !stop) setState((s) => (s === "idle" ? "done" : s));
+      })
+      .catch(() => {});
+    return () => {
+      stop = true;
+    };
+  }, [ctx.chatId, card.payees]);
   const approve = async () => {
     setState("working");
     setError(null);

@@ -1,4 +1,11 @@
-import { arkivReader, arkivWriter, findListings, issueInvoice, publishAgent } from "@eth/arkiv";
+import {
+  arkivReader,
+  arkivWriter,
+  findListings,
+  issueInvoice,
+  NO_JOB_FEE,
+  publishAgent,
+} from "@eth/arkiv";
 import { paywall } from "@eth/x402";
 import { Hono } from "hono";
 import { privateKeyToAccount } from "viem/accounts";
@@ -238,7 +245,7 @@ export function priceGuard(ctx: SpecialistContext, deps: PriceGuardDeps) {
         {
           agent: me.address,
           skill: "priceguard",
-          priceUnits: 1n,
+          priceUnits: NO_JOB_FEE, // paid from the saving instead
           acceptsCredits: false,
           title: `PriceGuard — rebooks when hotel prices drop; ${SUCCESS_FEE_PERCENT}% of the saving`,
           endpoint: ctx.baseUrl,

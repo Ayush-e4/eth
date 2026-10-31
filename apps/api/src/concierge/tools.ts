@@ -1,4 +1,5 @@
 import { betaZodTool } from "@anthropic-ai/sdk/helpers/beta/zod";
+import { hasJobFee } from "@eth/arkiv";
 import { type Card, type ConciergeEvent, OptionsCardSchema } from "@eth/shared";
 import { z } from "zod";
 import type { Market } from "./market";
@@ -32,7 +33,9 @@ export function conciergeTools(
               name: a.name,
               skill: a.skill,
               title: a.title,
-              feeUsdc: (Number(a.priceUnits) / 1e6).toFixed(2),
+              feeUsdc: hasJobFee(a.priceUnits)
+                ? (Number(a.priceUnits) / 1e6).toFixed(2)
+                : "none per job (see description)",
               description: a.description.slice(0, 300),
               identity: a.identity
                 ? `ERC-8004 #${a.identity.erc8004Id} on Hedera; ${a.identity.paidJobs} paid jobs reviewed, average ${a.identity.averageScore ?? "n/a"}/100`
