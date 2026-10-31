@@ -42,6 +42,7 @@ export function QuotesCard({ card, ctx }: { card: Of<"quotes">; ctx: CardCtx }) 
               )}
             </div>
             <p className="text-[13px] leading-relaxed text-ink-3">{q.note}</p>
+            {q.track && <p className="text-xs text-muted">{q.track}</p>}
             <div className="mt-auto flex items-end justify-between gap-3 border-t border-[#F1EEE8] pt-3">
               <span className="flex flex-col">
                 <span className="text-xl font-bold">

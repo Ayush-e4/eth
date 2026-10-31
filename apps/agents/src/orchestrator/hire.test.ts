@@ -95,6 +95,18 @@ beforeEach(() => {
 });
 
 describe("hire", () => {
+  it("weighs the track record: a cheaper agent that keeps refunding loses to a reliable one", async () => {
+    const records: Record<string, { delivered: number; failed: number }> = {
+      [A]: { delivered: 1, failed: 9 }, // cheapest total, but it rarely delivers
+      [B]: { delivered: 10, failed: 0 },
+    };
+    const d = deps({ trackRecord: async (a: string) => records[a] ?? null } as never);
+    const h = await hire("flights", "t1", trip, d);
+    expect(h.agent).toBe(B);
+    expect(h.choice).toContain("delivered 10 of 10 paid jobs");
+    expect(h.choice).toContain("has delivered only 1 of 10 paid jobs");
+  });
+
   it("asks only mandate-allowed agents, buys the lowest TOTAL cost, records it on Arkiv", async () => {
     const d = deps();
     const h = await hire("flights", "t1", trip, d);
@@ -105,7 +117,7 @@ describe("hire", () => {
     ]);
     expect(h).toMatchObject({ agent: A, feeUnits: 50_000n, itemTotal: 6000, itemCurrency: "INR" });
     expect(h.choice).toBe(
-      "lowest total of 2 comparable quote(s): ₹6,005 total = item ₹6,000 + agent fee ₹5",
+      "lowest total of 2 comparable quote(s): ₹6,005 total = item ₹6,000 + agent fee ₹5, no track record yet",
     );
     expect(h.rejected).toEqual([
       expect.stringContaining("not an allowed payee"),

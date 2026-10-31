@@ -1,4 +1,5 @@
 import { betaZodTool } from "@anthropic-ai/sdk/helpers/beta/zod";
+import { describeTrack } from "@eth/agents/hiring";
 import type { Card, ConciergeEvent } from "@eth/shared";
 import { z } from "zod";
 import type { ChatLike, HiringService } from "../hiring/service";
@@ -65,6 +66,7 @@ export function hireTools(
             itemTotal: o.itemTotal,
             itemCurrency: o.itemCurrency,
             totalInr: o.priced?.totalInr,
+            track: describeTrack(o.track),
             reply: `Go with ${o.title.split(" — ")[0]} (${ref})`,
           })),
         });
@@ -75,6 +77,7 @@ export function hireTools(
           agent: o.title,
           note: o.note,
           feeUsdc: (Number(o.feeUnits) / 1e6).toFixed(2),
+          trackRecord: describeTrack(o.track),
           // The rupee split is computed for you (today's rates); Claude's own maths has slipped.
           ...(o.priced
             ? {

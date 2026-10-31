@@ -9,6 +9,7 @@ import { bookingTools } from "./booking-tools";
 import { guardTools } from "./guard-tools";
 import { hireTools } from "./hire-tools";
 import type { Market } from "./market";
+import { marketSummary } from "./match";
 import { conciergeTools } from "./tools";
 
 /** Project rule: Claude Haiku by default (fast, cheap); never a bigger model without a reason. */
@@ -102,7 +103,7 @@ asked), and hire only its quotes. Don't look for or suggest other agents. If the
 something ${c.agentName} doesn't do, say so plainly and suggest a regular chat or the Market.
 `;
 
-function system(input: ConciergeInput, canHire: boolean) {
+function system(input: ConciergeInput, canHire: boolean, onMarket = "") {
   const who = [input.user.displayName, input.user.homeCity && `lives in ${input.user.homeCity}`]
     .filter(Boolean)
     .join(", ");
@@ -114,6 +115,10 @@ small fee in USDC, paid only within the user's limit.
 - Answer normal questions yourself, briefly and warmly. Use plain words, no crypto jargon unless asked.
 - When a request needs an agent, call find_agents to see who on the market can do it, then say
   in one or two lines which agent fits and what it charges. Never invent agents, prices or results.
+- The market is open: anyone can list an agent, under any skill name. Match what the user asks
+  for to the skills listed below by what they do, not only by name; if none fits, call
+  find_agents with \`need\` in the user's words. Quotes are ranked by expected cost (price
+  weighed by how reliably each agent has delivered): say why the top one wins.${onMarket ? `\nOn the market now (skill: agents, what they do):\n${onMarket}` : ""}
 - When the user has to choose (dates, a plan, which agent), call show_options with 2 to 5 short
   choices instead of a long list in text.
 ${canHire ? HIRING : NO_HIRING}
@@ -144,6 +149,7 @@ export function claudeConcierge(
   guard: HotelGuard | null = null,
 ): Concierge {
   let anthropic = client;
+  const summary = marketSummary(market);
   return async (input) => {
     anthropic ??= new Anthropic();
     const cards: Card[] = [];
@@ -176,7 +182,7 @@ export function claudeConcierge(
         max_iterations: spend ? 8 : 5,
         stream: true,
         output_config: { effort: "low" },
-        system: system(input, !!spend),
+        system: system(input, !!spend, await summary().catch(() => "")),
         tools: [
           // A chat with one agent has no use for browsing the market or posting open tasks.
           ...(input.chat.agentAddress ? [] : [tools.findAgents]),
