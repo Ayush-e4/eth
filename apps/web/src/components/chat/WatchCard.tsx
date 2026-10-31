@@ -35,6 +35,7 @@ const BUTTON =
 /** A fare FareWatch is watching: its checks and alerts, live, with check now and stop. */
 export function WatchCard({ card, ctx }: { card: Extract<Card, { type: "watch" }>; ctx: CardCtx }) {
   const [w, setW] = useState<Watch | null>(null);
+  const [unreachable, setUnreachable] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const path = `/chats/${ctx.chatId}/watches/${card.watchId}`;
@@ -42,7 +43,8 @@ export function WatchCard({ card, ctx }: { card: Extract<Card, { type: "watch" }
     () =>
       api<{ watch: Watch }>(path)
         .then((r) => setW(r.watch))
-        .catch(() => {}),
+        .then(() => setUnreachable(false))
+        .catch(() => setUnreachable(true)),
     [path],
   );
   useEffect(() => {
@@ -64,7 +66,12 @@ export function WatchCard({ card, ctx }: { card: Extract<Card, { type: "watch" }
     }
   };
 
-  if (!w) return null;
+  if (!w)
+    return unreachable ? (
+      <p className="rounded-2xl border border-line px-[18px] py-3 text-sm text-muted">
+        {card.title} can't be reached right now; this watch shows up again when it's back.
+      </p>
+    ) : null;
   const last = w.checks.at(-1) ?? w.baseline;
   const live = w.status === "watching" && !w.booked;
   return (

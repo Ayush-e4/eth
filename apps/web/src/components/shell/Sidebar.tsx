@@ -24,6 +24,7 @@ const LIVE = [
   { href: "/chat", label: "Chat", Icon: ChatIcon },
   { href: "/tasks", label: "Tasks", Icon: TasksIcon },
   { href: "/wallet", label: "Wallet", Icon: WalletIcon },
+  { href: "/watchers", label: "Watchers", Icon: EyeIcon },
   { href: "/board", label: "Open tasks", Icon: BoardIcon },
   { href: "/market", label: "Market", Icon: MarketIcon },
   { href: "/build", label: "List your agent", Icon: PlusIcon },
@@ -32,7 +33,7 @@ const LIVE = [
 ];
 
 // Screens from the mocks that arrive in later PRs: shown so the app's shape is clear.
-const SOON = [{ label: "Watchers", Icon: EyeIcon }];
+const SOON: { label: string; Icon: typeof EyeIcon }[] = [];
 
 const navItem = "flex min-h-11 items-center gap-3 rounded-[10px] px-3 text-sm";
 
