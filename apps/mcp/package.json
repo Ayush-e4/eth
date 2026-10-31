@@ -26,5 +26,10 @@
     "@types/node": "^26.6.5",
     "tsx": "^4.23.15",
     "vitest": "5.0.5"
+  },
+  "exports": {
+    "./server": "./src/server.ts",
+    "./tools": "./src/tools.ts",
+    "./deps": "./src/deps.ts"
   }
 }

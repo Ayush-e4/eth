@@ -33,7 +33,9 @@ export function LoginCard() {
 
   const done = (me: Me) => {
     const next = new URLSearchParams(window.location.search).get("next");
-    router.replace(!me.onboarded ? "/welcome" : next?.startsWith("/") ? next : "/chat");
+    // An app asking to connect (/connect/…) comes first, even before setup.
+    const back = next?.startsWith("/") && (me.onboarded || next.startsWith("/connect/"));
+    router.replace(back ? (next as string) : !me.onboarded ? "/welcome" : "/chat");
   };
 
   const run = async (fn: () => Promise<void>) => {

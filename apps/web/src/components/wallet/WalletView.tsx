@@ -15,6 +15,7 @@ import {
 } from "@/lib/api";
 import { cancelled, withFaceId } from "@/lib/passkey";
 import { revokeInWallet } from "@/lib/wallet";
+import { ConnectedApps } from "./ConnectedApps";
 import { DemoAllowance } from "./DemoAllowance";
 import { TopUp } from "./TopUp";
 
@@ -146,6 +147,7 @@ export function WalletView() {
         </p>
       )}
       {w.faceId?.status === "ready" && w.address && <TopUp address={w.address} />}
+      {w.faceId && <ConnectedApps />}
       {w.shared && <DemoAllowance />}
       {w.shared && (
         <p className="-mt-3 text-[13px] text-ink-3">

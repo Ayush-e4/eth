@@ -18,7 +18,19 @@ const nextConfig: NextConfig = {
     },
   },
   async rewrites() {
-    return [{ source: "/api/:path*", destination: `${API_URL}/:path*` }];
+    return [
+      { source: "/api/:path*", destination: `${API_URL}/:path*` },
+      // Connected apps (MCP + OAuth) look these up at the site's root.
+      { source: "/mcp", destination: `${API_URL}/mcp` },
+      {
+        source: "/.well-known/oauth-authorization-server/:path*",
+        destination: `${API_URL}/oauth/metadata`,
+      },
+      {
+        source: "/.well-known/oauth-protected-resource/:path*",
+        destination: `${API_URL}/oauth/resource`,
+      },
+    ];
   },
 };
 

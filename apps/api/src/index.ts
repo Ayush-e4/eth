@@ -7,6 +7,7 @@ import { closeInterruptedTurns } from "./chats/interrupted";
 import { claudeConcierge } from "./concierge/concierge";
 import { arkivMarket } from "./concierge/market";
 import { loadConfig } from "./config";
+import { oauthStore } from "./connect/oauth";
 import { connectDb } from "./db/client";
 import { demoQuotas, loadDemoQuotas } from "./demo/quotas";
 import { bookingDesk } from "./hiring/bookings";
@@ -198,6 +199,7 @@ serve(
       catalog,
       checkAgent,
       wallets,
+      connect: env ? { oauth: oauthStore(db, env.concierge.key), market, post } : null,
       ops: {
         env,
         status,

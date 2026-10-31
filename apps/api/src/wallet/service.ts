@@ -24,7 +24,8 @@ export class WalletOpError extends Error {}
 /** What a prepared move is for, so the second step can be checked against the first. */
 export type WalletOpMeta =
   | { kind: "limit"; chatId: string; card: Extract<Card, { type: "limit" }> }
-  | { kind: "revoke"; limitId: string };
+  | { kind: "revoke"; limitId: string }
+  | { kind: "connect"; connectionId: string };
 
 type Op = {
   userId: string;
