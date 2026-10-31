@@ -23,7 +23,12 @@ export function bookingTools(
       "List the flights and hotels the user booked through agents (from any chat), newest first, with booking references. Use it when they talk about a booking they already have.",
     inputSchema: z.object({}),
     run: async () => {
-      const all = await desk.list(user.id);
+      // Hotels may have been rebooked outside a hire (PriceGuard): show the booking as it is now.
+      const all = await Promise.all(
+        (await desk.list(user.id)).map((b) =>
+          b.kind === "hotel" ? desk.find(user.id, b.id).catch(() => b) : b,
+        ),
+      );
       return all.length
         ? JSON.stringify(
             all.map((b) => ({
@@ -34,9 +39,16 @@ export function bookingTools(
               bookedAt: b.bookedAt.slice(0, 10),
               inChat: b.chatTitle,
               ...(b.changes ? { changedTimes: b.changes } : {}),
+              ...(b.now
+                ? {
+                    hotel: b.now.hotelName,
+                    dates: `${b.now.checkin}→${b.now.checkout}`,
+                    status: b.now.status,
+                  }
+                : {}),
             })),
           )
-        : "No flights booked through agents yet.";
+        : "No flights or hotels booked through agents yet.";
     },
   });
 

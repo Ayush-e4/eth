@@ -11,6 +11,7 @@ import { connectDb } from "./db/client";
 import { demoQuotas, loadDemoQuotas } from "./demo/quotas";
 import { bookingDesk } from "./hiring/bookings";
 import { loadHiringEnv } from "./hiring/env";
+import { hotelGuard } from "./hiring/hotel-guard";
 import { pendingHires } from "./hiring/pending";
 import { reputation } from "./hiring/reputation";
 import { escrowReviews } from "./hiring/review";
@@ -102,6 +103,16 @@ const desk = env
           ?.endpoint ?? null,
     })
   : null;
+// PriceGuard from the chat: watches a hotel's price, rebooks it cheaper, paid on proof.
+const guard =
+  env && desk
+    ? hotelGuard(db, env, {
+        desk,
+        findAgent: async (skill) => (await market.agents(skill))[0] ?? null,
+        requireHuman: !!world,
+        allowSimulated: process.env.PRICEGUARD_PAY_SIMULATED === "1", // sandbox demos only
+      })
+    : null;
 // Open tasks: the concierge posts jobs on Arkiv and agents bid by themselves.
 const tasks = hiring ? openTaskService(db, hiring.env, hiring.service) : null;
 // Work in progress is in the database; pick up what a restart interrupted.
@@ -122,7 +133,7 @@ if (!hiring)
     "hiring is off: set HEDERA_* in .env and run `pnpm --filter @eth/agents identities`",
   );
 const concierge = process.env.ANTHROPIC_API_KEY
-  ? claudeConcierge(market, hiring?.service ?? null, undefined, tasks, desk)
+  ? claudeConcierge(market, hiring?.service ?? null, undefined, tasks, desk, guard)
   : null;
 if (!concierge) console.warn("ANTHROPIC_API_KEY not set: the concierge is off");
 
@@ -137,6 +148,7 @@ serve(
       undo,
       review,
       watches,
+      limitOffers: guard ? (chatId, card) => guard.offered(chatId, card) : undefined,
       demo,
       status,
       catalog,

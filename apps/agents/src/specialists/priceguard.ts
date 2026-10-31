@@ -12,6 +12,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { z } from "zod";
 import { type RepriceDelegation, type Signed, signedHeaders, verifyStatement } from "../auth";
 import type { JsonStore } from "../store";
+import { guardRoutes } from "./priceguard-routes";
 import type { SpecialistContext } from "./server";
 import { signerOf } from "./staywise-manage";
 import type { RepriceAttestation } from "./staywise-reprice";
@@ -27,6 +28,8 @@ export interface Watch {
   stayAgent: `0x${string}`;
   slip: Signed<RepriceDelegation>;
   status: "watching" | "stopped";
+  /** The latest checks (newest last), so its buyer can see it's working. */
+  checks?: GuardCheck[];
   invoices: {
     key: `0x${string}`;
     units: string;
@@ -34,6 +37,16 @@ export interface Watch {
     currency: string;
     paid: boolean;
   }[];
+}
+
+export interface GuardCheck {
+  at: string;
+  paid: number; // what the current booking cost
+  best: number | null; // the best refundable rate for the same stay now
+  currency: string;
+  saving: number;
+  simulated?: boolean;
+  outcome: string; // "not worth it", "rebooked", "stopped: free cancellation closed"
 }
 
 export interface PriceGuardDeps {
@@ -154,77 +167,94 @@ export function priceGuard(ctx: SpecialistContext, deps: PriceGuardDeps) {
     },
   );
 
-  /** One round of watching: for each booking, reprice if it beats the traveller's limits. */
-  async function checkOnce(log: (line: string) => void) {
-    for (const w of deps.store.values().filter((x) => x.status === "watching")) {
-      const limits = w.slip.body;
-      const o = (await callStay(w, `/bookings/${w.bookingId}/reprice-options`, {})) as {
-        current: {
-          paidTotal: number;
-          comparedTotal: number;
-          currency: string;
-          cancelFeeNow: number;
-        };
-        option: { optionKey: string; total: number } | null;
-        saving: number;
-        savingPercent: number;
-        simulated: boolean;
+  /** One check of one booking: reprice if it beats the traveller's limits. */
+  async function checkWatch(w: Watch, log: (line: string) => void): Promise<Watch> {
+    const limits = w.slip.body;
+    const o = (await callStay(w, `/bookings/${w.bookingId}/reprice-options`, {})) as {
+      current: { paidTotal: number; comparedTotal: number; currency: string; cancelFeeNow: number };
+      option: { optionKey: string; total: number } | null;
+      saving: number;
+      savingPercent: number;
+      simulated: boolean;
+    };
+    const tag = o.simulated ? " [SIMULATED drop]" : "";
+    const record = (outcome: string, patch: Partial<Watch> = {}) => {
+      const check: GuardCheck = {
+        at: new Date().toISOString(),
+        paid: o.current.comparedTotal,
+        best: o.option?.total ?? null,
+        currency: o.current.currency,
+        saving: o.saving,
+        ...(o.simulated ? { simulated: true } : {}),
+        outcome,
       };
-      const tag = o.simulated ? " [SIMULATED drop]" : "";
-      if (o.current.cancelFeeNow > 0) {
-        deps.store.set(w.task, { ...w, status: "stopped" });
-        log(`${w.bookingId}: free cancellation has closed — stopped watching`);
-        continue;
-      }
-      if (
-        !o.option ||
-        o.saving < limits.minSavingInr ||
-        o.savingPercent < limits.minSavingPercent
-      ) {
-        log(
-          `${w.bookingId}: best now ${o.option?.total ?? "—"} vs ${o.current.comparedTotal} ${o.current.currency}${tag} — not worth it (needs ≥ ₹${limits.minSavingInr} and ≥ ${limits.minSavingPercent}%)`,
-        );
-        continue;
-      }
-      log(
-        `${w.bookingId}: can save ${o.saving} ${o.current.currency} (${o.savingPercent}%)${tag} — rebooking`,
-      );
-      const { proof } = (await callStay(w, `/bookings/${w.bookingId}/reprice`, {
-        optionKey: o.option.optionKey,
-      })) as { proof: Signed<RepriceAttestation> };
-      if (!same(proof.signer, w.stayAgent) || !(await verifyStatement("attestation", proof))) {
-        throw new Error("StayWise returned a proof PriceGuard can't verify");
-      }
-      const a = proof.body;
-      const units = successFee(a.saving, await deps.inrPerUsdc());
-      const note = `PriceGuard rebooked ${a.hotelName ?? "your hotel"} ${a.checkin}→${a.checkout}: ${a.comparedTotal} → ${a.newTotal} ${a.currency}, saved ${a.saving}${a.simulated ? " (SIMULATED drop, sandbox)" : ""}. Fee ${SUCCESS_FEE_PERCENT}% of saving.`;
-      const { entityKey } = await issueInvoice(writer, {
-        agent: me.address,
-        buyer: w.buyer,
-        task: w.task,
-        amountUnits: units,
-        note,
-        proof: JSON.stringify(proof),
-      });
-      deps.store.set(w.task, {
-        ...w,
-        bookingId: a.newBookingId,
-        invoices: [
-          ...w.invoices,
-          {
-            key: entityKey,
-            units: units.toString(),
-            saving: a.saving,
-            currency: a.currency,
-            paid: false,
-          },
-        ],
-      });
-      log(
-        `${a.oldBookingId} → ${a.newBookingId}: saved ${a.saving} ${a.currency}; invoice ${entityKey} for ${Number(units) / 1e6} USDC`,
-      );
+      const next = { ...w, ...patch, checks: [...(w.checks ?? []), check].slice(-20) };
+      deps.store.set(w.task, next);
+      return next;
+    };
+    // A sandbox demo's simulated drop shows on every check: act on it once, never again.
+    if (
+      o.simulated &&
+      (w.checks ?? []).some((c) => c.simulated && c.outcome.startsWith("rebooked"))
+    )
+      return record("a simulated drop is shown once; ignored");
+    if (o.current.cancelFeeNow > 0) {
+      log(`${w.bookingId}: free cancellation has closed — stopped watching`);
+      return record("stopped: free cancellation has closed", { status: "stopped" });
     }
+    if (!o.option || o.saving < limits.minSavingInr || o.savingPercent < limits.minSavingPercent) {
+      log(
+        `${w.bookingId}: best now ${o.option?.total ?? "—"} vs ${o.current.comparedTotal} ${o.current.currency}${tag} — not worth it (needs ≥ ₹${limits.minSavingInr} and ≥ ${limits.minSavingPercent}%)`,
+      );
+      return record("not worth it yet");
+    }
+    log(
+      `${w.bookingId}: can save ${o.saving} ${o.current.currency} (${o.savingPercent}%)${tag} — rebooking`,
+    );
+    const { proof } = (await callStay(w, `/bookings/${w.bookingId}/reprice`, {
+      optionKey: o.option.optionKey,
+    })) as { proof: Signed<RepriceAttestation> };
+    if (!same(proof.signer, w.stayAgent) || !(await verifyStatement("attestation", proof))) {
+      throw new Error("StayWise returned a proof PriceGuard can't verify");
+    }
+    const a = proof.body;
+    const units = successFee(a.saving, await deps.inrPerUsdc());
+    const note = `PriceGuard rebooked ${a.hotelName ?? "your hotel"} ${a.checkin}→${a.checkout}: ${a.comparedTotal} → ${a.newTotal} ${a.currency}, saved ${a.saving}${a.simulated ? " (SIMULATED drop, sandbox)" : ""}. Fee ${SUCCESS_FEE_PERCENT}% of saving.`;
+    const { entityKey } = await issueInvoice(writer, {
+      agent: me.address,
+      buyer: w.buyer,
+      task: w.task,
+      amountUnits: units,
+      note,
+      proof: JSON.stringify(proof),
+    });
+    log(
+      `${a.oldBookingId} → ${a.newBookingId}: saved ${a.saving} ${a.currency}; invoice ${entityKey} for ${Number(units) / 1e6} USDC`,
+    );
+    return record(`rebooked: saved ${a.saving} ${a.currency}`, {
+      bookingId: a.newBookingId,
+      invoices: [
+        ...w.invoices,
+        {
+          key: entityKey,
+          units: units.toString(),
+          saving: a.saving,
+          currency: a.currency,
+          paid: false,
+        },
+      ],
+    });
   }
+
+  /** One round of watching every booking. */
+  async function checkOnce(log: (line: string) => void) {
+    for (const w of deps.store.values().filter((x) => x.status === "watching"))
+      await checkWatch(w, log).catch((err) =>
+        log(`${w.bookingId}: check failed: ${String(err).slice(0, 160)}`),
+      );
+  }
+
+  guardRoutes(app, { store: deps.store, check: (w) => checkWatch(w, ctx.log ?? (() => {})) });
 
   async function publish() {
     const mine = (await findListings(arkivReader(), { skill: "priceguard" })).find((l) =>

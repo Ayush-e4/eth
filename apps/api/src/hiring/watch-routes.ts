@@ -29,6 +29,7 @@ export function watchRoutes(db: Db, watches: FareWatchFollower | null) {
         watchId: w.watchId,
         chatId: w.chatId,
         chatTitle,
+        kind: w.kind,
         input: w.input,
         status: w.status,
         createdAt: w.createdAt.toISOString(),

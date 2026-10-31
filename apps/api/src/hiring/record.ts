@@ -122,3 +122,23 @@ export async function finishHire(
     subHires,
   };
 }
+
+/** A payment that isn't a hire (e.g. PriceGuard's success fee): saved, logged, shown as a card. */
+export async function finishPaid(
+  db: Db,
+  env: HiringEnv,
+  p: PaidHire & { summary: string },
+): Promise<Extract<Card, { type: "hired" }>> {
+  const { summary, ...hire } = p;
+  const log = await saveHire(db, env, hire);
+  return {
+    type: "hired",
+    skill: p.skill,
+    title: p.title,
+    summary,
+    feeUnits: p.feeUnits.toString(),
+    hederaTx: p.hederaTx,
+    jobKey: p.jobKey,
+    log,
+  };
+}

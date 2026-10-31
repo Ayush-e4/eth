@@ -29,7 +29,7 @@ import { fetchInrRates } from "../src/orchestrator/procure";
 import { collectQuotes } from "../src/orchestrator/quotes";
 import { airnest } from "../src/specialists/airnest";
 import { jobStore } from "../src/specialists/jobs";
-import { priceGuard, type Watch } from "../src/specialists/priceguard";
+import type { priceGuard } from "../src/specialists/priceguard";
 import { createSpecialist } from "../src/specialists/server";
 import { staywise } from "../src/specialists/staywise";
 import type { BookingRecord } from "../src/specialists/staywise-manage";
@@ -38,6 +38,7 @@ import { JsonStore } from "../src/store";
 import { escrowMoves, escrowReleaser, jobsFile, paymentChecker, refunder } from "./agent-money";
 import { farewatchAgent } from "./farewatch-agent";
 import { keepListed } from "./keep-listed";
+import { priceguardAgent } from "./priceguard-agent";
 import { skyhopAgent } from "./skyhop-agent";
 
 export function requireEnv(keys: string[]) {
@@ -84,7 +85,6 @@ const PORTS: Record<AgentName, number> = {
   farewatch: 8416,
 };
 const BIDDERS = new Set<AgentName>(["skyhop", "airnest", "staywise"]);
-const PRICEGUARD_STORE = fileURLToPath(new URL("../.priceguard.local.json", import.meta.url));
 /** Starts the chosen specialist agents and lists them on Arkiv. */
 export async function startAgents(
   which: AgentName[],
@@ -113,10 +113,7 @@ export async function startAgents(
     if (name === "airnest") return createSpecialist(airnest(new LiteFlightsClient(liteKey)), ctx);
     if (name === "tripmint") return createSpecialist(tripmintFor(identity), ctx);
     if (name === "priceguard") {
-      guard = priceGuard(ctx, {
-        store: new JsonStore<Watch>(PRICEGUARD_STORE),
-        inrPerUsdc: async () => (await fetchInrRates()).USDC ?? 0,
-      });
+      guard = priceguardAgent(ctx);
       return guard;
     }
     const manage = {
@@ -124,7 +121,9 @@ export async function startAgents(
       store: new JsonStore<BookingRecord>(STAYWISE_STORE),
       arkiv: arkivReader(),
       me: identity.evm,
-      simulateDropPercent: opts.simulateDropPercent, // sandbox demos only; labelled SIMULATED
+      // sandbox demos only (PRICEGUARD_SIMULATE_DROP=10, or the priceguard script); labelled SIMULATED
+      simulateDropPercent:
+        opts.simulateDropPercent ?? (Number(process.env.PRICEGUARD_SIMULATE_DROP) || undefined),
     };
     return createSpecialist(staywise(new LiteApiClient(liteKey), manage), ctx);
   };

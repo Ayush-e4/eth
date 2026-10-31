@@ -5,6 +5,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import type { Db } from "../db/client";
 import { chats, messages, fareWatches as table } from "../db/schema";
 import type { HiringEnv } from "./env";
+import { followHotel, type GuardView } from "./hotel-follow";
 import type { HiringService } from "./service";
 
 /** A watch as FareWatch reports it (see apps/agents/src/specialists/farewatch.ts). */
@@ -157,11 +158,15 @@ export function fareWatchFollower(
     await say(row.chatId, `The fare reached your target, but I couldn't book: ${out.reason}`);
   }
 
+  /** Fares (FareWatch) and hotel prices (PriceGuard) answer the same routes, in their shape. */
+  const followAny = (row: typeof table.$inferSelect, v: unknown) =>
+    row.kind === "hotel" ? followHotel(db, row, v as GuardView, say) : follow(row, v as WatchView);
+
   async function tick() {
     const rows = await db.select().from(table).where(eq(table.status, "watching"));
     for (const row of rows) {
       const w = await call(row, "view").catch(() => null);
-      if (w) await follow(row, w).catch(() => {});
+      if (w) await followAny(row, w).catch(() => {});
     }
   }
   const timer = setInterval(() => void tick().catch(() => {}), EVERY_MS);
@@ -191,7 +196,7 @@ export function fareWatchFollower(
         input: {},
       };
       const w = await call(
-        { ...row, alertsSeen: 0, status: "watching", createdAt: new Date() },
+        { ...row, kind: "fare", alertsSeen: 0, status: "watching", createdAt: new Date() },
         "view",
       ).catch(() => null);
       await db
@@ -210,8 +215,14 @@ export function fareWatchFollower(
       const row = await mine(chatId, watchId);
       if (!row) return null;
       const w = await call(row, "view");
-      await follow(row, w).catch(() => {}); // a look from the card also posts what's new
-      return { ...w, booked: row.status === "booked", canSimulate: !!d.simulate };
+      await followAny(row, w).catch(() => {}); // a look from the card also posts what's new
+      return {
+        ...w,
+        kind: row.kind,
+        input: { ...row.input, ...w.input },
+        booked: row.status === "booked",
+        canSimulate: !!d.simulate && row.kind === "fare",
+      };
     },
 
     async act(chatId: string, watchId: string, action: "stop" | "check-now" | "simulate") {
@@ -220,7 +231,7 @@ export function fareWatchFollower(
       const w = await call(row, action, action === "simulate" ? { percent: 10 } : {});
       if (action === "stop")
         await db.update(table).set({ status: "stopped" }).where(eq(table.watchId, watchId));
-      else await follow(row, w);
+      else await followAny(row, w);
       return w;
     },
   };

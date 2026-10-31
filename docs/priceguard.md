@@ -7,6 +7,29 @@ saving**. You keep 80%, and it is only paid after your own agent checks the proo
 Web2 analogy: "price-drop protection", but the protection service is a third party you can verify,
 not a promise from the booking site.
 
+## From the chat
+
+*"Turn on PriceGuard for my Goa hotel: rebook it if it gets at least ₹500 and 5% cheaper."*
+
+- `guard_hotel_price` (concierge): the app signs the permission slip with the concierge's key
+  (the booking's buyer on Arkiv) and registers it with PriceGuard; free to turn on. The chat gets
+  a **live card** (limits, each check, rebooks and fees, Check now, Stop watching), and the
+  **Watchers** page lists it too.
+- PriceGuard checks on a schedule (`PRICEGUARD_EVERY_MIN`, default 60) and keeps each check.
+- Each rebook is posted in the chat with **Pay PriceGuard** / **Not now**. `pay_invoice` reads the
+  invoice from Arkiv and checks its proof (signed by StayWise, a real saving, a fee of 20%, under
+  5 USDC). A fee above the chat's limit gets a one-off limit card for exactly that amount, payable
+  only to PriceGuard; the server accepts no other card. In "Ask first" chats there's an approval.
+- "My bookings" follows a hotel PriceGuard rebooked (StayWise's `replacedBy`) to the booking now.
+- Sandbox demos: `PRICEGUARD_SIMULATE_DROP=N` (market) shows a SIMULATED drop, acted on **once**
+  per watch; invoices for a simulated saving are refused unless `PRICEGUARD_PAY_SIMULATED=1` (API).
+
+Live (1 Nov 2026): booked Crystall Goa Emerald Edition 8–10 Dec (log #143) → PriceGuard on (₹100,
+1%) → Check now: SIMULATED 2% drop, rebooked, saved ₹249, invoice 0.52 USDC → chat: "Pay
+PriceGuard" → the concierge warned it was simulated → one-off 0.52 USDC limit approved → paid
+(log #146). Found on the way: with the simulated drop on, every 2-minute check rebooked again (4
+rebooks); now a simulated drop acts once and later checks say so.
+
 ## Who does what
 
 | Agent | Role |

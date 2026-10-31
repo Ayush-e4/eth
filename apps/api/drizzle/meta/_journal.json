@@ -99,6 +99,13 @@
       "when": 1793466334950,
       "tag": "0013_fare_watches",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1793469971590,
+      "tag": "0014_watch_kind",
+      "breakpoints": true
     }
   ]
 }
