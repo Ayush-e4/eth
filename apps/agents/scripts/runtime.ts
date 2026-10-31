@@ -123,6 +123,7 @@ export async function startAgents(
       bookings: new LiteHotelBookings(liteKey),
       store: new JsonStore<BookingRecord>(STAYWISE_STORE),
       arkiv: arkivReader(),
+      me: identity.evm,
       simulateDropPercent: opts.simulateDropPercent, // sandbox demos only; labelled SIMULATED
     };
     return createSpecialist(staywise(new LiteApiClient(liteKey), manage), ctx);
@@ -163,7 +164,6 @@ export async function startAgents(
 }
 
 const BOARD_EVERY_MS = 15_000;
-
 /** Reads Arkiv's open tasks every 15 s and offers each to every bidding agent. */
 function watchBoard(
   bidders: { considerTask: (t: Decoded<Task>, log: (l: string) => void) => void }[],

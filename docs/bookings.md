@@ -34,6 +34,19 @@ Live (13–15 Nov trip, Park Inn Candolim, refundable):
 | "put Rohan as lead guest" | amendment #3661 `PENDING`, 0.01 USDC |
 | "plans changed, cancel the hotel" | free cancellation, no question → `CANCELLED`, refund ₹28,051, job marked `cancelled` |
 
+### From the chat
+
+The same works from any chat: `my_bookings` lists hotels too, and `manage_booking` changes dates
+or guests (`change-options`, then a paid `hotels.change` job through `/work`, the same as a
+flight change) or cancels after an approval card showing what comes back. A change makes a new
+booking at LiteAPI, so its id becomes the booking's reference from then on (sandbox confirmation
+codes are all "test").
+
+Live (31 Oct 2026): booked Crystall Goa Emerald Edition 4–6 Dec (log #137) → "add a night,
+check out on 7 December": two options, +46% and +153% → approval card "It costs 46% more…" →
+new booking SvlUnIkh9 replacing h-rW53ZSj (log #140) → "cancel my Goa hotel": card "18268.68
+INR comes back" → approved → both bookings show CANCELLED at LiteAPI.
+
 ## Flights: SkyHop, from the chat
 
 *"Move my flight to the next day"*, *"cancel my flight"* work in any chat: the concierge's

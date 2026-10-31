@@ -1,4 +1,4 @@
-import { jobsForTask, postQuote } from "@eth/arkiv";
+import { jobsForTask } from "@eth/arkiv";
 import { createPayingFetch, type Facilitator, MirrorResolver, paywall } from "@eth/x402";
 import { Hono } from "hono";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
@@ -8,7 +8,8 @@ import { JsonStore } from "../store";
 import type { SpecialistKit } from "./server";
 import { type BookingRecord, manageRoutes } from "./staywise-manage";
 
-vi.mock("@eth/arkiv", () => ({ jobsForTask: vi.fn(), postQuote: vi.fn() }));
+vi.mock("@eth/arkiv", () => ({ jobsForTask: vi.fn() }));
+const quote = vi.fn(async (_q: unknown) => "0xopt1" as const);
 
 const REGISTRY = "0.0.11102395";
 const stayKey = generatePrivateKey();
@@ -58,7 +59,7 @@ function setup() {
   };
   const kit: SpecialistKit = {
     writer: {} as never,
-    quote: vi.fn(),
+    quote,
     ctx: {
       identity: stay,
       baseUrl: "http://stay",
@@ -118,7 +119,6 @@ beforeEach(() => {
   vi.mocked(jobsForTask).mockResolvedValue([
     { record: { seller: stay.evm, quote: "0xq1", buyer: buyer.address } },
   ] as never);
-  vi.mocked(postQuote).mockResolvedValue({ entityKey: "0xopt1", txHash: "0xt" } as never);
 });
 
 describe("StayWise booking management", () => {
@@ -154,10 +154,13 @@ describe("StayWise booking management", () => {
     expect(out.options).toEqual([
       expect.objectContaining({ quoteKey: "0xopt1", priceDifferencePercent: 61 }),
     ]);
-    expect(postQuote).toHaveBeenCalledWith(
-      {},
-      expect.objectContaining({ skill: "hotels.change", priceUnits: 20_000n, itemTotal: 28767.44 }),
-      180,
+    // quoted as a "hotels.change" job, which /work (or /change) then takes
+    expect(quote).toHaveBeenCalledWith(
+      expect.objectContaining({
+        skill: "hotels.change",
+        itemTotal: 28767.44,
+        detail: expect.objectContaining({ bookingId: "b1" }),
+      }),
     );
   });
 

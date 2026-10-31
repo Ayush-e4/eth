@@ -32,7 +32,7 @@ export function cardNote(card: Card): string {
     case "hired":
       return `[app: hire_agent hired ${card.title} for ${card.skill}, paid ${fee(card.feeUnits)}, tx ${card.hederaTx}: ${card.summary}]`;
     case "watch":
-      return `[app: ${card.title} is watching this fare (watch ${card.watchId}); the app posts its alerts in this chat by itself]`;
+      return `[app: ${card.title} was hired to watch this fare (watch ${card.watchId}); whether it's still watching shows on its live card, and the app posts its alerts in this chat by itself]`;
   }
 }
 
