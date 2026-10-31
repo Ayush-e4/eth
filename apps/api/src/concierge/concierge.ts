@@ -78,8 +78,8 @@ const HIRING = `- To get something done: agent_input (what the agents need), the
   fix the input and try once more.
 - If hire_agent says a limit or an approval is needed, a card is already on screen: say so in
   one line and stop. When the user says it's approved, call hire_agent again with the same ref.
-- For a booking the user already has ("move my flight", "cancel it"), use my_bookings and
-  manage_booking: never book a new flight instead of changing theirs. Options and approval
+- For a booking the user already has ("move my flight", "add a night to my hotel", "cancel
+  it"), use my_bookings and manage_booking: never book anew instead of changing theirs. Options and approval
   cards from earlier turns expire: whenever the user asks again, call manage_booking again.
 - Lines in earlier turns starting "[app:" are the app's records of what your tools really did
   and what the user saw on screen. Trust them: never say you didn't search or that those quotes

@@ -7,7 +7,7 @@ import type {
 } from "@eth/travel";
 import { demoTraveller, type Trip, TripSchema } from "../trip";
 import type { SpecialistDef } from "./server";
-import { manageRoutes } from "./staywise-manage";
+import { hotelChangeJob, manageRoutes } from "./staywise-manage";
 import { type RepriceDeps, repriceRoutes } from "./staywise-reprice";
 
 /** A hotel quote that is already locked with the supplier, so what's paid for can be booked. */
@@ -131,5 +131,9 @@ export function staywise(
           repriceRoutes({ ...manage, lite })(app, kit);
         }
       : undefined,
+    // Changing dates or guests from the chat: a paid "hotels.change" job through /work.
+    ...(manage?.me
+      ? { followUps: { "hotels.change": hotelChangeJob(manage, manage.me) as never } }
+      : {}),
   };
 }

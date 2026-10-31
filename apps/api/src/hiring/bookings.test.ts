@@ -52,6 +52,7 @@ beforeEach(async () => {
     vi.fn(async (url: string, init: RequestInit) => {
       const path = new URL(url).pathname;
       agentCalls.push({ path, body: JSON.parse(String(init.body ?? "{}")) });
+      if (path.startsWith("/bookings/h")) return hotelAgent(path);
       if (path.endsWith("/change-options"))
         return Response.json({
           current: "ZZ7426 BOM→GOI 2026-12-10 06:00",
@@ -81,18 +82,80 @@ beforeEach(async () => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
+/** As StayWise's management routes answer. */
+const hotelAgent = (path: string) =>
+  path.endsWith("/view")
+    ? Response.json({ booking: { total: 17815.68, currency: "INR" }, cancelFeeNow: 815.68 })
+    : path.endsWith("/change-options")
+      ? Response.json({
+          current: { hotelName: "Park Inn" },
+          options: [
+            {
+              quoteKey: "0xhchange",
+              note: "Park Inn 13→16 Nov: 28,767 INR (+61% vs paid)",
+              total: 28767.44,
+              currency: "INR",
+              priceDifferencePercent: 61,
+            },
+          ],
+          changeFeeUsdc: 0.02,
+          pay: { task: "trip-2", skill: "hotels.change", input: { bookingId: "h2" } },
+        })
+      : Response.json({ agent: "StayWise", result: { status: "CANCELLED" } });
+
 describe("my bookings", () => {
-  it("lists each flight once, as it stands after its changes; never someone else's", async () => {
+  it("lists each booking once, as it stands after its changes; never someone else's", async () => {
     await hire("flights", { orderId: "ord_1", bookingReference: "VRUDTM" }, 1000);
-    await hire("hotels", { bookingId: "h1" }, 2000);
+    await hire("hotels", { bookingId: "h1", confirmationCode: "HC1" }, 2000);
     await hire("flights.change", { orderId: "ord_1", bookingReference: "VRUDTN" }, 3000);
+    await hire("hotels.change", { bookingId: "h2", replaces: "h1", queued: false }, 4000);
     const desk = bookingDesk(db, env);
     expect(await desk.list(userId)).toEqual([
-      expect.objectContaining({ orderId: "ord_1", bookingReference: "VRUDTN", changes: 1 }),
+      expect.objectContaining({
+        kind: "hotel",
+        bookingId: "h2",
+        bookingReference: "h2", // a hotel change is a new booking: its id
+        changes: 1,
+      }),
+      expect.objectContaining({
+        kind: "flight",
+        bookingId: "ord_1",
+        bookingReference: "VRUDTN",
+        changes: 1,
+      }),
     ]);
     const [other] = await db.insert(users).values({ isDemo: true }).returning();
     expect(await desk.list(other?.id ?? "")).toEqual([]);
     await expect(desk.view(other?.id ?? "", "VRUDTN")).rejects.toThrow("no such booking");
+  });
+
+  it("hotels: a dearer change needs approval; a cancel shows what comes back after the fee", async () => {
+    await hire("hotels", { bookingId: "h1", confirmationCode: "HC1" }, 1000);
+    await hire("hotels.change", { bookingId: "h2", replaces: "h1" }, 2000);
+    const desk = bookingDesk(db, env);
+    const out = await desk.changeOptions(userId, chat.id, "h2", {
+      checkin: "2026-11-13",
+      checkout: "2026-11-16",
+      adults: 2,
+    });
+    expect(agentCalls.at(-1)).toEqual({
+      path: "/bookings/h2/change-options",
+      body: { checkin: "2026-11-13", checkout: "2026-11-16", adults: 2 },
+    });
+    expect(out.held[0]?.option.confirm).toContain("61% more than what was paid");
+    const asked = await desk.cancel(userId, chat.id, "h2");
+    expect(asked).toMatchObject({
+      card: {
+        title: "Cancel hotel h2",
+        detail: expect.stringContaining("17000 INR comes back of 17815.68"),
+      },
+    });
+    await approvalBook(db).note(
+      chat.id,
+      `Approve ${asked.status === "needs_approval" ? asked.card.code : ""}`,
+    );
+    expect(await desk.cancel(userId, chat.id, "h2")).toMatchObject({ status: "cancelled" });
+    expect(agentCalls.at(-1)).toEqual({ path: "/bookings/h2/cancel", body: {} });
   });
 
   it("a change that costs more at the airline needs the user's approval, even in Auto", async () => {

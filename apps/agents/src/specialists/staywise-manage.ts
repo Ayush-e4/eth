@@ -1,11 +1,11 @@
-import { type ArkivReader, jobsForTask, postQuote } from "@eth/arkiv";
+import { type ArkivReader, jobsForTask } from "@eth/arkiv";
 import { type ChangeOption, cancellationFeeAt, type LiteHotelBookings } from "@eth/travel";
 import type { Context, Hono, Next } from "hono";
 import { z } from "zod";
 import { type RepriceDelegation, type Signed, verifySigned } from "../auth";
 import type { JsonStore } from "../store";
 import { demoTraveller } from "../trip";
-import type { SpecialistKit } from "./server";
+import type { FollowUp, SpecialistKit } from "./server";
 
 export const CHANGE_FEE = 20_000n; // 0.02 USDC to change dates / number of guests
 export const GUEST_FEE = 10_000n; // 0.01 USDC to change the lead guest's name
@@ -42,6 +42,74 @@ export function bookingOwner<R extends Owned>(
   };
 }
 
+/** Moves a booking onto a locked option (LiteAPI cancels the old one) and records the new one. */
+export async function rebookTo(
+  deps: Pick<ManageDeps, "bookings" | "store">,
+  rec: BookingRecord,
+  option: ChangeOption,
+  quoteKey: string,
+) {
+  const before = await deps.bookings.get(rec.bookingId);
+  const lead = demoTraveller(0);
+  const result = await deps.bookings.rebook(option.prebookId, rec.bookingId, {
+    firstName: before.holder?.firstName || lead.givenName,
+    lastName: before.holder?.lastName || lead.familyName,
+    email: before.holder?.email || lead.email,
+  });
+  if (!result.queued) {
+    deps.store.set(result.bookingId, {
+      bookingId: result.bookingId,
+      task: rec.task,
+      quoteKey,
+      owner: rec.owner,
+      hotelId: rec.hotelId,
+      adults: rec.adults,
+    });
+    deps.store.set(rec.bookingId, { ...rec, replacedBy: result.bookingId });
+  }
+  return result;
+}
+
+/** What a "hotels.change" quote stands for: this booking, moved to this locked option. */
+export interface HotelChangeDetail {
+  bookingId: string;
+  option: ChangeOption;
+}
+
+/** The paid follow-up: change dates/guests through /work (with escrow, recovery…). */
+export function hotelChangeJob(
+  deps: ManageDeps,
+  me: string,
+): FollowUp<{ bookingId: string }, HotelChangeDetail> {
+  const ownerOf = bookingOwner(deps, me);
+  return {
+    input: z.object({ bookingId: z.string().min(1).max(80) }),
+    priceUnits: CHANGE_FEE,
+    async check(req, detail, buyer) {
+      const rec = deps.store.get(detail.bookingId);
+      if (req.input.bookingId !== detail.bookingId)
+        return "that change quote is for another booking";
+      if (!rec || rec.replacedBy) return "that booking was already changed";
+      const owner = await ownerOf(rec);
+      return owner && buyer && owner.toLowerCase() === buyer.toLowerCase()
+        ? null
+        : "not your booking";
+    },
+    async work(_req, detail) {
+      const rec = deps.store.get(detail.bookingId) as BookingRecord;
+      const result = await rebookTo(deps, rec, detail.option, _req.quoteKey ?? "");
+      return {
+        ...result,
+        replaces: detail.bookingId,
+        checkin: detail.option.checkin,
+        checkout: detail.option.checkout,
+        total: detail.option.total,
+        currency: detail.option.currency,
+      };
+    },
+  };
+}
+
 /** The address that signed this request, or undefined if unsigned/stale/forged. */
 export async function signerOf(c: Context): Promise<`0x${string}` | undefined> {
   return verifySigned((n) => c.req.header(n), c.req.method, c.req.path, await c.req.text()).catch(
@@ -54,6 +122,7 @@ export interface ManageDeps {
   store: JsonStore<BookingRecord>;
   arkiv: ArkivReader;
   now?: () => Date;
+  me?: string; // StayWise's own address (who the Arkiv job's seller must be)
 }
 
 const ChangeBody = z.object({
@@ -117,19 +186,15 @@ export function manageRoutes(deps: ManageDeps) {
       const listed = [];
       for (const option of found) {
         const note = `${current.hotelName ?? "Hotel"} ${option.checkin}→${option.checkout}, ${q.adults} adult(s): ${option.total.toLocaleString("en-IN")} ${option.currency} (${option.priceDifferencePercent >= 0 ? "+" : ""}${option.priceDifferencePercent}% vs paid)`;
-        const { entityKey } = await postQuote(
-          kit.writer,
-          {
-            agent: kit.ctx.identity.evm,
-            task: rec.task,
-            skill: "hotels.change",
-            priceUnits: CHANGE_FEE,
-            note,
-            itemTotal: option.total,
-            itemCurrency: option.currency,
-          },
-          OPTION_TTL_SECONDS,
-        );
+        // Quoted as a "hotels.change" job (paid through /work); /change takes it too.
+        const entityKey = await kit.quote({
+          task: rec.task,
+          skill: "hotels.change",
+          note,
+          detail: { bookingId: rec.bookingId, option } satisfies HotelChangeDetail,
+          itemTotal: option.total,
+          itemCurrency: option.currency,
+        });
         options.set(entityKey, {
           bookingId: rec.bookingId,
           option,
@@ -137,7 +202,12 @@ export function manageRoutes(deps: ManageDeps) {
         });
         listed.push({ quoteKey: entityKey, note, ...option });
       }
-      return c.json({ current, options: listed, changeFeeUsdc: Number(CHANGE_FEE) / 1e6 });
+      return c.json({
+        current,
+        options: listed,
+        changeFeeUsdc: Number(CHANGE_FEE) / 1e6,
+        pay: { task: rec.task, skill: "hotels.change", input: { bookingId: rec.bookingId } },
+      });
     });
 
     app.post(
@@ -160,22 +230,7 @@ export function manageRoutes(deps: ManageDeps) {
         if (!o) return c.json({ error: "unknown_or_expired_option" }, 409);
         options.delete(quoteKey);
         try {
-          const before = await deps.bookings.get(rec.bookingId);
-          const lead = demoTraveller(0);
-          const result = await deps.bookings.rebook(o.option.prebookId, rec.bookingId, {
-            firstName: before.holder?.firstName || lead.givenName,
-            lastName: before.holder?.lastName || lead.familyName,
-            email: before.holder?.email || lead.email,
-          });
-          if (!result.queued) {
-            deps.store.set(result.bookingId, {
-              bookingId: result.bookingId,
-              task: rec.task,
-              quoteKey,
-              owner: rec.owner,
-            });
-            deps.store.set(rec.bookingId, { ...rec, replacedBy: result.bookingId });
-          }
+          const result = await rebookTo(deps, rec, o.option, quoteKey);
           return c.json({ agent: "StayWise", result, option: o.option });
         } catch (err) {
           const refund = await kit.refundPaid(c, CHANGE_FEE, `refund change ${rec.bookingId}`);
