@@ -153,6 +153,20 @@ export function liveTasks(r: ArkivReader) {
   return query(r, "task", []) as Promise<Decoded<Task>[]>;
 }
 
+/** One agent's own profile(s) and listing(s), as it signed them. */
+export async function agentRecords(r: ArkivReader, agent: `0x${string}`) {
+  const [profiles, listings] = await Promise.all([
+    query(r, "agent", [], { createdBy: agent }) as Promise<Decoded<Agent>[]>,
+    query(r, "listing", [], { createdBy: agent }) as Promise<Decoded<Listing>[]>,
+  ]);
+  return { profiles, listings };
+}
+
+/** The jobs an agent says it delivered or refunded (its public track record). */
+export function deliveriesBy(r: ArkivReader, agent: `0x${string}`, limit = 50) {
+  return query(r, "delivery", [], { createdBy: agent, limit }) as Promise<Decoded<Delivery>[]>;
+}
+
 /** How the agent says a paid job ended, trusted only if that agent wrote it. */
 export async function deliveryFor(r: ArkivReader, quote: `0x${string}`, agent: `0x${string}`) {
   const [d] = (await query(r, "delivery", [eq("quote", key(quote))], {

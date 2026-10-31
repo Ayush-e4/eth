@@ -96,7 +96,8 @@ export function createSpecialist<I, D, R>(def: SpecialistDef<I, D, R>, ctx: Spec
       return { error: TASK_ERRORS.invalidInput, status: 422 as const, issues: input.error.issues };
     return { req: { ...env.data, input: input.data } as TaskRequest<I> };
   };
-  const inputSchema = z.toJSONSchema(def.input, { unrepresentable: "any" });
+  // The input view: fields with defaults are optional to send.
+  const inputSchema = z.toJSONSchema(def.input, { unrepresentable: "any", io: "input" });
   const writer = arkivWriter(ctx.identity.key);
   // quote key → detail, so /work does exactly what was quoted; saved, so a restart keeps it
   const jobs = ctx.jobs ?? jobStore();

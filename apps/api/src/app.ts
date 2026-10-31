@@ -14,6 +14,8 @@ import { paymentRoutes } from "./hiring/payment-routes";
 import { mandateRoutes } from "./hiring/routes";
 import type { HiringService } from "./hiring/service";
 import type { UndoWindows } from "./hiring/undo";
+import type { MarketCatalog } from "./market/catalog";
+import { marketRoutes } from "./market/routes";
 import { type LogNames, spendLogRoutes } from "./spend-log/routes";
 import type { StatusCheck } from "./status/check";
 import { statusRoutes } from "./status/routes";
@@ -33,6 +35,7 @@ export interface AppDeps {
   undo?: UndoWindows | null;
   demo?: DemoQuotaCheck | null;
   status?: StatusCheck | null;
+  catalog?: MarketCatalog | null;
 }
 
 export function createApp(db: Db, config: Config, deps: AppDeps = {}) {
@@ -71,6 +74,7 @@ export function createApp(db: Db, config: Config, deps: AppDeps = {}) {
   app.route("/", mandateRoutes(db, hiring?.env ?? null, deps.demo ?? null));
   app.route("/", demoRoutes(db, deps.demo ?? null));
   app.route("/", statusRoutes(deps.status ?? null));
+  app.route("/", marketRoutes(deps.catalog ?? null));
   app.route("/", accountRoutes(db, hiring?.env ?? null));
   app.route("/", spendLogRoutes(hiring?.env ?? null, deps.logNames));
   app.route("/", humanCheckRoutes(db, deps.humanChecks ?? null, hiring?.service ?? null));
