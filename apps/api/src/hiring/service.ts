@@ -61,6 +61,7 @@ export function hiringService(
     watches?: FareWatchFollower; // a fare watch that was hired: followed, with a live card
     pending?: PendingHires;
     demo?: DemoQuotaCheck; // daily allowances when the shared demo wallet pays
+    hidden?: (agent: string) => boolean; // agents an admin hid on the ops page
   } = {},
 ) {
   const refs = quoteRefs(db);
@@ -86,7 +87,8 @@ export function hiringService(
       // Agents that hire others name who they'll pay; only quotes we can vet are offered.
       const options = [];
       for (const o of round.options) {
-        if (!o.subcontract) options.push(o);
+        if (opts.hidden?.(o.agent)) round.skipped.push(`${nameOf(o)}: not offered on AgentNet`);
+        else if (!o.subcontract) options.push(o);
         else {
           const sub = await vetSubcontract(qd.arkiv, o.agent, o.subcontract).catch(() => null);
           if (sub) options.push({ ...o, subcontract: sub });

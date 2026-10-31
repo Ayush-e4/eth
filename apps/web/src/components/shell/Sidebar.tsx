@@ -10,6 +10,7 @@ import {
   ChatIcon,
   ExitIcon,
   EyeIcon,
+  GaugeIcon,
   LedgerIcon,
   LogoMark,
   MarketIcon,
@@ -79,7 +80,12 @@ export function Sidebar() {
 
       <nav aria-label="Main">
         <ul className="flex flex-col gap-0.5">
-          {LIVE.map(({ href, label, Icon }) => (
+          {[
+            ...LIVE,
+            ...(me?.roles.includes("admin")
+              ? [{ href: "/ops", label: "Ops", Icon: GaugeIcon }]
+              : []),
+          ].map(({ href, label, Icon }) => (
             <li key={href}>
               <Link
                 href={href}

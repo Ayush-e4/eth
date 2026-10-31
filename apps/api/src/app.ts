@@ -23,6 +23,7 @@ import type { MarketCatalog } from "./market/catalog";
 import { marketRoutes } from "./market/routes";
 import type { Notifier } from "./notify/notifier";
 import { notifyRoutes } from "./notify/routes";
+import { type OpsDeps, opsRoutes } from "./ops/routes";
 import { type LogNames, spendLogRoutes } from "./spend-log/routes";
 import type { StatusCheck } from "./status/check";
 import { statusRoutes } from "./status/routes";
@@ -51,6 +52,7 @@ export interface AppDeps {
   catalog?: MarketCatalog | null;
   checkAgent?: AgentChecker | null;
   wallets?: PasskeyWallets | null;
+  ops?: OpsDeps | null;
 }
 
 /** A listed agent's name and skill, for starting a chat with it alone. */
@@ -118,6 +120,7 @@ export function createApp(db: Db, config: Config, deps: AppDeps = {}) {
   app.route("/", paymentRoutes(db, deps.undo ?? null, deps.review ?? null));
   app.route("/", watchRoutes(db, deps.watches ?? null));
   app.route("/", notifyRoutes(db, deps.notify ?? null));
+  if (deps.ops) app.route("/", opsRoutes(db, config, deps.ops));
 
   return app;
 }

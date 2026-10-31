@@ -7,8 +7,12 @@ export type Role = "user" | "builder" | "admin";
  * settings. Builders (people who own an agent) are added when agents are stored in the
  * database; until then everyone else is a plain user.
  */
-export function rolesFor(user: User, admins: ReadonlySet<string>): Role[] {
+export function rolesFor(
+  user: User,
+  admins: ReadonlySet<string>,
+  adminUsers: ReadonlySet<string> = new Set(),
+): Role[] {
   const roles: Role[] = ["user"];
-  if (user.address && admins.has(user.address)) roles.push("admin");
+  if ((user.address && admins.has(user.address)) || adminUsers.has(user.id)) roles.push("admin");
   return roles;
 }
