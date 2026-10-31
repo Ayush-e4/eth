@@ -5,23 +5,9 @@ import { type AuthEnv, requireUser } from "../auth/routes";
 import type { Db } from "../db/client";
 import { chats, hires, mandates } from "../db/schema";
 import { type HiringEnv, hederaAccountOf } from "../hiring/env";
+import { balances } from "./balances";
 
 const fee = (units: bigint) => units.toString();
-
-/** Balances from Hedera's public mirror node: USDC (6 decimals) and HBAR (tinybars). */
-async function balances(mirrorUrl: string, account: string, usdcTokenId: string) {
-  const res = await fetch(`${mirrorUrl}/api/v1/balances?account.id=${account}`).catch(() => null);
-  if (!res?.ok) return null;
-  const body = (await res.json()) as {
-    balances?: { balance: number; tokens: { token_id: string; balance: number }[] }[];
-  };
-  const b = body.balances?.[0];
-  if (!b) return null;
-  return {
-    hbarTinybars: String(b.balance),
-    usdcUnits: String(b.tokens.find((t) => t.token_id === usdcTokenId)?.balance ?? 0),
-  };
-}
 
 /** What the signed-in user's agents did (Tasks) and what they spent through (Wallet). */
 export function accountRoutes(db: Db, env: HiringEnv | null) {

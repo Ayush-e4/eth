@@ -15,6 +15,8 @@ import { mandateRoutes } from "./hiring/routes";
 import type { HiringService } from "./hiring/service";
 import type { UndoWindows } from "./hiring/undo";
 import { type LogNames, spendLogRoutes } from "./spend-log/routes";
+import type { StatusCheck } from "./status/check";
+import { statusRoutes } from "./status/routes";
 import { openTaskRoutes } from "./tasks/routes";
 import type { OpenTaskService } from "./tasks/service";
 import type { HumanChecks } from "./world/checks";
@@ -30,6 +32,7 @@ export interface AppDeps {
   tasks?: OpenTaskService | null;
   undo?: UndoWindows | null;
   demo?: DemoQuotaCheck | null;
+  status?: StatusCheck | null;
 }
 
 export function createApp(db: Db, config: Config, deps: AppDeps = {}) {
@@ -67,6 +70,7 @@ export function createApp(db: Db, config: Config, deps: AppDeps = {}) {
   );
   app.route("/", mandateRoutes(db, hiring?.env ?? null, deps.demo ?? null));
   app.route("/", demoRoutes(db, deps.demo ?? null));
+  app.route("/", statusRoutes(deps.status ?? null));
   app.route("/", accountRoutes(db, hiring?.env ?? null));
   app.route("/", spendLogRoutes(hiring?.env ?? null, deps.logNames));
   app.route("/", humanCheckRoutes(db, deps.humanChecks ?? null, hiring?.service ?? null));

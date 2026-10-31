@@ -29,10 +29,16 @@ export function loadDemoQuotas(e: NodeJS.ProcessEnv = process.env): DemoQuotas {
 }
 
 const DAY_MS = 86_400_000;
+/** Demo hires pause before the shared wallet runs dry, so they're refused, not failed mid-payment. */
+export const DEMO_FLOOR_USDC_UNITS = 500_000n;
 const NEXT =
   "Sign in with MetaMask to keep going with your own test wallet, or come back tomorrow.";
 
-export function demoQuotas(db: Db, q: DemoQuotas = loadDemoQuotas()) {
+export function demoQuotas(
+  db: Db,
+  q: DemoQuotas = loadDemoQuotas(),
+  d: { usdcLeft?: () => Promise<bigint | null> } = {}, // the shared wallet's test USDC
+) {
   const since = () => new Date(Date.now() - DAY_MS); // a rolling 24 hours
 
   async function usage(userId: string) {
@@ -114,6 +120,9 @@ export function demoQuotas(db: Db, q: DemoQuotas = loadDemoQuotas()) {
         return `this demo account has used today's ${q.hiresPerUser} paid hires. ${NEXT}`;
       if (w.feeUnits + feeUnits > q.feeUnitsPerDay)
         return `the shared demo wallet has spent today's budget for agent fees. ${NEXT}`;
+      const usdc = await d.usdcLeft?.().catch(() => null);
+      if (usdc != null && usdc < feeUnits + DEMO_FLOOR_USDC_UNITS)
+        return `the shared demo wallet is nearly out of test USDC and is waiting for a top-up. ${NEXT}`;
       return null;
     },
   };
