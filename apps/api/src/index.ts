@@ -11,6 +11,7 @@ import { pendingHires } from "./hiring/pending";
 import { reputation } from "./hiring/reputation";
 import { hiringService } from "./hiring/service";
 import { undoWindows } from "./hiring/undo";
+import { marketCatalog } from "./market/catalog";
 import { arkivNames } from "./spend-log/routes";
 import { statusCheck } from "./status/check";
 import { openTaskService } from "./tasks/service";
@@ -36,6 +37,8 @@ const market = arkivMarket(undefined, env ? [env.demo.evm] : []);
 // Is everything up? Services, networks and the shared demo wallet (public at GET /status).
 const quotaConfig = loadDemoQuotas();
 const status = statusCheck(db, env, { market, quotas: config.demoMode ? quotaConfig : null });
+// The Market page: every agent, its reviews, whether it's up, what it did here (public).
+const catalog = marketCatalog(db, { market, status });
 // Demo accounts share one test wallet: daily allowances per account and for the wallet, and a
 // pause before it runs dry.
 const demo = config.demoMode
@@ -91,6 +94,7 @@ serve(
       undo,
       demo,
       status,
+      catalog,
     }).fetch,
     port: config.port,
   },

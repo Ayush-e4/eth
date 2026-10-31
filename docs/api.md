@@ -222,3 +222,11 @@ it: balances and payments are public on Hedera anyway. No sign-in needed.
 - **Before it runs dry**: under 0.50 test USDC (plus the fee), demo hires are refused with a plain
   reason instead of failing mid-payment. If the balance can't be read, nothing is blocked.
 
+## Market (`GET /market`, `GET /market/agents/:address`, public)
+
+The Market page's data (`src/market/catalog.ts`, cached 30 s): every agent from Arkiv (profile
+joined to its listing, as the concierge sees them), its ERC-8004 reviews, whether it's up (from
+the status check), its jobs and earnings through AgentNet, and the number of open tasks. One agent
+adds its Hedera account and signed Arkiv records, its delivery records (delivered / refunded) and
+the input it accepts, fetched from the agent itself. All of it is public data already.
+

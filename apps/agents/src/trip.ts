@@ -6,17 +6,30 @@ const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD");
 
 /** What the orchestrator understood from the user's request. */
 export const TripSchema = z.object({
-  origin: iata,
-  destination: iata,
-  destinationName: z.string().min(1).max(60),
-  departDate: date,
-  returnDate: date, // last night out: hotel checkout, and the return flight when returnFlight
-  returnFlight: z.boolean(), // false only when the traveller wants a one-way flight
-  adults: z.number().int().min(1).max(6),
-  budgetInr: z.number().int().positive().nullable(),
-  nonRefundableOk: z.boolean(), // true only if the traveller puts price over being able to cancel/change
-  hotelWishes: z.string().max(120), // what the traveller wants from the hotel, e.g. "quiet, beachfront"; "" if nothing
-  notes: z.string().max(300),
+  origin: iata.describe("Airport the trip starts from (IATA code, e.g. BOM)"),
+  destination: iata.describe("Destination airport (IATA code, e.g. GOI)"),
+  destinationName: z.string().min(1).max(60).describe("Destination in words, e.g. Goa"),
+  departDate: date.describe("Outbound date, YYYY-MM-DD"),
+  // last night out: hotel checkout, and the return flight when returnFlight
+  returnDate: date.describe(
+    "Hotel checkout, and the return flight's date if there is one (YYYY-MM-DD)",
+  ),
+  returnFlight: z.boolean().describe("false only when the traveller wants a one-way flight"),
+  adults: z.number().int().min(1).max(6).describe("Number of adult travellers (1–6)"),
+  budgetInr: z
+    .number()
+    .int()
+    .positive()
+    .nullable()
+    .describe("Most they want to spend in rupees, or null"),
+  nonRefundableOk: z
+    .boolean()
+    .describe("true only if they put price over being able to cancel or change"),
+  hotelWishes: z
+    .string()
+    .max(120)
+    .describe('What they want from the hotel, e.g. "quiet, beachfront"; "" if nothing'),
+  notes: z.string().max(300).describe("Anything else the agent should know"),
 });
 
 export type Trip = z.infer<typeof TripSchema>;
