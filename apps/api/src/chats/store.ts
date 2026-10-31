@@ -15,14 +15,20 @@ const titleFrom = (text: string) => {
 export function chatStore(db: Db) {
   return {
     /** A new chat starts with the user's default spending settings. */
-    async create(user: Pick<User, "id" | "defaultMode" | "defaultLimitUnits">): Promise<Chat> {
+    async create(
+      user: Pick<User, "id" | "defaultMode" | "defaultLimitUnits">,
+      agent?: { address: string; name: string; skill: string }, // a chat with one agent only
+    ): Promise<Chat> {
       const [chat] = await db
         .insert(chats)
         .values({
           userId: user.id,
-          title: "New chat",
+          title: agent ? `Chat with ${agent.name}` : "New chat",
           mode: user.defaultMode,
           limitUnits: user.defaultLimitUnits,
+          ...(agent
+            ? { agentAddress: agent.address, agentName: agent.name, agentSkill: agent.skill }
+            : {}),
         })
         .returning();
       if (!chat) throw new Error("could not create the chat");
@@ -82,11 +88,13 @@ export function chatStore(db: Db) {
     async update(
       userId: string,
       chatId: string,
-      patch: { title?: string; mode?: ChatMode; limitUnits?: bigint },
+      patch: { title?: string; mode?: ChatMode; limitUnits?: bigint; agent?: null },
     ): Promise<Chat | null> {
+      const { agent, ...rest } = patch;
+      const unpin = agent === null ? { agentAddress: null, agentName: null, agentSkill: null } : {};
       const [chat] = await db
         .update(chats)
-        .set({ ...patch, updatedAt: new Date() })
+        .set({ ...rest, ...unpin, updatedAt: new Date() })
         .where(and(eq(chats.id, chatId), eq(chats.userId, userId)))
         .returning();
       return chat ?? null;

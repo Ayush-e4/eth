@@ -16,6 +16,7 @@ export interface Me {
 export interface ChatSummary {
   id: string;
   title: string;
+  agent: { address: string; name: string; skill: string } | null; // a chat with one agent
   mode: ChatMode;
   limitUnits: string;
   createdAt: string;

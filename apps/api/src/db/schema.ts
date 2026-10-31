@@ -72,6 +72,10 @@ export const chats = pgTable(
     mode: text("mode").$type<ChatMode>().notNull().default("auto"),
     // Most agent fees this chat may spend without asking, in USDC base units (0.30 USDC).
     limitUnits: bigint("limit_units", { mode: "bigint" }).notNull().default(sql`300000`),
+    // A chat with one agent from the Market: only it is asked for quotes and only it is paid.
+    agentAddress: text("agent_address"),
+    agentName: text("agent_name"),
+    agentSkill: text("agent_skill"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

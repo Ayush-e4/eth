@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type ChatMessage, type ChatSummary } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { sendMessage } from "@/lib/stream";
+import { AgentBanner } from "./AgentBanner";
 import { PENDING_KEY } from "./ChatHome";
 import { Composer } from "./Composer";
 import { Messages, type Turn } from "./Messages";
@@ -121,6 +122,15 @@ export function ChatThread({ chatId }: { chatId: string }) {
     bottom.current?.scrollIntoView({ block: "end" });
   }, [turns]);
 
+  const unpin = async () => {
+    const { chat: updated } = await api<{ chat: ChatSummary }>(`/chats/${chatId}`, {
+      method: "PATCH",
+      body: { agent: null },
+    });
+    setChat(updated);
+    void refreshChats();
+  };
+
   const changeMode = async (p: { mode?: ChatMode; limitUnits?: string }) => {
     const { chat: updated } = await api<{ chat: ChatSummary }>(`/chats/${chatId}`, {
       method: "PATCH",
@@ -142,11 +152,12 @@ export function ChatThread({ chatId }: { chatId: string }) {
             {chats.find((c) => c.id === chatId)?.title ?? chat?.title ?? "…"}
           </h1>
           <span className="rounded-full bg-side px-2.5 py-0.5 text-xs font-medium text-ink-3">
-            Concierge
+            {chat?.agent ? `with ${chat.agent.name}` : "Concierge"}
           </span>
         </div>
       </header>
       <main className="mx-auto flex w-full max-w-[800px] flex-1 flex-col gap-7 px-6 pt-8 pb-6">
+        {chat?.agent && <AgentBanner agent={chat.agent} onUnpin={unpin} />}
         <Messages
           turns={turns}
           onReply={send}

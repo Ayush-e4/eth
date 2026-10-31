@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api, arkivEntity, shortAddress, usdc } from "@/lib/api";
+import { ChatWithAgent } from "./ChatWithAgent";
 import { type AgentDetail, feeText, initials, SKILL_TONE, stars } from "./types";
 
 const ERC8004_IDENTITY = "0x8004A818BFB912233c491871b3d84c89A494BD9e";
@@ -71,6 +72,7 @@ export function AgentView({ address }: { address: string }) {
           </span>
           <p className="mt-1 text-[15px] leading-relaxed text-ink-3">{a.description}</p>
         </div>
+        <ChatWithAgent agent={a.agent} name={a.name} primary />
       </div>
 
       <Section title="What it costs">

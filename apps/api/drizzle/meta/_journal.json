@@ -64,6 +64,13 @@
       "when": 1793452576033,
       "tag": "0008_pending_hires",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793457354760,
+      "tag": "0009_pinned_agent",
+      "breakpoints": true
     }
   ]
 }

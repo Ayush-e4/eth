@@ -6,6 +6,7 @@ import type { HireDeps } from "./hire";
 /** What quoting needs. Without a mandate, every listed agent is asked (the mandate comes later). */
 export type QuoteDeps = Pick<HireDeps, "arkiv" | "evm" | "registry" | "inrRates" | "log"> & {
   mandateId?: bigint;
+  only?: string; // ask just this agent (a chat with one agent from the Market)
 };
 
 import { type Candidate, describePriced, type Priced, rankByTotalCost } from "./procure";
@@ -41,7 +42,9 @@ export async function collectQuotes(
   d: QuoteDeps,
 ): Promise<QuoteRound> {
   const skipped: string[] = [];
-  const listings = await findListings(d.arkiv, { skill });
+  const listings = (await findListings(d.arkiv, { skill })).filter(
+    (l) => !d.only || l.record.agent.toLowerCase() === d.only.toLowerCase(),
+  );
   d.log(`[${skill}] ${listings.length} listing(s) on Arkiv`);
 
   const allowed = [];
