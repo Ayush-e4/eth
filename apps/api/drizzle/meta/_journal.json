@@ -92,6 +92,13 @@
       "when": 1793464310180,
       "tag": "0012_hire_endpoint",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1793466334950,
+      "tag": "0013_fare_watches",
+      "breakpoints": true
     }
   ]
 }

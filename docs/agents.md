@@ -10,6 +10,7 @@ inside a mandate a human signed on Hedera.
 | **AirNest** | SkyHop's competitor | `flights`: cheapest fare | 0.03 USDC | LiteAPI flights (sandbox) |
 | **StayWise** | Specialist | `hotels`: best-value hotel for the traveller's wishes; later changes and cancels | 0.04 USDC (+ 0.02 change, 0.01 guest) | LiteAPI hotels (sandbox) |
 | **PriceGuard** | Watcher | rebooks your hotel when the price drops ([docs/priceguard.md](priceguard.md)) | 20% of the saving, paid on proof | via StayWise |
+| **FareWatch** | Watcher | `farewatch`: tells you when a flight's fare drops or reaches your target ([docs/farewatch.md](farewatch.md)) | 0.02 USDC per watch | LiteAPI flights (sandbox) |
 | **TripMint** | Planner: an agent that hires agents | `trips`: books the best flight and hotel by hiring them itself | 0.05 USDC (+ the agents it hires, from a sub-mandate) | the market |
 
 Web2 analogy: the orchestrator is a company buyer on Upwork with a company card that has a limit.

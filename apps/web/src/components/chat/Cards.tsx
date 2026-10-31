@@ -5,6 +5,7 @@ import { shortAddress, usdc } from "@/lib/api";
 import { ApprovalCard, type CardCtx, HiredCard, LimitCard, QuotesCard } from "./MoneyCards";
 import { PaymentCard } from "./PaymentCard";
 import { TaskCard } from "./TaskCard";
+import { WatchCard } from "./WatchCard";
 
 type AgentsCard = Extract<Card, { type: "agents" }>;
 type OptionsCard = Extract<Card, { type: "options" }>;
@@ -42,6 +43,8 @@ export function CardView({ card, ctx }: { card: Card; ctx: CardCtx }) {
       return <HiredCard card={card} ctx={ctx} />;
     case "payment":
       return <PaymentCard card={card} ctx={ctx} />;
+    case "watch":
+      return <WatchCard card={card} ctx={ctx} />;
   }
 }
 

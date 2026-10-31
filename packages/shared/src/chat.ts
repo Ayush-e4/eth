@@ -152,6 +152,13 @@ export const PaymentCardSchema = z.object({
   feeUnits: units,
 });
 
+/** A fare FareWatch is watching: the app shows its checks live (and stop, check now). */
+export const WatchCardSchema = z.object({
+  type: z.literal("watch"),
+  watchId: z.string(),
+  title: z.string(), // the agent's name
+});
+
 export const CardSchema = z.discriminatedUnion("type", [
   AgentsCardSchema,
   OptionsCardSchema,
@@ -161,6 +168,7 @@ export const CardSchema = z.discriminatedUnion("type", [
   HiredCardSchema,
   TaskCardSchema,
   PaymentCardSchema,
+  WatchCardSchema,
 ]);
 export type Card = z.infer<typeof CardSchema>;
 

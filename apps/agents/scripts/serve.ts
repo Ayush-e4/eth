@@ -8,10 +8,10 @@ requireEnv(["DUFFEL_ACCESS_TOKEN", "LITEAPI_KEY"]);
 console.log("starting the facilitator (:8402) …");
 const facilitator = await startFacilitator();
 console.log(
-  "starting agents: SkyHop :8411, StayWise :8412, AirNest :8413, PriceGuard :8414, TripMint :8415",
+  "starting agents: SkyHop :8411, StayWise :8412, AirNest :8413, PriceGuard :8414, TripMint :8415, FareWatch :8416",
 );
 const agents = await startAgents(
-  ["skyhop", "airnest", "staywise", "priceguard", "tripmint"],
+  ["skyhop", "airnest", "staywise", "priceguard", "tripmint", "farewatch"],
   facilitator.client,
 );
 console.log("market is up. Ctrl+C to stop.");

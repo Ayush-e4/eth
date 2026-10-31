@@ -112,6 +112,7 @@ export function hireTools(
         emit({ type: "status", label: "Paying when the undo window ends" });
       });
       if ("card" in out) show(out.card);
+      if (out.status === "hired") for (const c of out.more ?? []) show(c); // e.g. a fare watch
       if (out.status === "hired" && held) await afterHire(held).catch(() => {}); // e.g. award an open task
       if (out.status === "hired")
         return JSON.stringify({

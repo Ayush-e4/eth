@@ -36,6 +36,7 @@ import type { BookingRecord } from "../src/specialists/staywise-manage";
 import { tripmint } from "../src/specialists/tripmint";
 import { JsonStore } from "../src/store";
 import { escrowMoves, escrowReleaser, jobsFile, paymentChecker, refunder } from "./agent-money";
+import { farewatchAgent } from "./farewatch-agent";
 import { keepListed } from "./keep-listed";
 import { skyhopAgent } from "./skyhop-agent";
 
@@ -73,13 +74,14 @@ export async function startFacilitator() {
   return { client: new HttpFacilitator("http://localhost:8402"), stop: () => child.kill() };
 }
 
-export type AgentName = "skyhop" | "airnest" | "staywise" | "priceguard" | "tripmint";
+export type AgentName = "skyhop" | "airnest" | "staywise" | "priceguard" | "tripmint" | "farewatch";
 const PORTS: Record<AgentName, number> = {
   skyhop: 8411,
   staywise: 8412,
   airnest: 8413,
   priceguard: 8414,
   tripmint: 8415,
+  farewatch: 8416,
 };
 const BIDDERS = new Set<AgentName>(["skyhop", "airnest", "staywise"]);
 const PRICEGUARD_STORE = fileURLToPath(new URL("../.priceguard.local.json", import.meta.url));
@@ -107,6 +109,7 @@ export async function startAgents(
       log,
     };
     if (name === "skyhop") return createSpecialist(skyhopAgent(identity), ctx);
+    if (name === "farewatch") return createSpecialist(farewatchAgent(), ctx);
     if (name === "airnest") return createSpecialist(airnest(new LiteFlightsClient(liteKey)), ctx);
     if (name === "tripmint") return createSpecialist(tripmintFor(identity), ctx);
     if (name === "priceguard") {
