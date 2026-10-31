@@ -8,6 +8,7 @@ export interface Me {
   homeCity: string | null;
   isDemo: boolean; // pays from the shared demo wallet (passkey and demo accounts)
   passkey?: boolean; // signs in with a passkey (sent by GET /me)
+  wallet?: { address: string; status: "creating" | "ready" | "failed" } | null; // Face ID wallet
   defaultMode: ChatMode;
   defaultLimitUnits: string;
   onboarded: boolean;
@@ -87,6 +88,7 @@ export interface Limit {
   chatId: string;
   chatTitle: string;
   demo: boolean;
+  via: "demo" | "wallet" | "face-id"; // who cancels it: the server, MetaMask, or Face ID
   budgetUnits: string;
   spentUnits: string | null;
   payees: string[];
@@ -99,6 +101,8 @@ export interface WalletInfo {
   account: string | null;
   address: string | null;
   shared: boolean;
+  /** Their own Face ID wallet (passkey users), with the free test USDC it got, if any. */
+  faceId: { status: "creating" | "ready" | "failed"; giftUnits: string | null } | null;
   balances: { usdcUnits: string; hbarTinybars: string } | null;
   spentUnits: string;
   limits: Limit[];

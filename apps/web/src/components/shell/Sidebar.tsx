@@ -152,11 +152,13 @@ export function Sidebar() {
               <span className="truncate font-mono text-xs text-muted">
                 {me?.address
                   ? shortAddress(me.address)
-                  : me?.passkey
-                    ? "passkey · demo wallet"
-                    : me?.isDemo
-                      ? "demo account"
-                      : "…"}
+                  : me?.wallet?.status === "ready"
+                    ? `Face ID wallet · ${shortAddress(me.wallet.address)}`
+                    : me?.passkey
+                      ? "passkey · setting up wallet"
+                      : me?.isDemo
+                        ? "demo account"
+                        : "…"}
               </span>
             </span>
           </span>

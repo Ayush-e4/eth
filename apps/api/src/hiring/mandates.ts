@@ -141,6 +141,42 @@ export async function adoptUserMandate(
   });
 }
 
+/**
+ * Passkey users: their own wallet created the mandate in a batch their Face ID signed, and we
+ * submitted it (see wallet/service). The id comes from that transaction's MandateCreated event.
+ */
+export async function adoptPasskeyMandate(
+  db: Db,
+  env: HiringEnv,
+  chat: Chat,
+  card: LimitCard,
+  m: { mandateId: bigint; wallet: string; payer: string },
+) {
+  return save(db, env, chat, card, {
+    mandateId: m.mandateId,
+    owner: m.wallet,
+    payer: m.payer,
+    budget: BigInt(card.budgetUnits),
+    payees: card.payees.map((p) => p.agent),
+    expiresAt: card.expiresAt,
+    demo: false,
+    via: "face-id",
+  });
+}
+
+/** The batch a passkey wallet signs to set this limit card. */
+export const limitCardParams = (card: LimitCard) => {
+  const addr = (a: string) => getAddress(a.toLowerCase()); // any case in, checksummed out
+  return {
+    agent: addr(card.agent),
+    token: addr(card.token),
+    budget: BigInt(card.budgetUnits),
+    perPaymentCap: BigInt(card.perPaymentCapUnits),
+    expiresAt: BigInt(card.expiresAt),
+    payees: card.payees.map((p) => addr(p.agent)),
+  };
+};
+
 async function save(
   db: Db,
   env: HiringEnv,
@@ -154,6 +190,7 @@ async function save(
     payees: string[];
     expiresAt: number;
     demo: boolean;
+    via?: "face-id";
   },
 ): Promise<MandateRow> {
   const [row] = await db
@@ -180,7 +217,7 @@ async function save(
       budget: m.budget.toString(),
       payees: m.payees,
       expiresAt: m.expiresAt,
-      via: m.demo ? "demo" : "wallet",
+      via: m.via ?? (m.demo ? "demo" : "wallet"),
     })) ?? null;
   if (logSeq === null) return row;
   await db.update(mandates).set({ logSeq }).where(eq(mandates.id, row.id));

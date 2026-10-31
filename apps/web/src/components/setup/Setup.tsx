@@ -190,7 +190,22 @@ export function Setup() {
             </div>
           )}
 
-          {at === 2 && (
+          {at === 2 && me?.passkey && (
+            <div className="flex flex-col gap-4 text-[15px] leading-relaxed text-ink-3">
+              <p>You're on Hedera testnet, so money here is free and only works here.</p>
+              <p>
+                Your passkey made you your own wallet on Hedera, and we sent it some free test USDC.
+                Nothing to install, and we pay the network fees.
+              </p>
+              <p className="rounded-xl bg-side px-4 py-3 text-sm">
+                The first time a chat needs to pay an agent, you approve a spending limit for that
+                chat with Face ID (or your fingerprint). Only your passkey can approve it, and
+                Hedera enforces it, so nobody can spend past it.
+              </p>
+            </div>
+          )}
+
+          {at === 2 && !me?.passkey && (
             <div className="flex flex-col gap-4 text-[15px] leading-relaxed text-ink-3">
               <p>You're on Hedera testnet, so money here is free and only works here.</p>
               <ul className="flex flex-col gap-2 pl-5 list-disc">

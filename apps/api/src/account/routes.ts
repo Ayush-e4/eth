@@ -1,17 +1,29 @@
+import { revokeCalls } from "@eth/mandates";
 import { and, desc, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { privateKeyToAccount } from "viem/accounts";
+import { z } from "zod";
 import { type AuthEnv, requireUser } from "../auth/routes";
 import type { Db } from "../db/client";
 import { chats, hires, mandates } from "../db/schema";
 import { type HiringEnv, hederaAccountOf, mandateClientFor } from "../hiring/env";
+import { type PasskeyWallets, WalletOpError } from "../wallet/service";
 import { balances } from "./balances";
 
 const fee = (units: bigint) => units.toString();
+const REVOKE_GAS = 800_000n; // a cancel used 0.3M on Hedera
+const FaceIdBody = z.object({
+  opId: z.uuid(),
+  response: z.looseObject({ id: z.string().max(1024), response: z.looseObject({}) }),
+});
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** What the signed-in user's agents did (Tasks) and what they spent through (Wallet). */
-export function accountRoutes(db: Db, env: HiringEnv | null) {
+export function accountRoutes(
+  db: Db,
+  env: HiringEnv | null,
+  wallets: PasskeyWallets | null = null,
+) {
   const app = new Hono<AuthEnv>();
   app.use("/tasks", requireUser(db));
   app.use("/wallet", requireUser(db));
@@ -52,11 +64,14 @@ export function accountRoutes(db: Db, env: HiringEnv | null) {
   /** Your account, your limits as the chain sees them right now, and every fee paid. */
   app.get("/wallet", async (c) => {
     const user = c.get("user");
-    const account = user.isDemo
-      ? (env?.demo.account ?? null)
-      : user.address && env
-        ? await hederaAccountOf(env.mirrorUrl, user.address as `0x${string}`)
-        : null;
+    const own = await wallets?.get(user.id, false); // a Face ID wallet, if they have one
+    const account = own?.hederaId
+      ? own.hederaId
+      : user.isDemo
+        ? (env?.demo.account ?? null)
+        : user.address && env
+          ? await hederaAccountOf(env.mirrorUrl, user.address as `0x${string}`)
+          : null;
     const rows = await db
       .select({ m: mandates, chatTitle: chats.title })
       .from(mandates)
@@ -87,6 +102,12 @@ export function accountRoutes(db: Db, env: HiringEnv | null) {
           chatId: m.chatId,
           chatTitle,
           demo: m.demo,
+          // who cancels it: the server (demo wallet), Face ID (their passkey wallet), or MetaMask
+          via: m.demo
+            ? "demo"
+            : own && m.owner.toLowerCase() === own.address.toLowerCase()
+              ? "face-id"
+              : "wallet",
           budgetUnits: fee(onchain?.budget ?? m.budgetUnits),
           spentUnits: onchain ? fee(onchain.spent) : null,
           payees: m.payees.map(
@@ -103,8 +124,9 @@ export function accountRoutes(db: Db, env: HiringEnv | null) {
     );
     return c.json({
       account,
-      address: user.address,
-      shared: user.isDemo, // demo users share one test wallet
+      address: own?.address ?? user.address,
+      faceId: own ? { status: own.status, giftUnits: own.giftUnits } : null,
+      shared: user.isDemo && !own?.hederaId, // demo users share one test wallet
       balances: account && env ? await balances(env.mirrorUrl, account, env.usdcTokenId) : null,
       spentUnits: fee(paid.reduce((s, { hire }) => s + hire.feeUnits, 0n)),
       limits,
@@ -137,6 +159,31 @@ export function accountRoutes(db: Db, env: HiringEnv | null) {
       .innerJoin(chats, eq(chats.id, mandates.chatId))
       .where(and(eq(mandates.id, id), eq(chats.userId, c.get("user").id)));
     if (!row) return c.json({ error: "no such limit" }, 404);
+    const faceId = FaceIdBody.safeParse(await c.req.json().catch(() => null));
+    if (faceId.success && wallets) {
+      // Face ID, step 2: the device signed the cancel prepared below; run it.
+      const meta = wallets.meta(c.get("user").id, faceId.data.opId);
+      if (meta?.kind !== "revoke" || meta.limitId !== id)
+        return c.json({ error: "that approval is for something else; try again" }, 409);
+      try {
+        const run = await wallets.run(
+          c.get("user").id,
+          faceId.data.opId,
+          faceId.data.response as never,
+          REVOKE_GAS,
+        );
+        await env.log?.write({
+          kind: "agentnet.mandate.revoked",
+          mandateId: row.m.mandateId.toString(),
+          registry: row.m.registry,
+          by: run.wallet,
+        });
+        return c.json({ ok: true, tx: run.hash });
+      } catch (err) {
+        if (err instanceof WalletOpError) return c.json({ error: err.message }, 422);
+        throw err;
+      }
+    }
     if (!row.m.demo) return c.json({ error: "cancel this limit from your wallet" }, 409);
     await mandateClientFor(env, row.m.registry).revoke(
       privateKeyToAccount(env.demo.key),
@@ -149,6 +196,29 @@ export function accountRoutes(db: Db, env: HiringEnv | null) {
       by: env.demo.evm,
     });
     return c.json({ ok: true });
+  });
+
+  /** Face ID, step 1: what the device signs to cancel a limit its passkey wallet owns. */
+  app.post("/wallet/limits/:id/revoke/face-id", async (c) => {
+    if (!env || !wallets) return c.json({ error: "Face ID wallets are off on this server" }, 503);
+    const user = c.get("user");
+    const id = c.req.param("id");
+    if (!UUID.test(id)) return c.json({ error: "no such limit" }, 404);
+    const [row] = await db
+      .select({ m: mandates })
+      .from(mandates)
+      .innerJoin(chats, eq(chats.id, mandates.chatId))
+      .where(and(eq(mandates.id, id), eq(chats.userId, user.id)));
+    const own = await wallets.get(user.id, false);
+    if (!row || !own || row.m.owner.toLowerCase() !== own.address.toLowerCase())
+      return c.json({ error: "no such limit" }, 404);
+    try {
+      const calls = revokeCalls(row.m.registry as `0x${string}`, row.m.mandateId);
+      return c.json(await wallets.prepare(user.id, calls, { kind: "revoke", limitId: id }));
+    } catch (err) {
+      if (err instanceof WalletOpError) return c.json({ error: err.message }, 409);
+      throw err;
+    }
   });
 
   return app;

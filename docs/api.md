@@ -47,9 +47,32 @@ one-time challenge at each sign-in.
 
 A passkey only works on the site that made it (`APP_ORIGIN`'s hostname), so a look-alike site
 can't use it. We ask for P-256 keys only, the kind phones and laptops use, so the same passkey
-can later control an on-chain wallet. New passkey accounts pay from the demo wallet (with the demo
-quotas) and keep their chats across visits; making one needs `DEMO_MODE=on`, signing back in
+can later control an on-chain wallet. New passkey accounts get their own Face ID wallet (below) and keep their chats across visits; making one needs `DEMO_MODE=on`, signing back in
 doesn't. `GET /me` says `passkey: true` for them.
+
+### Their own wallet (Face ID approves limits)
+
+Each passkey account also gets its own wallet on Hedera: a `PasskeyWallet` contract whose only
+key is that passkey (see [mandates.md](mandates.md#passkey-wallets-face-id-controls-the-wallet)).
+Sign-up makes it in the background (`passkey_wallets` table, status creating → ready) and the demo
+wallet sends it `WALLET_GIFT_UNITS` of test USDC (0.50 by default, at most
+`WALLET_GIFTS_PER_DAY` new wallets a day). We send its transactions and pay the gas; we can't
+change them.
+
+A wallet move is two calls, the same way for a limit and for a cancel:
+
+1. `POST /chats/:id/mandate/face-id {card}` (or `POST /wallet/limits/:id/revoke/face-id`): the
+   server builds the batch (approve USDC + create the limit, or revoke it), reads its digest from
+   the wallet, and returns `{opId, options}`: WebAuthn request options whose challenge is that
+   digest, for this user's passkey only, user verification required.
+2. The browser asks the device (Face ID), then `POST /chats/:id/mandate {opId, response, card}`
+   (or `POST /wallet/limits/:id/revoke {opId, response}`). The server checks it's the same op,
+   passkey, origin and challenge, and submits the batch; the contract checks the signature.
+
+An op is good for 5 minutes and runs once. `GET /me` carries `wallet: {address, status}`;
+`GET /wallet` shows the wallet as the account (`faceId: {status, giftUnits}`) and each limit's
+`via` (`face-id`, `wallet` or `demo`). The concierge pays agents from these limits exactly as from
+MetaMask ones: the registry pulls fees from the wallet, and refunds go back to it.
 
 `POST /auth/demo` ("Just looking? Try it without an account") creates a throwaway demo user with
 no wallet and no passkey: it's gone once the cookie is. Turn it off with `DEMO_MODE=off`.

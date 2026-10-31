@@ -28,6 +28,7 @@ import type { StatusCheck } from "./status/check";
 import { statusRoutes } from "./status/routes";
 import { openTaskRoutes } from "./tasks/routes";
 import type { OpenTaskService } from "./tasks/service";
+import type { PasskeyWallets } from "./wallet/service";
 import type { HumanChecks } from "./world/checks";
 import { humanCheckRoutes } from "./world/routes";
 
@@ -49,6 +50,7 @@ export interface AppDeps {
   status?: StatusCheck | null;
   catalog?: MarketCatalog | null;
   checkAgent?: AgentChecker | null;
+  wallets?: PasskeyWallets | null;
 }
 
 /** A listed agent's name and skill, for starting a chat with it alone. */
@@ -83,7 +85,7 @@ export function createApp(db: Db, config: Config, deps: AppDeps = {}) {
   });
 
   app.get("/health", (c) => c.json(health("api")));
-  app.route("/", authRoutes(db, config));
+  app.route("/", authRoutes(db, config, deps.wallets ?? null));
   const { concierge = null, hiring = null } = deps;
   app.route(
     "/",
@@ -97,13 +99,19 @@ export function createApp(db: Db, config: Config, deps: AppDeps = {}) {
   );
   app.route(
     "/",
-    mandateRoutes(db, hiring?.env ?? null, deps.demo ?? null, deps.limitOffers ?? undefined),
+    mandateRoutes(
+      db,
+      hiring?.env ?? null,
+      deps.demo ?? null,
+      deps.limitOffers ?? undefined,
+      deps.wallets ?? null,
+    ),
   );
   app.route("/", demoRoutes(db, deps.demo ?? null));
   app.route("/", statusRoutes(deps.status ?? null));
   app.route("/", marketRoutes(deps.catalog ?? null));
   app.route("/", builderRoutes(db, deps.checkAgent ?? null));
-  app.route("/", accountRoutes(db, hiring?.env ?? null));
+  app.route("/", accountRoutes(db, hiring?.env ?? null, deps.wallets ?? null));
   app.route("/", spendLogRoutes(hiring?.env ?? null, deps.logNames));
   app.route("/", humanCheckRoutes(db, deps.humanChecks ?? null, hiring?.service ?? null));
   app.route("/", openTaskRoutes(db, deps.tasks ?? null));

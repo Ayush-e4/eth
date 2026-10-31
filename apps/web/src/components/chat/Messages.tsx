@@ -25,7 +25,7 @@ export function Messages({
   turns: Turn[];
   onReply: (t: string) => void;
   busy: boolean;
-  ctx: Pick<CardCtx, "chatId" | "isDemo">;
+  ctx: Pick<CardCtx, "chatId" | "isDemo" | "faceId">;
 }) {
   // Only the latest reply's cards can be acted on; older ones are history.
   const latest = turns.findLast((t) => t.role === "assistant")?.id;
