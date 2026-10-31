@@ -1,5 +1,6 @@
 import { serve } from "@hono/node-server";
 import { createApp } from "./app";
+import { closeInterruptedTurns } from "./chats/interrupted";
 import { claudeConcierge } from "./concierge/concierge";
 import { arkivMarket } from "./concierge/market";
 import { loadConfig } from "./config";
@@ -23,7 +24,7 @@ const env = loadHiringEnv();
 const world = loadWorldConfig();
 // Undo windows (Hedera scheduled payments) for "Auto" chats; UNDO_SECONDS=0 turns them off.
 const undoSeconds = Number(process.env.UNDO_SECONDS ?? 60);
-const undo = env && undoSeconds > 0 ? undoWindows(env, undoSeconds) : null;
+const undo = env && undoSeconds > 0 ? undoWindows(db, env, undoSeconds) : null;
 const hiring = env
   ? {
       env,
@@ -39,7 +40,18 @@ const checks =
     ? humanChecks(db, worldClient(world), (chatId, code) => hiring.service.markHuman(chatId, code))
     : null;
 // Open tasks: the concierge posts jobs on Arkiv and agents bid by themselves.
-const tasks = hiring ? openTaskService(hiring.env, hiring.service) : null;
+const tasks = hiring ? openTaskService(db, hiring.env, hiring.service) : null;
+// Work in progress is in the database; pick up what a restart interrupted.
+void closeInterruptedTurns(db)
+  .then(
+    (ids) => ids.length && console.log(`${ids.length} chat(s) told their last turn was cut off`),
+  )
+  .catch((err) => console.error("closing interrupted turns failed:", err));
+void checks?.resume().catch((err) => console.error("resuming World ID checks failed:", err));
+void undo
+  ?.recover()
+  .then((n) => n && console.log(`cancelled ${n} payment(s) left waiting by the last run`))
+  .catch((err) => console.error("recovering undo windows failed:", err));
 if (!world) console.warn("World ID is off: set WORLD_ID_CLIENT_ID and WORLD_ID_CLIENT_SECRET");
 if (!hiring)
   console.warn(

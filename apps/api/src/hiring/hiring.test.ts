@@ -71,6 +71,7 @@ beforeEach(async () => {
   chat = await chatStore(db).create(u as never);
 });
 
+const NAMES: Record<string, string> = { [AIRNEST]: "AirNest" };
 const giveMandate = (payees: string[]) =>
   db.insert(mandates).values({
     chatId: chat.id,
@@ -79,6 +80,8 @@ const giveMandate = (payees: string[]) =>
     payer: "0.0.1001",
     budgetUnits: 300_000n,
     payees,
+    // as when the user approved the limit card: the names it showed
+    payeeNames: Object.fromEntries(payees.map((p) => [p.toLowerCase(), NAMES[p] ?? p])),
     expiresAt: new Date(Date.now() + 3_600_000),
   });
 
@@ -163,10 +166,10 @@ describe("hiring from a chat", () => {
     expect(first.status).toBe("needs_approval");
     const code = first.status === "needs_approval" ? first.card.code : "";
 
-    s.noteUserMessage(chat.id, "Approve zzzzzz"); // wrong code: nothing happens
+    await s.noteUserMessage(chat.id, "Approve zzzzzz"); // wrong code: nothing happens
     expect((await s.hire(ask, "q1", "x", "flights")).status).toBe("needs_approval");
 
-    s.noteUserMessage(chat.id, `Approve ${code}`);
+    await s.noteUserMessage(chat.id, `Approve ${code}`);
     expect((await s.hire(ask, "q1", "x", "flights")).status).toBe("hired");
     expect(buy).toHaveBeenCalledOnce();
   });
@@ -177,7 +180,7 @@ describe("hiring from a chat", () => {
     const s = hiringService(db, env);
     await s.quotes(ask, "flights", {});
     const first = await s.hire(ask, "q1", "x", "flights");
-    s.noteUserMessage(
+    await s.noteUserMessage(
       chat.id,
       `Decline ${first.status === "needs_approval" ? first.card.code : ""}`,
     );
@@ -233,15 +236,15 @@ describe("hiring from a chat", () => {
     expect(first.status === "needs_approval" && first.card.human).toBe(true);
     const code = first.status === "needs_approval" ? first.card.code : "";
 
-    s.noteUserMessage(chat.id, `Approve ${code}`); // typed, but no human check yet
+    await s.noteUserMessage(chat.id, `Approve ${code}`); // typed, but no human check yet
     expect((await s.hire(ask, "q1", "x", "flights")).status).toBe("needs_approval");
     expect(buy).not.toHaveBeenCalled();
 
     const again = await s.hire(ask, "q1", "x", "flights");
     const code2 = again.status === "needs_approval" ? again.card.code : "";
-    expect(s.pendingApproval(chat.id, code2)).toBe(true);
-    s.markHuman(chat.id, code2);
-    s.noteUserMessage(chat.id, `Approve ${code2}`);
+    expect(await s.pendingApproval(chat.id, code2)).toBe(true);
+    await s.markHuman(chat.id, code2);
+    await s.noteUserMessage(chat.id, `Approve ${code2}`);
     expect((await s.hire(ask, "q1", "x", "flights")).status).toBe("hired");
     expect(buy).toHaveBeenCalledOnce();
   });
@@ -253,8 +256,8 @@ describe("hiring from a chat", () => {
     await s.quotes(ask, "flights", {});
     const first = await s.hire(ask, "q1", "x", "flights");
     const code = first.status === "needs_approval" ? first.card.code : "";
-    s.markHuman(chat.id, code);
-    s.noteUserMessage(chat.id, `Approve ${code}`);
+    await s.markHuman(chat.id, code);
+    await s.noteUserMessage(chat.id, `Approve ${code}`);
     // the check took a while: fresh quotes (a new quote key, so a new ref), same agent and fee
     const requote = (key: string) =>
       vi

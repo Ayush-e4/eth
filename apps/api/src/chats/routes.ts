@@ -39,7 +39,7 @@ const isUuid = (s: string) => z.uuid().safeParse(s).success;
 export function chatRoutes(
   db: Db,
   concierge: Concierge | null,
-  onUserMessage: (chatId: string, text: string) => void = () => {},
+  onUserMessage: (chatId: string, text: string) => unknown = () => {},
 ) {
   const hiredIn = (chatId: string) =>
     db.select().from(hires).where(eq(hires.chatId, chatId)).orderBy(asc(hires.createdAt));
@@ -96,7 +96,7 @@ export function chatRoutes(
       text: withCardNotes(m.text, m.cards),
     }));
     await store.add(chat, "user", body.data.text);
-    onUserMessage(chat.id, body.data.text); // e.g. "Approve abc123"
+    await onUserMessage(chat.id, body.data.text); // e.g. "Approve abc123"
 
     const hired = (await hiredIn(chat.id)).map(
       (h) =>

@@ -1,6 +1,8 @@
 import { readBids } from "@eth/agents/hiring";
 import { claimTask, postTask, setTaskStatus } from "@eth/arkiv";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { Db } from "../db/client";
+import { chats, users } from "../db/schema";
 import type { HiringEnv } from "../hiring/env";
 import { hiringService } from "../hiring/service";
 import { testDb } from "../test/db";
@@ -43,10 +45,14 @@ const bid = {
 
 let tasks: ReturnType<typeof openTaskService>;
 let hiring: ReturnType<typeof hiringService>;
+let db: Db;
 beforeEach(async () => {
   vi.clearAllMocks();
-  hiring = hiringService(await testDb(), env);
-  tasks = openTaskService(env, hiring, { reader: {} as never, writer: {} as never });
+  db = await testDb();
+  const [u] = await db.insert(users).values({ isDemo: true }).returning();
+  await db.insert(chats).values({ id: chat.id, userId: u?.id ?? "", title: "t" });
+  hiring = hiringService(db, env);
+  tasks = openTaskService(db, env, hiring, { reader: {} as never, writer: {} as never });
 });
 
 const roundFor = (task: string) => ({
@@ -89,7 +95,7 @@ describe("open tasks on Arkiv", () => {
     expect(first?.refs.map((r) => r.ref)).toEqual(["q1"]);
     expect(again?.refs.map((r) => r.ref)).toEqual(["q1"]); // polling doesn't mint new refs
     expect(first?.status).toBe("open");
-    expect(await tasks.bids("another-chat", task)).toBeNull();
+    expect(await tasks.bids("99999999-2222-3333-4444-555555555555", task)).toBeNull();
   });
 
   it("records the award on Arkiv once, and only for a bid on our own task", async () => {
@@ -102,7 +108,7 @@ describe("open tasks on Arkiv", () => {
     vi.mocked(readBids).mockResolvedValue(roundFor(task) as never);
     await tasks.bids(chat.id, task);
     // the hire tool reads the bid before paying (a hire drops its refs) and hands it over
-    const held = hiring.held(chat.id, "q1");
+    const held = await hiring.held(chat.id, "q1");
     expect(held).not.toBeNull();
     await tasks.award(chat.id, held as NonNullable<typeof held>);
     await tasks.award(chat.id, held as NonNullable<typeof held>);
@@ -121,8 +127,25 @@ describe("open tasks on Arkiv", () => {
     expect((await tasks.bids(chat.id, task))?.status).toBe("awarded");
 
     // a plain quote (not a bid on a task we posted) awards nothing
-    hiring.hold(chat.id, roundFor("chat-plain-quote") as never);
+    await hiring.hold(chat.id, roundFor("chat-plain-quote") as never);
     await tasks.award(chat.id, { round: { task: "chat-plain-quote" }, option: bid as never });
+    expect(claimTask).toHaveBeenCalledOnce();
+  });
+
+  it("a task posted before a restart keeps its bids, refs and award", async () => {
+    const { task } = await tasks.post(chat, {
+      skill: "flights",
+      title: "t",
+      input: {},
+      minutes: 10,
+    });
+    vi.mocked(readBids).mockResolvedValue(roundFor(task) as never);
+    const after = hiringService(db, env); // restarted
+    const again = openTaskService(db, env, after, { reader: {} as never, writer: {} as never });
+    const b = await again.bids(chat.id, task);
+    expect(b?.status).toBe("open");
+    expect(b?.refs.map((r) => r.ref)).toEqual(["q1"]);
+    await again.award(chat.id, (await after.held(chat.id, "q1")) as never);
     expect(claimTask).toHaveBeenCalledOnce();
   });
 });

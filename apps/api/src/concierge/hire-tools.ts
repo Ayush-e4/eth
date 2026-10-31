@@ -21,7 +21,7 @@ export function hireTools(
   show: (card: Card) => void,
   emit: (event: ConciergeEvent) => void,
   afterHire: (
-    held: NonNullable<ReturnType<HiringService["held"]>>,
+    held: NonNullable<Awaited<ReturnType<HiringService["held"]>>>,
   ) => Promise<void> = async () => {},
 ) {
   const agentInput = betaZodTool({
@@ -95,7 +95,7 @@ export function hireTools(
     }),
     run: async ({ quote, reason }) => {
       emit({ type: "status", label: "Hiring" });
-      const held = hiring.held(chat.id, quote); // a hire drops its refs, so read it first
+      const held = await hiring.held(chat.id, quote); // a hire drops its refs, so read it first
       const out = await hiring.hire(chat, quote, reason, `booked from an AgentNet chat`, (card) => {
         show(card); // the payment waits out its undo window; the user can cancel it
         emit({ type: "status", label: "Paying when the undo window ends" });
