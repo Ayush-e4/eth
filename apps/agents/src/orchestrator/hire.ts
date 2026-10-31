@@ -1,7 +1,7 @@
 import { type ArkivReader, type ArkivWriter, openJob, rateAgent, recordReceipt } from "@eth/arkiv";
 import type { Delegation } from "@eth/shared";
 import type { PaidResponse } from "@eth/x402";
-import type { LocalAccount, PublicClient } from "viem";
+import type { Hex, LocalAccount, PublicClient } from "viem";
 import { signedHeaders } from "../auth";
 import type { Trip } from "../trip";
 import { awaitJob, HireFailed, HirePending, readJob } from "./job-client";
@@ -20,6 +20,17 @@ export interface HireDeps {
   inrRates: InrRates; // to compare quotes in different currencies
   log: (line: string) => void;
   jobWaitMs?: number; // how long to wait on an agent that's still working (default 2 min)
+  /** Pay on delivery: the buyer pays the held fee out once it has the result. Without it, the
+   *  agent claims it after the review window. Returns the Hedera transaction id. */
+  release?: (escrowId: Hex) => Promise<string>;
+}
+
+/** A fee paid on delivery: held, marked delivered by the agent, then released by us. */
+export interface HireEscrow {
+  id: Hex;
+  deliveredTx?: string;
+  releasedTx?: string;
+  releaseFailed?: string; // then the agent can claim it after its review window
 }
 
 export interface Hire {
@@ -36,6 +47,7 @@ export interface Hire {
   jobKey: `0x${string}`;
   result: unknown;
   rejected: string[]; // why other candidates lost or were skipped
+  escrow?: HireEscrow;
 }
 
 /**
@@ -54,6 +66,7 @@ export interface Delivered {
   result: unknown;
   hederaTx: string;
   payTo: string; // the agent's Hedera account
+  escrow?: { id: Hex; deliveredTx?: string }; // paid on delivery: still to release
 }
 
 const failure = (skill: string, status: number | string, body: WorkReply) => {
@@ -97,7 +110,12 @@ export async function buy(
     }
     const view = await awaitJob(pick.endpoint, pick.key, signer, { timeoutMs: d.jobWaitMs });
     if (view?.status === "delivered")
-      return { result: view.result, hederaTx: view.paymentTx ?? "", payTo: view.payTo };
+      return {
+        result: view.result,
+        hederaTx: view.paymentTx ?? "",
+        payTo: view.payTo,
+        ...(view.escrow ? { escrow: view.escrow } : {}),
+      };
     if (view?.status === "failed") throw failure(skill, "job failed", view);
     throw new HirePending(pick.endpoint, pick.key, view);
   };
@@ -117,6 +135,7 @@ export async function buy(
         result: reply.result,
         hederaTx: paid.settlement.transaction,
         payTo: paid.requirements.payTo,
+        ...(paid.escrowId ? { escrow: reply.escrow ?? { id: paid.escrowId } } : {}),
       };
   } catch (err) {
     if (err instanceof HirePending || err instanceof HireFailed) throw err;
@@ -131,12 +150,13 @@ export async function recordHire(
   round: QuoteRound,
   pick: QuoteOption,
   label: string,
-  d: Pick<HireDeps, "buyerWriter" | "platformWriter" | "mandateId" | "payer" | "log">,
+  d: Pick<HireDeps, "buyerWriter" | "platformWriter" | "mandateId" | "payer" | "log" | "release">,
   choice: string,
   done: Delivered,
 ): Promise<Hire> {
   const { skill, task } = round;
   const { hederaTx } = done;
+  const escrow = done.escrow && (await releaseEscrow(done.escrow, d, skill));
 
   // From here the agent is paid and the job done. The public records below must never lose that:
   // if Arkiv refuses one, log it and still return the hire (the payment is proof on Hedera).
@@ -194,11 +214,30 @@ export async function recordHire(
     jobKey: job?.entityKey ?? "0x", // "0x": paid, but Arkiv didn't take the job record
     result: done.result,
     rejected: otherOptions(round, pick.key),
+    ...(escrow ? { escrow } : {}),
   };
+}
+
+/** We have the result: pay the held fee out to the agent. */
+async function releaseEscrow(
+  e: NonNullable<Delivered["escrow"]>,
+  d: Pick<HireDeps, "release" | "log">,
+  skill: string,
+): Promise<HireEscrow> {
+  if (!d.release) return { ...e, releaseFailed: "this buyer doesn't release; the agent claims it" };
+  try {
+    const releasedTx = await d.release(e.id);
+    d.log(`[${skill}] released the escrowed fee → ${releasedTx}`);
+    return { ...e, releasedTx };
+  } catch (err) {
+    d.log(`[${skill}] couldn't release the escrow: ${String(err).slice(0, 200)}`);
+    return { ...e, releaseFailed: String(err).slice(0, 200) };
+  }
 }
 
 interface WorkReply {
   result?: unknown;
+  escrow?: { id: Hex; deliveredTx?: string };
   error?: string;
   detail?: string;
   refund?: { transaction?: string; failed?: string };

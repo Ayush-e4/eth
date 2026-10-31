@@ -14,6 +14,8 @@ export {
 export { EscrowClient } from "./escrow";
 export {
   decodeX402Authorization,
+  decodeX402EscrowAuthorization,
+  mandateIdOfAuthorization,
   type PaymentCheckDeps,
   type PaymentState,
   paymentState,

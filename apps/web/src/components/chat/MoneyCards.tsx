@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { ApiError, api, usdc } from "@/lib/api";
 import { createMandateInWallet } from "@/lib/wallet";
 import { CheckIcon, ShieldIcon } from "../icons";
+import { EscrowSteps } from "./EscrowSteps";
 import { HumanApproval } from "./HumanApproval";
 
 type Of<T extends Card["type"]> = Extract<Card, { type: T }>;
@@ -218,7 +219,10 @@ export function HiredCard({ card }: { card: Of<"hired"> }) {
             from limit #{card.subMandateId}, a slice of this chat's limit:
           </p>
           {card.subHires.map((s) => (
-            <HiredRow key={s.hederaTx} card={{ ...card, ...s, summary: "", subHires: undefined }} />
+            <HiredRow
+              key={s.hederaTx}
+              card={{ ...card, ...s, summary: "", subHires: undefined, escrow: undefined }}
+            />
           ))}
         </section>
       ) : null}
@@ -274,6 +278,7 @@ function HiredRow({ card }: { card: Of<"hired"> }) {
           </a>
         )}
       </span>
+      <EscrowSteps card={card} />
     </section>
   );
 }

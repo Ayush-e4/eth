@@ -7,7 +7,7 @@ import { HttpFacilitator } from "@eth/x402";
 import { serve } from "@hono/node-server";
 import { jobStore } from "../../src/specialists/jobs";
 import { createSpecialist, type SpecialistDef } from "../../src/specialists/server";
-import { jobsFile, paymentChecker, refunder } from "../agent-money";
+import { escrowMoves, jobsFile, paymentChecker, refunder } from "../agent-money";
 import { keepListed } from "../keep-listed";
 import { loadCustom, sourceOf } from "./custom-agents";
 
@@ -31,6 +31,7 @@ const agent = createSpecialist(mod.default(), {
   usdcTokenId: NETWORKS.testnet.usdcTokenId,
   executorId: DEPLOYMENTS.testnet.mandateRegistryId,
   refund: refunder(identity),
+  escrow: escrowMoves(identity), // pay on delivery (ESCROW=off to take fees directly)
   jobs: jobStore(jobsFile(slug)),
   paymentState: paymentChecker(),
   log,

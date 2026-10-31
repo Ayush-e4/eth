@@ -36,7 +36,7 @@ import { staywise } from "../src/specialists/staywise";
 import type { BookingRecord } from "../src/specialists/staywise-manage";
 import { tripmint } from "../src/specialists/tripmint";
 import { JsonStore } from "../src/store";
-import { jobsFile, paymentChecker, refunder } from "./agent-money";
+import { escrowMoves, escrowReleaser, jobsFile, paymentChecker, refunder } from "./agent-money";
 import { keepListed } from "./keep-listed";
 
 export function requireEnv(keys: string[]) {
@@ -99,6 +99,7 @@ export async function startAgents(
       usdcTokenId: net.usdcTokenId,
       executorId: DEPLOYMENTS.testnet.mandateRegistryId,
       refund: refunder(identity),
+      escrow: escrowMoves(identity), // pay on delivery for /work
       jobs: jobStore(jobsFile(name)),
       paymentState: checkPayment,
       log,
@@ -227,6 +228,7 @@ function tripmintFor(identity: SpecialistIdentity) {
         }),
         mandateId,
         payer: delegation.payer,
+        release: escrowReleaser(identity), // pays the agents it hired once they deliver
       };
     },
     collect: collectQuotes,

@@ -200,6 +200,7 @@ export function hiringService(
         ...(await quoteDeps()),
         buyerWriter: arkivWriter(env.concierge.key),
         platformWriter: arkivWriter(env.demo.key),
+        ...(env.release ? { release: env.release } : {}), // pay on delivery: we pay it out
         payingFetch: createPayingFetch({
           agent: privateKeyToAccount(env.concierge.key),
           mandateId: m.mandateId,

@@ -1,13 +1,7 @@
-import { mandateRegistryAbi, revertName } from "@eth/mandates";
+import { mandateIdOfAuthorization, mandateRegistryAbi, revertName } from "@eth/mandates";
 import { type Client, ContractExecuteTransaction } from "@hiero-ledger/sdk";
 import type { SettleResponse, VerifyResponse } from "@x402/core/types";
-import {
-  decodeAbiParameters,
-  encodeFunctionData,
-  type Hex,
-  type PublicClient,
-  recoverMessageAddress,
-} from "viem";
+import { encodeFunctionData, type Hex, type PublicClient, recoverMessageAddress } from "viem";
 import { checkSettlement, type MirrorTx } from "../record-checks";
 import { assetToEvm, longZero, type MirrorResolver } from "../resolve";
 import {
@@ -24,7 +18,7 @@ import {
   X402_VERSION,
 } from "../types";
 import type { PaymentScheduler } from "./scheduled";
-import { validateExecutorPayment } from "./validate";
+import { escrowTerms, validateExecutorPayment } from "./validate";
 
 export interface ExecutorFacilitatorDeps {
   network: HederaCaip;
@@ -32,6 +26,7 @@ export interface ExecutorFacilitatorDeps {
   feePayerId: string; // our operator account (pays network fees)
   feePayerEvm: `0x${string}`;
   gas: bigint; // the limit we simulate with AND submit with
+  escrowGas?: bigint; // the same for pay on delivery, which stores the escrow (default 700k)
   hedera: Client;
   evm: PublicClient; // JSON-RPC (Hashio) for simulation
   mirror: MirrorResolver;
@@ -48,11 +43,7 @@ export interface ExecutorFacilitatorDeps {
   }) => Promise<void>;
 }
 
-const mandateOf = (authorization: Hex) =>
-  decodeAbiParameters(
-    [{ type: "uint256" }, { type: "uint256" }, { type: "uint256" }, { type: "bytes" }],
-    authorization,
-  )[0].toString();
+const mandateOf = (authorization: Hex) => mandateIdOfAuthorization(authorization).toString();
 
 export interface SettledInfo {
   transaction: string;
@@ -62,10 +53,13 @@ export interface SettledInfo {
   amount: string;
   executor: string;
   authorization: Hex;
+  /** Paid on delivery: the fee is held in the registry (`executor`), not with `payTo`. */
+  escrow: boolean;
 }
 
 /**
- * x402 facilitator for Hedera `exact` + `transferExecutor` (spec Phases 3–4).
+ * x402 facilitator for Hedera `exact` + `transferExecutor` (spec Phases 3–4), paid at once
+ * (`executeTransfer`) or on delivery (`executeEscrowTransfer`, when the payee asks for escrow).
  * Verification = validation + admission + address resolution + simulation.
  * Settlement = ContractExecuteTransaction + proof from the mirror records.
  */
@@ -104,7 +98,7 @@ export class ExecutorFacilitator {
       const { invalidReason, invalidMessage } = prepared.invalid;
       return { ...base, success: false, errorReason: invalidReason, errorMessage: invalidMessage };
     }
-    const { key, executor, data, payer, authorization } = prepared;
+    const { key, executor, data, payer, authorization, escrow, gas } = prepared;
     if (this.inFlight.has(key)) {
       return { ...base, success: false, errorReason: ERR.duplicateInFlight, payer };
     }
@@ -117,7 +111,7 @@ export class ExecutorFacilitator {
         const pending = await this.d.scheduler.create({
           key,
           executor,
-          gas: this.d.gas,
+          gas,
           data,
           seconds: undo.data.seconds,
           mandateId: mandateOf(authorization),
@@ -146,7 +140,7 @@ export class ExecutorFacilitator {
       } else {
         const res = await new ContractExecuteTransaction()
           .setContractId(executor)
-          .setGas(Number(this.d.gas))
+          .setGas(Number(gas))
           .setFunctionParameters(Buffer.from(data.slice(2), "hex"))
           .execute(this.d.hedera);
         transaction = res.transactionId.toString();
@@ -156,7 +150,7 @@ export class ExecutorFacilitator {
       const records = await this.d.fetchRecords(transaction);
       const verdict = checkSettlement(records, {
         payer,
-        payTo: req.payTo,
+        payTo: escrow ? executor : req.payTo, // escrow: the registry holds it until delivery
         asset: req.asset,
         amount: BigInt(req.amount),
         feePayer: this.d.feePayerId,
@@ -179,6 +173,7 @@ export class ExecutorFacilitator {
         amount: req.amount,
         executor,
         authorization,
+        escrow,
       });
       return { ...base, transaction, payer, success: true, amount: req.amount };
     } catch (err) {
@@ -202,6 +197,10 @@ export class ExecutorFacilitator {
     });
     if (!v.isValid) return { ok: false as const, invalid: v };
     const { payer, executor, authorization } = v.payload;
+    const terms = escrowTerms(req, authorization as Hex);
+    if (!terms.isValid) return this.fail(terms.invalidReason, terms.invalidMessage, payer);
+    const functionName = terms.escrow ? "executeEscrowTransfer" : "executeTransfer";
+    const gas = terms.escrow ? (this.d.escrowGas ?? 700_000n) : this.d.gas;
 
     if (await this.d.mirror.hasCustomFees(req.asset).catch(() => true)) {
       return this.fail(
@@ -229,26 +228,31 @@ export class ExecutorFacilitator {
       BigInt(req.amount),
       authorization as Hex,
     ] as const;
-    const data = encodeFunctionData({
-      abi: mandateRegistryAbi,
-      functionName: "executeTransfer",
-      args,
-    });
+    const data = encodeFunctionData({ abi: mandateRegistryAbi, functionName, args });
     try {
       // Same call, same gas limit as settlement; viem decodes the registry's custom errors.
       await this.d.evm.simulateContract({
         account: this.d.feePayerEvm,
         address: longZero(executor),
         abi: mandateRegistryAbi,
-        functionName: "executeTransfer",
+        functionName,
         args,
-        gas: this.d.gas,
+        gas,
       });
     } catch (err) {
       return this.fail(ERR.simulationReverted, revertName(err), payer);
     }
     const key = paymentKey(this.d.network, executor, payer, authorization);
-    return { ok: true as const, key, executor, data, payer, authorization: authorization as Hex };
+    return {
+      ok: true as const,
+      key,
+      executor,
+      data,
+      payer,
+      authorization: authorization as Hex,
+      escrow: terms.escrow,
+      gas,
+    };
   }
 
   /** A payment waiting out its undo window, by payment key. */

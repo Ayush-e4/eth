@@ -1,3 +1,5 @@
+import { decodeX402EscrowAuthorization } from "@eth/mandates";
+import type { Hex } from "viem";
 import {
   ERR,
   ExecutorExtraSchema,
@@ -82,4 +84,28 @@ export function validateExecutorPayment(
     return invalid(ERR.executorNotAdmitted, `executor ${executor} is not admitted`);
   }
   return { isValid: true, payload: parsed.data };
+}
+
+/**
+ * Pay on delivery, when the payee asks for it: the authorization must be the escrow form, signed
+ * on the payee's terms (no longer a review window, at least `deliverSeconds` to deliver). The
+ * terms come from the payee's requirements, never from what the client sent.
+ */
+export function escrowTerms(
+  req: PaymentRequirements,
+  authorization: Hex,
+): Invalid | { isValid: true; escrow: boolean } {
+  const terms = ExecutorExtraSchema.safeParse(req.extra).data?.escrow;
+  if (!terms) return { isValid: true, escrow: false };
+  let a: ReturnType<typeof decodeX402EscrowAuthorization>;
+  try {
+    a = decodeX402EscrowAuthorization(authorization);
+  } catch {
+    return invalid(ERR.payloadAuthorization, "not an escrow (pay on delivery) authorization");
+  }
+  if (a.reviewSeconds > terms.reviewSeconds)
+    return invalid(ERR.escrowTerms, `review window ${a.reviewSeconds}s > ${terms.reviewSeconds}s`);
+  if (a.deliverBy < a.validBefore + BigInt(terms.deliverSeconds))
+    return invalid(ERR.escrowTerms, `deliver-by leaves under ${terms.deliverSeconds}s to deliver`);
+  return { isValid: true, escrow: true };
 }

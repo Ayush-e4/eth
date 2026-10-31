@@ -1,5 +1,5 @@
 import { createClient, type HederaConfig, NETWORKS, submitMessage } from "@eth/hedera";
-import { DEPLOYMENTS, hederaTestnet } from "@eth/mandates";
+import { DEPLOYMENTS, hederaTestnet, mandateIdOfAuthorization } from "@eth/mandates";
 import {
   ExecutorFacilitator,
   MirrorResolver,
@@ -7,7 +7,7 @@ import {
   paymentScheduler,
 } from "@eth/x402";
 import { PrivateKey } from "@hiero-ledger/sdk";
-import { createPublicClient, decodeAbiParameters, http } from "viem";
+import { createPublicClient, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
 export interface FacilitatorEnv {
@@ -72,10 +72,7 @@ export function buildFacilitator(env: FacilitatorEnv) {
       await log({ kind: "x402.scheduled", ...s, executesAt: new Date(s.executesAt).toISOString() });
     },
     onSettled: async (s) => {
-      const [mandateId] = decodeAbiParameters(
-        [{ type: "uint256" }, { type: "uint256" }, { type: "uint256" }, { type: "bytes" }],
-        s.authorization,
-      );
+      const mandateId = mandateIdOfAuthorization(s.authorization);
       await log({
         kind: "x402.settled",
         mandateId: mandateId.toString(),
@@ -85,6 +82,7 @@ export function buildFacilitator(env: FacilitatorEnv) {
         amount: s.amount,
         executor: s.executor,
         transaction: s.transaction,
+        ...(s.escrow ? { heldInEscrow: true } : {}), // paid on delivery: the registry holds it
       });
     },
   });

@@ -72,6 +72,27 @@ On start, each agent runs `recover()` on the jobs the last run left unfinished:
 - **`working`**: it stopped in the middle of the job. Doing the job again could book twice with
   the airline or hotel, so the fee is refunded and the job is marked `failed`.
 
+## Pay on delivery (escrow)
+
+Agents ask for their `/work` fee **on delivery** (x402 `extra.escrow`, terms 15 min to deliver,
+15 min to review; `ESCROW=off` turns it off for an agent). The buyer signs an `EscrowAuth`
+instead of a `PaymentAuth`, and the facilitator calls `executeEscrowTransfer`: the same mandate
+checks, but the USDC lands in MandateRegistry, not with the agent. Then:
+
+1. **Delivered.** After the job, the agent calls `markDelivered(escrowId, sha256(result))` from
+   its own Hedera account, before it answers, and its job view carries `escrow { id, deliveredTx }`.
+2. **Paid out.** The buyer releases it once it has the result: the API with the concierge's key,
+   TripMint for the agents it hires. The chat card shows held → delivered → paid out, each
+   linked on HashScan.
+3. **Failed job.** The agent calls `refund(escrowId)`: the USDC goes back to the payer and the
+   spent amount back to the limit.
+
+Every 2 minutes each agent sweeps its open escrows (`escrow.ts`): it retries a delivery or
+refund that failed, closes the ones the buyer released, and **claims** a fee the buyer didn't
+release within the review window. A buyer that doesn't release (the MCP server has no HBAR)
+therefore still pays, 15 minutes later. Every move needs a little HBAR for gas (about 0.06 HBAR
+each): `pnpm setup:testnet --fix` tops up the concierge and the agents.
+
 ## Limits
 
 - One agent process per database: SQLite's single writer is what makes the claim atomic.

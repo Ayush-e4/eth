@@ -1,6 +1,12 @@
 import { loadIdentities } from "@eth/agents/hiring";
 import { createClient, NETWORKS, type SpendLog, spendLog } from "@eth/hedera";
-import { DEPLOYMENTS, hederaTestnet, MandateClient, tokenIdToEvmAddress } from "@eth/mandates";
+import {
+  DEPLOYMENTS,
+  EscrowClient,
+  hederaTestnet,
+  MandateClient,
+  tokenIdToEvmAddress,
+} from "@eth/mandates";
 import type { Address, Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
@@ -22,6 +28,12 @@ export interface HiringEnv {
   mirrorUrl: string;
   /** The public spend log on Hedera (HCS); null when SPEND_LOG_TOPIC_ID isn't set. */
   log: SpendLog | null;
+  /**
+   * Pay on delivery: once the agent delivered, the concierge (the mandate's agent) pays the held
+   * fee out. Sent from the concierge's own Hedera account (it needs a little HBAR for gas; see
+   * `pnpm setup:testnet`). Returns the transaction hash.
+   */
+  release?: (escrowId: Hex) => Promise<string>;
 }
 
 const hex = (k: string) => (k.startsWith("0x") ? k : `0x${k}`) as Hex;
@@ -49,6 +61,7 @@ export function loadHiringEnv(env: NodeJS.ProcessEnv = process.env): HiringEnv |
         env.HEDERA_PRIVATE_KEY, // the operator holds the topic's submit key, like the facilitator
       )
     : null;
+  const escrow = new EscrowClient(DEPLOYMENTS.testnet.mandateRegistry, hederaTestnet);
   return {
     concierge,
     demo: {
@@ -63,6 +76,15 @@ export function loadHiringEnv(env: NodeJS.ProcessEnv = process.env): HiringEnv |
     usdcTokenId: net.usdcTokenId,
     mirrorUrl: net.mirrorUrl,
     log,
+    // One retry: the relay can turn down a transaction it would take a moment later.
+    release: async (id) => {
+      const go = async () =>
+        (await escrow.release(privateKeyToAccount(concierge.key), id)).transactionHash;
+      return go().catch(async () => {
+        await new Promise((r) => setTimeout(r, 3000));
+        return go();
+      });
+    },
   };
 }
 

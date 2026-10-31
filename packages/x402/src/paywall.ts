@@ -8,6 +8,7 @@ import type { PaymentRequired } from "@x402/core/types";
 import type { MiddlewareHandler } from "hono";
 import type { Facilitator } from "./facilitator-client";
 import {
+  type EscrowTerms,
   HEADERS,
   type HederaCaip,
   type PaymentPayload,
@@ -50,6 +51,8 @@ export interface PaywallOptions {
   facilitator: Facilitator;
   description?: string;
   maxTimeoutSeconds?: number;
+  /** Paid on delivery: the fee waits in MandateRegistry until the job is delivered. */
+  escrow?: EscrowTerms;
 }
 
 /**
@@ -65,7 +68,11 @@ export function paywall(o: PaywallOptions): MiddlewareHandler {
     amount: o.amount,
     payTo: o.payTo,
     maxTimeoutSeconds: o.maxTimeoutSeconds ?? 120,
-    extra: { assetTransferMethod: TRANSFER_EXECUTOR, executors: o.executors },
+    extra: {
+      assetTransferMethod: TRANSFER_EXECUTOR,
+      executors: o.executors,
+      ...(o.escrow ? { escrow: o.escrow } : {}),
+    },
   };
 
   return async (c, next) => {

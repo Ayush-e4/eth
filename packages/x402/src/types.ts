@@ -20,10 +20,30 @@ export const HEADERS = {
 
 const hederaId = z.string().regex(/^0\.0\.\d+$/);
 
-/** `accepted.extra` for the transferExecutor method. */
+/**
+ * Pay on delivery: the fee waits in MandateRegistry (not with the payee) until the job is done.
+ * The payee has `deliverSeconds` after the payment to mark it delivered; then the buyer releases
+ * it, or after `reviewSeconds` the payee may claim it. Not delivered in time → back to the payer.
+ */
+export const EscrowTermsSchema = z.object({
+  deliverSeconds: z
+    .number()
+    .int()
+    .min(30)
+    .max(7 * 86_400),
+  reviewSeconds: z
+    .number()
+    .int()
+    .min(0)
+    .max(30 * 86_400),
+});
+export type EscrowTerms = z.infer<typeof EscrowTermsSchema>;
+
+/** `accepted.extra` for the transferExecutor method; with `escrow`, it's paid on delivery. */
 export const ExecutorExtraSchema = z.object({
   assetTransferMethod: z.literal(TRANSFER_EXECUTOR),
   executors: z.array(hederaId).min(1),
+  escrow: EscrowTermsSchema.optional(),
 });
 
 /** `payload` for the transferExecutor method (spec Phase 2). */
@@ -47,6 +67,7 @@ export const ERR = {
   payloadPayer: "invalid_exact_hedera_payload_payer",
   payloadExecutor: "invalid_exact_hedera_payload_executor",
   payloadAuthorization: "invalid_exact_hedera_payload_authorization",
+  escrowTerms: "invalid_exact_hedera_escrow_terms",
   customFeeAsset: "invalid_exact_hedera_custom_fee_asset",
   addressResolution: "address_resolution_failed",
   simulationReverted: "simulation_reverted",

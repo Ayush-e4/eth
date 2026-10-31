@@ -1,7 +1,10 @@
 import {
   encodeX402Authorization,
+  encodeX402EscrowAuthorization,
+  escrowIdOf,
   mandateDomain,
   randomNonce,
+  signEscrowAuth,
   signPaymentAuth,
 } from "@eth/mandates";
 import {
@@ -10,7 +13,7 @@ import {
   encodePaymentSignatureHeader,
 } from "@x402/core/http";
 import type { PaymentRequired, SettleResponse } from "@x402/core/types";
-import type { LocalAccount } from "viem";
+import type { Hex, LocalAccount } from "viem";
 import type { MirrorResolver } from "./resolve";
 import {
   ExecutorExtraSchema,
@@ -41,12 +44,18 @@ export interface MandateWallet {
 
 export interface PaidResponse {
   response: Response;
-  paid?: { requirements: PaymentRequirements; settlement: SettleResponse };
+  paid?: {
+    requirements: PaymentRequirements;
+    settlement: SettleResponse;
+    /** Paid on delivery: the escrow holding the fee until the job is delivered and released. */
+    escrowId?: Hex;
+  };
 }
 
 /**
  * fetch() for agents: if a server answers 402, pick a transferExecutor offer our mandate can
- * pay, sign a single-use PaymentAuth, and retry with PAYMENT-SIGNATURE. No human involved —
+ * pay, sign a single-use PaymentAuth (an EscrowAuth when it's paid on delivery), and retry with
+ * PAYMENT-SIGNATURE. No human involved —
  * the onchain mandate is what limits the agent.
  */
 export function createPayingFetch(w: MandateWallet, fetchImpl: typeof fetch = fetch) {
@@ -63,6 +72,7 @@ export function createPayingFetch(w: MandateWallet, fetchImpl: typeof fetch = fe
       return r.scheme === SCHEME && extra.success && extra.data.executors.includes(w.executor);
     });
     if (!offer) throw new Error("No payment option our mandate can pay");
+    const escrow = ExecutorExtraSchema.parse(offer.extra).escrow;
     const amount = BigInt(offer.amount);
     if (w.maxAmount !== undefined && amount > w.maxAmount) {
       throw new Error(`Price ${amount} exceeds this agent's per-call limit ${w.maxAmount}`);
@@ -82,7 +92,18 @@ export function createPayingFetch(w: MandateWallet, fetchImpl: typeof fetch = fe
           (w.undoSeconds ?? 0),
       ),
     };
-    const signature = await signPaymentAuth(w.agent, mandateDomain(w.chainId, w.executorEvm), auth);
+    const domain = mandateDomain(w.chainId, w.executorEvm);
+    // Pay on delivery: the payee gets `deliverSeconds` from the latest the payment can run.
+    const authorization = escrow
+      ? await (async () => {
+          const e = {
+            ...auth,
+            deliverBy: auth.validBefore + BigInt(escrow.deliverSeconds),
+            reviewSeconds: escrow.reviewSeconds,
+          };
+          return encodeX402EscrowAuthorization(e, await signEscrowAuth(w.agent, domain, e));
+        })()
+      : encodeX402Authorization(auth, await signPaymentAuth(w.agent, domain, auth));
 
     const payment: PaymentPayload = {
       x402Version: X402_VERSION,
@@ -91,7 +112,7 @@ export function createPayingFetch(w: MandateWallet, fetchImpl: typeof fetch = fe
       payload: {
         payer: w.payer,
         executor: w.executor,
-        authorization: encodeX402Authorization(auth, signature),
+        authorization,
       },
       ...(w.undoSeconds ? { extensions: { [UNDO_EXTENSION]: { seconds: w.undoSeconds } } } : {}),
     };
@@ -105,7 +126,14 @@ export function createPayingFetch(w: MandateWallet, fetchImpl: typeof fetch = fe
     const settlementHeader = response.headers.get(HEADERS.response);
     if (response.ok && settlementHeader) {
       const settlement = decodePaymentResponseHeader(settlementHeader) as SettleResponse;
-      return { response, paid: { requirements: offer, settlement } };
+      return {
+        response,
+        paid: {
+          requirements: offer,
+          settlement,
+          ...(escrow ? { escrowId: escrowIdOf(w.mandateId, auth.nonce) } : {}),
+        },
+      };
     }
     return { response };
   };
