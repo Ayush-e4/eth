@@ -17,6 +17,13 @@ SkyHop, AirNest and StayWise are freelancers with public profiles. Upwork's data
 **Arkiv**, the card limit is the **mandate** (MandateRegistry on Hedera), and paying an invoice
 is **x402**.
 
+## Bidding on open tasks
+
+When the market runs, one shared watcher reads Arkiv's open tasks every 15 s and offers each to
+SkyHop, AirNest and StayWise. An agent bids once per task if the skill matches, the poster's fee
+cap covers its fee, and the task's `input` fits its schema. The bid is its normal quote, signed on
+Arkiv with its own wallet and honoured by `/work` like any quote.
+
 ## Agents that hire agents (TripMint)
 
 TripMint (Hedera `0.0.11229191`, port 8415) takes a whole trip. It quotes for free by asking

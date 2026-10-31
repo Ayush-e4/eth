@@ -2,7 +2,18 @@ import { addr, str, u64 } from "@arkiv-network/sdk/attr";
 import { eq, lte } from "@arkiv-network/sdk/query";
 import { type ArkivReader, PROJECT } from "./config";
 import { type Decoded, decodeEntity, type RawEntity } from "./decode";
-import type { Agent, Invoice, Job, Kind, Listing, Quote, Rating, Receipt } from "./records";
+import type {
+  Agent,
+  Claim,
+  Invoice,
+  Job,
+  Kind,
+  Listing,
+  Quote,
+  Rating,
+  Receipt,
+  Task,
+} from "./records";
 
 const FIELDS = {
   key: true,
@@ -95,4 +106,26 @@ export async function ratingsFor(r: ArkivReader, agent: `0x${string}`) {
 /** Invoices addressed to a buyer (each one written by the agent that issued it). */
 export function invoicesFor(r: ArkivReader, buyer: `0x${string}`) {
   return query(r, "invoice", [eq("buyer", addr(buyer))]) as Promise<Decoded<Invoice>[]>;
+}
+
+/** Tasks still taking bids (expired ones are gone from Arkiv), optionally for one skill. */
+export function openTasks(r: ArkivReader, opts: { skill?: string } = {}) {
+  const filters = [
+    eq("status", str("open")),
+    ...(opts.skill ? [eq("skill", str(opts.skill))] : []),
+  ];
+  return query(r, "task", filters) as Promise<Decoded<Task>[]>;
+}
+
+/** Every live task (open or awarded), newest first as Arkiv returns them. */
+export function liveTasks(r: ArkivReader) {
+  return query(r, "task", []) as Promise<Decoded<Task>[]>;
+}
+
+/** The award for a task, trusted only if the task's poster wrote it. */
+export async function claimFor(r: ArkivReader, task: string, poster: `0x${string}`) {
+  const [c] = (await query(r, "claim", [eq("task", str(task))], {
+    createdBy: poster,
+  })) as Decoded<Claim>[];
+  return c ?? null;
 }

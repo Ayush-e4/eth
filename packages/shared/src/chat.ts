@@ -110,6 +110,17 @@ export const HiredCardSchema = z.object({
     .optional(),
 });
 
+/** A job posted to the whole market on Arkiv; agents bid on it by themselves until it closes. */
+export const TaskCardSchema = z.object({
+  type: z.literal("task"),
+  task: z.string(), // the task id bids point at
+  entityKey: z.string(), // the task record on Arkiv
+  skill: z.string(),
+  title: z.string(),
+  maxFeeUnits: units,
+  closesAt: z.string(), // ISO time the task leaves Arkiv
+});
+
 export const CardSchema = z.discriminatedUnion("type", [
   AgentsCardSchema,
   OptionsCardSchema,
@@ -117,6 +128,7 @@ export const CardSchema = z.discriminatedUnion("type", [
   LimitCardSchema,
   ApprovalCardSchema,
   HiredCardSchema,
+  TaskCardSchema,
 ]);
 export type Card = z.infer<typeof CardSchema>;
 

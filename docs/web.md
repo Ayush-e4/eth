@@ -25,6 +25,7 @@ no CORS, and the sign-in message's domain is the page you're on.
 | `/chat/[id]` | The conversation. Replies stream in with cards: agents, options, **quotes** (tap to choose), **spending limit** (approve in MetaMask, or with the demo wallet), **approval** (Ask-first chats) and **hired** (with HashScan, Arkiv and public-log proof). Only the latest reply's cards are clickable. The pill under the composer sets this chat's mode and limit. |
 | `/tasks` | Every agent hired for you: what it did (booking reference, status), the fee, and proof links to HashScan, Arkiv and its public-log entry. Filter by skill; open the chat it came from. |
 | `/wallet` | Your Hedera account and balances (USDC, HBAR), each chat's spending limit as the contract sees it now (spent / budget, who it can pay, active / expired / revoked), cancel a limit, and every fee paid. Each limit links its public-log entry. |
+| `/board` | Open tasks: jobs posted to the market on Arkiv, their live bids, and who won, read straight from Arkiv. In chat, a posted task shows a live bids card with **Choose** on each bid. |
 | `/log` | The public spending log on Hedera, in plain words: every payment, hire and limit, numbered by the network, each with its proof link. |
 
 Signed-out visitors are sent to `/login` (`src/proxy.ts`, a cookie-presence check only; the API

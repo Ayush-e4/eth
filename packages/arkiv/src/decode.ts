@@ -1,6 +1,7 @@
 import type { z } from "zod";
 import {
   AgentSchema,
+  ClaimSchema,
   InvoiceSchema,
   JobSchema,
   type Kind,
@@ -8,6 +9,7 @@ import {
   QuoteSchema,
   RatingSchema,
   ReceiptSchema,
+  TaskSchema,
 } from "./records";
 
 /** The slice of an Arkiv entity we read (matches select({ key, creator, expiresAt, payload, attributes })). */
@@ -34,6 +36,8 @@ const SCHEMAS = {
   receipt: ReceiptSchema,
   rating: RatingSchema,
   invoice: InvoiceSchema,
+  task: TaskSchema,
+  claim: ClaimSchema,
 } as const;
 
 /** Indexed attribute name → record field. Attributes win over the payload: they are what queries matched. */
@@ -78,6 +82,14 @@ const ATTR_FIELDS: Record<Kind, Record<string, string>> = {
   },
   rating: { agent: "agent", job: "job", rater: "rater", score: "score" },
   invoice: { agent: "agent", buyer: "buyer", task: "task", amount_units: "amountUnits" },
+  task: {
+    task: "task",
+    poster: "poster",
+    skill: "skill",
+    max_fee_units: "maxFeeUnits",
+    status: "status",
+  },
+  claim: { task: "task", poster: "poster", quote: "quote", agent: "agent" },
 };
 
 /** Fields stored as bigint in records (decimal strings in JSON payloads). */
@@ -88,6 +100,7 @@ const BIGINT_FIELDS = new Set([
   "amountUnits",
   "hcsSequence",
   "erc8004Id",
+  "maxFeeUnits",
 ]);
 
 function sameAddress(a: unknown, b: string) {
@@ -96,8 +109,9 @@ function sameAddress(a: unknown, b: string) {
 
 /**
  * Turns an entity into a validated record, or null if it is malformed or fails its trust rule:
- * agent/listing/quote must be written by the agent they describe, a rating by its rater, and a
- * job by its buyer. (Receipts are trusted by filtering on the platform wallet at query time.)
+ * agent/listing/quote must be written by the agent they describe, a rating by its rater, a job by
+ * its buyer, and a task or claim by its poster. (Receipts are trusted by filtering on the platform
+ * wallet at query time.)
  */
 export function decodeEntity<K extends Kind>(
   kind: K,
@@ -122,7 +136,14 @@ export function decodeEntity<K extends Kind>(
   if (!parsed.success) return null;
   const record = parsed.data as Record<string, unknown>;
 
-  const author = kind === "rating" ? record.rater : kind === "job" ? record.buyer : record.agent;
+  const author =
+    kind === "rating"
+      ? record.rater
+      : kind === "job"
+        ? record.buyer
+        : kind === "task" || kind === "claim"
+          ? record.poster
+          : record.agent;
   if (kind !== "receipt" && !sameAddress(author, e.creator)) return null;
 
   return {

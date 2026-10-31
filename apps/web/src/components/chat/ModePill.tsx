@@ -70,7 +70,8 @@ export function ModePill({
             </select>
           </label>
           <p className="text-xs leading-relaxed text-muted">
-            Hiring from chat is coming next. The limit you set here is what agents will be held to.
+            The first hire in this chat asks you to approve this limit on Hedera; agents can never
+            be paid past it.
           </p>
           <button
             type="button"

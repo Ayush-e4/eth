@@ -18,6 +18,8 @@ export const LIFETIME = {
   receipt: () => ExpirationTime.fromDays(90),
   rating: () => ExpirationTime.fromDays(365),
   invoice: () => ExpirationTime.fromDays(30),
+  task: (seconds = 600) => ExpirationTime.fromSeconds(seconds - (seconds % 2)),
+  claim: () => ExpirationTime.fromDays(7),
 } as const;
 
 export const ARKIV_CHAIN = tiramisu;
@@ -27,16 +29,30 @@ export const ARKIV_EXPLORER = {
   entity: (key: string) => `https://tiramisu.explorer.arkiv.network/entity/${key}`,
 } as const;
 
-/** Reads need no key and are safe anywhere. */
+/**
+ * The RPC connection. Keyless use has a small query budget; with ARKIV_API_KEY (an access key
+ * from hub.arkiv.network, kept on the server) queries count against that key's quota instead.
+ * When the budget runs out the node answers 429: fail after one retry instead of backing off
+ * for minutes, so callers see an error rather than a hang.
+ */
+function transport(rpcUrl?: string, apiKey = process.env.ARKIV_API_KEY) {
+  return http(rpcUrl, {
+    retryCount: 1,
+    timeout: 15_000,
+    ...(apiKey ? { fetchOptions: { headers: { "X-API-KEY": apiKey } } } : {}),
+  });
+}
+
+/** Reads need no wallet and are safe anywhere. */
 export function arkivReader(rpcUrl?: string) {
-  return createPublicClient({ chain: tiramisu, transport: http(rpcUrl) });
+  return createPublicClient({ chain: tiramisu, transport: transport(rpcUrl) });
 }
 
 /** Writes are signed by the given wallet; the nonce manager allows parallel writes from one process. */
 export function arkivWriter(privateKey: Hex, rpcUrl?: string) {
   return createWalletClient({
     chain: tiramisu,
-    transport: http(rpcUrl),
+    transport: transport(rpcUrl),
     account: privateKeyToAccount(privateKey, { nonceManager }),
   });
 }

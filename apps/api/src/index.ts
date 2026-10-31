@@ -7,6 +7,7 @@ import { connectDb } from "./db/client";
 import { loadHiringEnv } from "./hiring/env";
 import { hiringService } from "./hiring/service";
 import { arkivNames } from "./spend-log/routes";
+import { openTaskService } from "./tasks/service";
 import { humanChecks } from "./world/checks";
 import { loadWorldConfig, worldClient } from "./world/oidc";
 
@@ -23,20 +24,27 @@ const checks =
   world && hiring
     ? humanChecks(db, worldClient(world), (chatId, code) => hiring.service.markHuman(chatId, code))
     : null;
+// Open tasks: the concierge posts jobs on Arkiv and agents bid by themselves.
+const tasks = hiring ? openTaskService(hiring.env, hiring.service) : null;
 if (!world) console.warn("World ID is off: set WORLD_ID_CLIENT_ID and WORLD_ID_CLIENT_SECRET");
 if (!hiring)
   console.warn(
     "hiring is off: set HEDERA_* in .env and run `pnpm --filter @eth/agents identities`",
   );
 const concierge = process.env.ANTHROPIC_API_KEY
-  ? claudeConcierge(arkivMarket(), hiring?.service ?? null)
+  ? claudeConcierge(arkivMarket(), hiring?.service ?? null, undefined, tasks)
   : null;
 if (!concierge) console.warn("ANTHROPIC_API_KEY not set: the concierge is off");
 
 serve(
   {
-    fetch: createApp(db, config, { concierge, hiring, logNames: arkivNames(), humanChecks: checks })
-      .fetch,
+    fetch: createApp(db, config, {
+      concierge,
+      hiring,
+      logNames: arkivNames(),
+      humanChecks: checks,
+      tasks,
+    }).fetch,
     port: config.port,
   },
   (info) => {

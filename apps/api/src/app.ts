@@ -11,6 +11,8 @@ import type { HiringEnv } from "./hiring/env";
 import { mandateRoutes } from "./hiring/routes";
 import type { HiringService } from "./hiring/service";
 import { type LogNames, spendLogRoutes } from "./spend-log/routes";
+import { openTaskRoutes } from "./tasks/routes";
+import type { OpenTaskService } from "./tasks/service";
 import type { HumanChecks } from "./world/checks";
 import { humanCheckRoutes } from "./world/routes";
 
@@ -21,6 +23,7 @@ export interface AppDeps {
   hiring?: { env: HiringEnv; service: HiringService } | null;
   logNames?: LogNames;
   humanChecks?: HumanChecks | null;
+  tasks?: OpenTaskService | null;
 }
 
 export function createApp(db: Db, config: Config, deps: AppDeps = {}) {
@@ -55,6 +58,7 @@ export function createApp(db: Db, config: Config, deps: AppDeps = {}) {
   app.route("/", accountRoutes(db, hiring?.env ?? null));
   app.route("/", spendLogRoutes(hiring?.env ?? null, deps.logNames));
   app.route("/", humanCheckRoutes(db, deps.humanChecks ?? null, hiring?.service ?? null));
+  app.route("/", openTaskRoutes(db, deps.tasks ?? null));
 
   return app;
 }

@@ -25,6 +25,8 @@ export function cardNote(card: Card): string {
       return `[app: hire_agent asked the user to approve a limit of ${fee(card.budgetUnits)} for ${card.payees.map((p) => p.name).join(", ")}]`;
     case "approval":
       return `[app: hire_agent asked the user to approve a payment: ${card.title}, ${fee(card.feeUnits)}, code ${card.code}]`;
+    case "task":
+      return `[app: post_task posted open task ${card.task} on Arkiv for ${card.skill} ("${card.title}"), taking bids until ${card.closesAt}; read them with check_bids]`;
     case "hired":
       return `[app: hire_agent hired ${card.title} for ${card.skill}, paid ${fee(card.feeUnits)}, tx ${card.hederaTx}: ${card.summary}]`;
   }

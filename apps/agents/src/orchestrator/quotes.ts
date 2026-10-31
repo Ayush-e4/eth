@@ -86,6 +86,32 @@ export async function collectQuotes(
     }),
   );
 
+  return rankLive(skill, task, input, allowed, skipped, subcontracts, d);
+}
+
+/**
+ * Bids agents posted on an open task by themselves (see the task watcher in specialists/server):
+ * nobody is asked, we only read the signed quotes on Arkiv. Same ranking as collectQuotes.
+ */
+export async function readBids(
+  skill: string,
+  task: string,
+  input: unknown,
+  d: QuoteDeps,
+): Promise<QuoteRound> {
+  const listings = await findListings(d.arkiv, { skill });
+  return rankLive(skill, task, input, listings, [], new Map(), d);
+}
+
+async function rankLive(
+  skill: string,
+  task: string,
+  input: unknown,
+  allowed: Awaited<ReturnType<typeof findListings>>,
+  skipped: string[],
+  subcontracts: Map<string, Subcontract>,
+  d: QuoteDeps,
+): Promise<QuoteRound> {
   // Prices come from the signed Arkiv quote, not the HTTP reply, so the decision is auditable.
   const byAgent = new Map(allowed.map((l) => [l.record.agent.toLowerCase(), l]));
   const quotes = (await liveQuotes(d.arkiv, task)).filter(
