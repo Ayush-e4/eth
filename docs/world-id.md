@@ -54,12 +54,39 @@ approval as verified. Typing "Approve abc123" without a passed check does nothin
    (`WORLD_ID_ISSUER` defaults to `https://auth.world.org`). Restart the API.
 3. Leave them empty and approvals work as before, without a human check.
 
+## Status (31 Oct 2026)
+
+| Path | Live? |
+|---|---|
+| Start a check: our app registered, World shows "AgentNet" and the same code as our card | ✅ production and sandbox |
+| **Denied**: "Deny connection" on World's page → card says "You declined in World ID. Nothing was paid.", no hire recorded | ✅ live |
+| Approved → validated → paid | ⏳ blocked on access to a test World ID (below); the server checks are covered by tests with locally signed tokens |
+
+We run against the **sandbox** issuer (`WORLD_ID_ISSUER=https://sandbox.auth.world.org`). Its
+banner says "Uses fake identities", but completing a proof there still needs World's sandbox app.
+
 ## Integration debrief (for World)
 
-- **Time to first success:** _to fill in after the first live run._
-- **Friction:** _to fill in._
-- **Missing capability or documentation:** the device flow can't show *what* is being approved
-  (`binding_message` isn't supported), so the World ID app shows only our app's name and a code.
-  We record the action ourselves, as the docs advise. A signed "approve this payment of 0.03 USDC
-  to AirNest" would let the human see and sign the actual action.
-- **The one improvement with the greatest impact:** _to fill in._
+- **Time to first success:** about an hour from reading the docs to a live check started from our
+  app, showing our name and code on World's page, with the denied path working end to end. The
+  approved path is still blocked (see friction).
+- **Friction:**
+  1. The portal accepts only work Google accounts ("Personal Gmail accounts are not supported").
+     We used a university account.
+  2. The production World ID app asks a new user to verify at an Orb before it can approve
+     anything, so a hackathon team can't complete a production proof.
+  3. The sandbox needs World's sandbox app. The TestFlight link on the prize page
+     (`testflight.apple.com/join/Tub7zuyD`) says "not found", and the prize page says proofs are
+     mocked and the sandbox app isn't needed, without saying what replaces it.
+  4. The web World ID Simulator can't answer Agent Pass requests: its Content Security Policy only
+     allows `bridge.worldcoin.org` / `staging-bridge.worldcoin.org`, so fetching the request from
+     `sandbox.auth.world.org/bridge/v1` is blocked ("Failed to fetch bridge request data").
+- **Missing capability or documentation:**
+  - How to complete a mocked proof in the sandbox without the TestFlight app.
+  - The device flow can't show *what* is being approved (`binding_message` isn't supported), so
+    the World ID app shows only our app's name and a code. We record the action ourselves, as the
+    docs advise. A signed "approve this payment of 0.03 USDC to AirNest" would let the human see
+    and sign the actual action.
+- **The one improvement with the greatest impact:** let the web Simulator (or a "mock approve"
+  button on the sandbox approval page) complete Agent Pass sandbox requests. Then anyone can
+  test the full flow in minutes, with no phone, no Orb and no TestFlight.
