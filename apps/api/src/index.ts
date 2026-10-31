@@ -23,6 +23,7 @@ import { marketCatalog } from "./market/catalog";
 import { notifier } from "./notify/notifier";
 import { chatNudge, chatPoster } from "./notify/post";
 import { telegramBot } from "./notify/telegram";
+import { telegramChat } from "./notify/telegram-chat";
 import { hiddenAgentStore, visibleMarket } from "./ops/hidden";
 import { arkivNames } from "./spend-log/routes";
 import { statusCheck } from "./status/check";
@@ -61,7 +62,6 @@ const wallets = env
   : null;
 const post = chatPoster(db, notify, config.appOrigin);
 const nudge = chatNudge(db, notify, config.appOrigin);
-telegramBot(notify, console.log);
 // Pay on delivery: a delivered fee waits this long for the user to pay now or dispute (0 = paid
 // out at once).
 const reviewSeconds = Number(process.env.ESCROW_REVIEW_SECONDS ?? 120);
@@ -180,6 +180,21 @@ const concierge = process.env.ANTHROPIC_API_KEY
   ? claudeConcierge(market, hiring?.service ?? null, undefined, tasks, desk, guard)
   : null;
 if (!concierge) console.warn("ANTHROPIC_API_KEY not set: the concierge is off");
+// The Telegram bot: linking and alerts, and (with the concierge on) chatting.
+telegramBot(
+  notify,
+  console.log,
+  concierge
+    ? telegramChat(db, {
+        notify,
+        concierge,
+        appOrigin: config.appOrigin,
+        onUserMessage: (id, text) => hiring?.service.noteUserMessage(id, text),
+        demo,
+        log: console.log,
+      })
+    : undefined,
+);
 
 serve(
   {
