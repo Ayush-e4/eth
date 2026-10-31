@@ -136,6 +136,7 @@ export const hires = pgTable(
     registry: text("registry").notNull(), // with mandateId, which limit paid it
     skill: text("skill").notNull(),
     agent: text("agent").notNull(),
+    endpoint: text("endpoint"), // the agent's service, to manage what it booked later
     title: text("title").notNull(),
     feeUnits: bigint("fee_units", { mode: "bigint" }).notNull(),
     hederaTx: text("hedera_tx").notNull(),

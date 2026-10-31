@@ -1,4 +1,6 @@
 import { randomBytes } from "node:crypto";
+import type { QuoteOption } from "@eth/agents/hiring";
+import type { Card } from "@eth/shared";
 import { and, eq } from "drizzle-orm";
 import type { Db } from "../db/client";
 import { approvals } from "../db/schema";
@@ -6,6 +8,7 @@ import { approvals } from "../db/schema";
 type Approval = typeof approvals.$inferSelect;
 
 const HUMAN_FRESH_MS = 5 * 60_000; // a human check unlocks its payment for 5 minutes
+const usdc = (u: bigint) => (Number(u) / 1e6).toFixed(2);
 
 /**
  * "Ask first" approvals: one code per payment the concierge wants to make. With `requireHuman`,
@@ -23,11 +26,15 @@ export function approvalBook(db: Db, requireHuman = false) {
   return {
     requireHuman,
 
-    /** Takes (uses up) an approval for this offer, if the user gave one. */
-    async take(chatId: string, ref: string, agent: string, feeUnits: bigint) {
+    /**
+     * Takes (uses up) an approval for this offer, if the user gave one. `exact`: only one given
+     * for this very ref counts (an offer with costs of its own, a cancellation).
+     */
+    async take(chatId: string, ref: string, agent: string, feeUnits: bigint, exact = false) {
       const mine = await db.select().from(approvals).where(eq(approvals.chatId, chatId));
       // A quote can lapse during a slow human check; the approval was for this agent and fee.
-      const same = (a: Approval) => a.ref === ref || (a.agent === agent && feeUnits <= a.feeUnits);
+      const same = (a: Approval) =>
+        a.ref === ref || (!exact && a.agent === agent && feeUnits <= a.feeUnits);
       const ok = mine.find((a) => same(a) && a.approved && human(a));
       if (!ok) return false;
       // Only one caller gets the row back, so an approval can't pay twice.
@@ -62,5 +69,32 @@ export function approvalBook(db: Db, requireHuman = false) {
         await db.update(approvals).set({ approved }).where(one(chatId, code));
       }
     },
+  };
+}
+
+/** The card asking the user to approve one offer (its code goes in "Approve <code>"). */
+export function approvalCard(
+  o: QuoteOption,
+  code: string,
+  approvals: { requireHuman: boolean },
+): Extract<Card, { type: "approval" }> {
+  const sub = o.subcontract;
+  const [who, what] = o.title.split(" — ");
+  return {
+    type: "approval",
+    code,
+    // An offer with costs of its own says what it does ("Move flight X with SkyHop").
+    title:
+      o.confirm && what ? `${what[0]?.toUpperCase()}${what.slice(1)} with ${who}` : `Hire ${who}`,
+    detail: [
+      o.note,
+      sub &&
+        `It also gets up to ${usdc(BigInt(sub.budgetUnits))} USDC from this limit to pay ${sub.payees.map((p) => p.name).join(" and ")}.`,
+      o.confirm,
+    ]
+      .filter(Boolean)
+      .join(". "),
+    feeUnits: o.feeUnits.toString(),
+    ...(approvals.requireHuman ? { human: true } : {}),
   };
 }

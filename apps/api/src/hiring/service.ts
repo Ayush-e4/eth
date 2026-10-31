@@ -13,7 +13,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import type { Db } from "../db/client";
 import type { Chat, MandateRow } from "../db/schema";
 import type { DemoQuotaCheck } from "../demo/quotas";
-import { approvalBook } from "./approvals";
+import { approvalBook, approvalCard } from "./approvals";
 import { grantSubMandate, vetSubcontract } from "./delegate";
 import type { HiringEnv } from "./env";
 import {
@@ -35,8 +35,6 @@ import type { UndoWindows } from "./undo";
 export type ChatLike = Pick<Chat, "id" | "mode" | "limitUnits"> & {
   agentAddress?: string | null; // a chat with one agent: only it is asked and paid
 };
-
-const usdc = (u: bigint) => (Number(u) / 1e6).toFixed(2);
 
 export type HireOutcome =
   | { status: "hired"; card: Extract<Card, { type: "hired" }>; result: unknown }
@@ -177,25 +175,15 @@ export function hiringService(
         const over = await opts.demo.canHire(chat.id, cost);
         if (over) return { status: "refused", reason: `Not hired, nothing paid: ${over}` };
       }
-      // "Ask first": one approval, one payment (taken here, or asked for with a card).
+      // "Ask first": one approval, one payment (taken here, or asked for with a card). An offer
+      // with costs of its own (`confirm`) is asked about in every chat, and only that approval counts.
+      const { agent, feeUnits, confirm } = h.option;
       if (
-        chat.mode === "ask" &&
-        !(await approvals.take(chat.id, ref, h.option.agent, h.option.feeUnits))
+        (chat.mode === "ask" || confirm) &&
+        !(await approvals.take(chat.id, ref, agent, feeUnits, !!confirm))
       ) {
-        const code = await approvals.ask(chat.id, ref, h.option.agent, h.option.feeUnits);
-        return {
-          status: "needs_approval",
-          card: {
-            type: "approval",
-            code,
-            title: `Hire ${h.option.title.split(" — ")[0]}`,
-            detail: sub
-              ? `${h.option.note}. It also gets up to ${usdc(BigInt(sub.budgetUnits))} USDC from this limit to pay ${sub.payees.map((p) => p.name).join(" and ")}.`
-              : h.option.note,
-            feeUnits: h.option.feeUnits.toString(),
-            ...(approvals.requireHuman ? { human: true } : {}),
-          },
-        };
+        const code = await approvals.ask(chat.id, ref, agent, feeUnits);
+        return { status: "needs_approval", card: approvalCard(h.option, code, approvals) };
       }
       const m = mandate as MandateRow;
       const deps: HireDeps = {

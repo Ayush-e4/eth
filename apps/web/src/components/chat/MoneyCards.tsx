@@ -174,10 +174,12 @@ export function ApprovalCard({ card, ctx }: { card: Of<"approval">; ctx: CardCtx
     >
       <span className="text-[15px] font-bold">{card.title}?</span>
       <p className="text-sm leading-relaxed text-[#5C3A00]">{card.detail}</p>
-      <p className="text-sm text-[#5C3A00]">
-        Agent fee <strong className="font-mono">{usdc(card.feeUnits)} USDC</strong>, from this
-        chat's limit.
-      </p>
+      {Number(card.feeUnits) > 0 && ( // e.g. a cancellation: nothing to pay an agent
+        <p className="text-sm text-[#5C3A00]">
+          Agent fee <strong className="font-mono">{usdc(card.feeUnits)} USDC</strong>, from this
+          chat's limit.
+        </p>
+      )}
       {card.human ? (
         <HumanApproval card={card} ctx={ctx} />
       ) : (

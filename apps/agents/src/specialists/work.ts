@@ -27,7 +27,7 @@ export interface WorkDeps<I, D, R> {
   jobs: JobStore;
   writer: ArkivWriter;
   parseTask(raw: unknown): Parsed<I>;
-  feeWall: MiddlewareHandler;
+  feeWall: (skill: string) => MiddlewareHandler; // per kind of job (main or follow-up)
   log?: (line: string) => void;
 }
 
@@ -43,6 +43,9 @@ export function workRoutes<I, D, R>(app: Hono, w: WorkDeps<I, D, R>) {
   const log = w.log ?? (() => {});
   const watching = new Set<string>();
   const escrow = escrowJobs(ctx.escrow, jobs, log);
+  // The main job, or a follow-up on something delivered (e.g. "flights.change").
+  const kindOf = (skill: string) => def.followUps?.[skill] ?? def;
+  const skillOf = (j: Job) => (j.request as TaskRequest<I>).skill;
 
   /** What the buyer sees of its job. */
   const view = (j: Job) => ({
@@ -66,7 +69,7 @@ export function workRoutes<I, D, R>(app: Hono, w: WorkDeps<I, D, R>) {
     j.escrow
       ? escrow.refund(j)
       : ctx.refund
-        ? ctx.refund(j.payment.payer, def.priceUnits, memo).then(
+        ? ctx.refund(j.payment.payer, kindOf(skillOf(j)).priceUnits, memo).then(
             (transaction): Refund => ({ transaction }),
             (e: unknown): Refund => ({ failed: String(e).slice(0, 200) }),
           )
@@ -94,7 +97,8 @@ export function workRoutes<I, D, R>(app: Hono, w: WorkDeps<I, D, R>) {
     const quote = jobs.quote<D>(key);
     try {
       if (!quote) throw new Error("the quote's details are gone");
-      const result = await def.work(j.request as TaskRequest<I>, quote.detail);
+      const req = j.request as TaskRequest<I>;
+      const result = await kindOf(req.skill).work(req, quote.detail);
       jobs.update(key, { status: "delivered", result });
       await escrow.delivered(jobs.job(key) as Job); // before the buyer hears, so it can release
     } catch (err) {
@@ -161,13 +165,14 @@ export function workRoutes<I, D, R>(app: Hono, w: WorkDeps<I, D, R>) {
     const quote = jobs.quote<D>(key);
     if (!quote || quote.expiresAt <= Date.now())
       return c.json({ error: TASK_ERRORS.unknownQuote }, 409);
-    const problem = await def.check?.(req, quote.detail);
+    const problem = await kindOf(req.skill).check?.(req, quote.detail, buyer);
     if (problem) return c.json({ error: TASK_ERRORS.invalidInput, detail: problem }, 422);
 
     // No payment yet (or an unreadable one): the paywall answers 402 with what to pay.
     const payment = readPaymentHeader(c.req.header(HEADERS.signature));
     const auth = payment ? safeAuth(payment.payload.authorization as Hex, !!ctx.escrow) : null;
-    if (!payment || !auth) return (await w.feeWall(c, async () => {})) as Response;
+    const wall = w.feeWall(req.skill);
+    if (!payment || !auth) return (await wall(c, async () => {})) as Response;
 
     // Record the payment before it settles: if we crash now, the chain tells us later.
     const claimed = jobs.claim({
@@ -189,7 +194,7 @@ export function workRoutes<I, D, R>(app: Hono, w: WorkDeps<I, D, R>) {
     }
     const out: { settled?: Parameters<typeof paymentResponseHeader>[0] } = {};
     try {
-      const refused = await w.feeWall(c, async () => {
+      const refused = await wall(c, async () => {
         out.settled = c.get("x402Settlement" as never) as typeof out.settled;
       });
       if (!out.settled) {

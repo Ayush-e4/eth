@@ -85,6 +85,13 @@
       "when": 1793462565097,
       "tag": "0011_escrow_reviews",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1793464310180,
+      "tag": "0012_hire_endpoint",
+      "breakpoints": true
     }
   ]
 }

@@ -18,6 +18,8 @@ export interface QuoteOption extends Candidate {
   endpoint: string; // the agent's service, from its Arkiv listing
   priced?: Priced; // set when the item price could be converted to INR
   subcontract?: Subcontract; // agents it will hire itself, and the budget it needs for them
+  /** Why the user must approve this one even in an "Auto" chat (e.g. it costs more elsewhere). */
+  confirm?: string;
 }
 
 /** Everything learned while asking one skill's agents for quotes. */

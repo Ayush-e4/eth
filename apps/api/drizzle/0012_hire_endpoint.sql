@@ -1,0 +1,1 @@
+ALTER TABLE "hires" ADD COLUMN "endpoint" text;

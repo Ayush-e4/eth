@@ -9,6 +9,7 @@ import { arkivMarket } from "./concierge/market";
 import { loadConfig } from "./config";
 import { connectDb } from "./db/client";
 import { demoQuotas, loadDemoQuotas } from "./demo/quotas";
+import { bookingDesk } from "./hiring/bookings";
 import { loadHiringEnv } from "./hiring/env";
 import { pendingHires } from "./hiring/pending";
 import { reputation } from "./hiring/reputation";
@@ -79,6 +80,15 @@ const checks =
   world && hiring
     ? humanChecks(db, worldClient(world), (chatId, code) => hiring.service.markHuman(chatId, code))
     : null;
+// "My bookings": flights booked through agents, changed or cancelled from any chat.
+const desk = env
+  ? bookingDesk(db, env, {
+      requireHuman: !!world,
+      endpointOf: async (agent) =>
+        (await market.agents("flights")).find((a) => a.agent.toLowerCase() === agent.toLowerCase())
+          ?.endpoint ?? null,
+    })
+  : null;
 // Open tasks: the concierge posts jobs on Arkiv and agents bid by themselves.
 const tasks = hiring ? openTaskService(db, hiring.env, hiring.service) : null;
 // Work in progress is in the database; pick up what a restart interrupted.
@@ -99,7 +109,7 @@ if (!hiring)
     "hiring is off: set HEDERA_* in .env and run `pnpm --filter @eth/agents identities`",
   );
 const concierge = process.env.ANTHROPIC_API_KEY
-  ? claudeConcierge(market, hiring?.service ?? null, undefined, tasks)
+  ? claudeConcierge(market, hiring?.service ?? null, undefined, tasks, desk)
   : null;
 if (!concierge) console.warn("ANTHROPIC_API_KEY not set: the concierge is off");
 
