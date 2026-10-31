@@ -30,7 +30,9 @@ export function hireTools(
       "Get the JSON Schema of the `input` that agents with this skill accept. Call it before get_quotes so the input is right.",
     inputSchema: z.object({ skill }),
     run: async ({ skill }) => {
+      const pinned = chat.agentAddress?.toLowerCase();
       for (const a of await market.agents(skill)) {
+        if (pinned && a.agent.toLowerCase() !== pinned) continue; // a chat with one agent
         const res = await fetch(a.endpoint, { signal: AbortSignal.timeout(5000) }).catch(
           () => null,
         );

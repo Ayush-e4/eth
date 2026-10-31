@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { accountRoutes } from "./account/routes";
 import { authRoutes } from "./auth/routes";
-import { chatRoutes } from "./chats/routes";
+import { chatRoutes, type FindAgent } from "./chats/routes";
 import type { Concierge } from "./concierge/concierge";
 import type { Config } from "./config";
 import type { Db } from "./db/client";
@@ -38,6 +38,16 @@ export interface AppDeps {
   catalog?: MarketCatalog | null;
 }
 
+/** A listed agent's name and skill, for starting a chat with it alone. */
+const finder =
+  (catalog: MarketCatalog | null | undefined): FindAgent =>
+  async (address) => {
+    const a = (await catalog?.list())?.agents.find(
+      (x) => x.agent.toLowerCase() === address.toLowerCase(),
+    );
+    return a ? { name: a.name, skill: a.skill } : null;
+  };
+
 export function createApp(db: Db, config: Config, deps: AppDeps = {}) {
   const app = new Hono();
 
@@ -69,6 +79,7 @@ export function createApp(db: Db, config: Config, deps: AppDeps = {}) {
       concierge,
       (id, text) => hiring?.service.noteUserMessage(id, text),
       deps.demo ?? null,
+      finder(deps.catalog),
     ),
   );
   app.route("/", mandateRoutes(db, hiring?.env ?? null, deps.demo ?? null));

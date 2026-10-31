@@ -31,7 +31,9 @@ import type { Reputation } from "./reputation";
 import type { UndoWindows } from "./undo";
 
 /** What hiring needs to know about a chat. */
-export type ChatLike = Pick<Chat, "id" | "mode" | "limitUnits">;
+export type ChatLike = Pick<Chat, "id" | "mode" | "limitUnits"> & {
+  agentAddress?: string | null; // a chat with one agent: only it is asked and paid
+};
 
 const usdc = (u: bigint) => (Number(u) / 1e6).toFixed(2);
 
@@ -75,7 +77,10 @@ export function hiringService(
     async quotes(chat: ChatLike, skill: string, input: unknown) {
       const task = `chat-${chat.id.slice(0, 8)}-${Date.now().toString(36)}`;
       const qd = await quoteDeps();
-      const round = await collectQuotes(skill, task, input, qd);
+      const round = await collectQuotes(skill, task, input, {
+        ...qd,
+        ...(chat.agentAddress ? { only: chat.agentAddress } : {}),
+      });
       // Agents that hire others name who they'll pay; only quotes we can vet are offered.
       const options = [];
       for (const o of round.options) {
@@ -145,6 +150,11 @@ export function hiringService(
         return {
           status: "refused",
           reason: `quote ${ref} expired or doesn't exist; get fresh quotes`,
+        };
+      if (chat.agentAddress && h.option.agent.toLowerCase() !== chat.agentAddress.toLowerCase())
+        return {
+          status: "refused",
+          reason: "this chat only works with one agent; that quote is someone else's",
         };
       const sub = h.option.subcontract;
       const cost = h.option.feeUnits + BigInt(sub?.budgetUnits ?? 0);

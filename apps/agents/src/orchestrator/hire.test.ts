@@ -3,6 +3,7 @@ import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Trip } from "../trip";
 import { type HireDeps, hire } from "./hire";
+import { collectQuotes } from "./quotes";
 
 vi.mock("@eth/arkiv", () => ({
   findListings: vi.fn(),
@@ -126,6 +127,12 @@ describe("hire", () => {
       d.buyerWriter,
       expect.objectContaining({ agent: A, job: "0xjob", score: 5 }),
     );
+  });
+
+  it("in a chat with one agent, asks only that agent", async () => {
+    const round = await collectQuotes("flights", "t1", trip, { ...deps(), only: B.toUpperCase() });
+    expect(quoteFetch.mock.calls.map((c) => c[0])).toEqual([`http://${B}/quote`]);
+    expect(round.options.map((o) => o.agent)).toEqual([B]);
   });
 
   it("falls back to the cheapest fee when no quote has a comparable price", async () => {

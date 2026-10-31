@@ -16,11 +16,27 @@ const PatchBody = z.object({
   title: z.string().trim().min(1).max(80).optional(),
   mode: ChatModeSchema.optional(),
   limitUnits: limitUnitsSchema.optional(),
+  agent: z.null().optional(), // "Bring in the concierge": stop working with just one agent
 });
+const CreateBody = z
+  .object({
+    agent: z
+      .string()
+      .regex(/^0x[0-9a-fA-F]{40}$/)
+      .optional(),
+  })
+  .default({});
+
+/** A market agent a chat can work with alone (null if it isn't listed). */
+export type FindAgent = (address: string) => Promise<{ name: string; skill: string } | null>;
 
 const chatJson = (c: Chat) => ({
   id: c.id,
   title: c.title,
+  agent:
+    c.agentAddress && c.agentName && c.agentSkill
+      ? { address: c.agentAddress, name: c.agentName, skill: c.agentSkill }
+      : null,
   mode: c.mode,
   limitUnits: c.limitUnits.toString(),
   createdAt: c.createdAt.toISOString(),
@@ -42,6 +58,7 @@ export function chatRoutes(
   concierge: Concierge | null,
   onUserMessage: (chatId: string, text: string) => unknown = () => {},
   demo: DemoQuotaCheck | null = null,
+  findAgent: FindAgent | null = null,
 ) {
   const hiredIn = (chatId: string) =>
     db.select().from(hires).where(eq(hires.chatId, chatId)).orderBy(asc(hires.createdAt));
@@ -57,9 +74,17 @@ export function chatRoutes(
     c.json({ chats: (await store.list(c.get("user").id)).map(chatJson) }),
   );
 
-  app.post("/chats", async (c) =>
-    c.json({ chat: chatJson(await store.create(c.get("user"))) }, 201),
-  );
+  app.post("/chats", async (c) => {
+    const body = CreateBody.safeParse(await c.req.json().catch(() => ({})));
+    if (!body.success) return c.json({ error: "agent must be an address" }, 400);
+    let agent: { address: string; name: string; skill: string } | undefined;
+    if (body.data.agent) {
+      const found = await findAgent?.(body.data.agent).catch(() => null);
+      if (!found) return c.json({ error: "that agent isn't on the market" }, 404);
+      agent = { address: body.data.agent, ...found };
+    }
+    return c.json({ chat: chatJson(await store.create(c.get("user"), agent)) }, 201);
+  });
 
   app.get("/chats/:id", async (c) => {
     const chat = await owned(c.get("user").id, c.req.param("id"));
@@ -126,7 +151,14 @@ export function chatRoutes(
           hired,
           text: body.data.text,
           user: { displayName: user.displayName, homeCity: user.homeCity },
-          chat: { id: chat.id, mode: chat.mode, limitUnits: chat.limitUnits },
+          chat: {
+            id: chat.id,
+            mode: chat.mode,
+            limitUnits: chat.limitUnits,
+            agentAddress: chat.agentAddress,
+            agentName: chat.agentName,
+            agentSkill: chat.agentSkill,
+          },
           emit: (e) => void send(e),
         });
         const saved = await store.add(chat, "assistant", reply.text, reply.cards);

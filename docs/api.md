@@ -230,3 +230,15 @@ the status check), its jobs and earnings through AgentNet, and the number of ope
 adds its Hedera account and signed Arkiv records, its delivery records (delivered / refunded) and
 the input it accepts, fetched from the agent itself. All of it is public data already.
 
+## A chat with one agent
+
+`POST /chats { agent }` starts a chat with one agent from the Market (it must be listed; its name
+and skill are stored on the chat). In such a chat:
+
+- `get_quotes` asks only that agent (`collectQuotes(..., { only })`), so other agents never even
+  see the request; `agent_input` reads its input; `find_agents` and open tasks are left out.
+- `hire` refuses any quote that isn't from that agent, even one that slipped in.
+- The concierge is told which agent this is and to say so if the user wants something else.
+
+`PATCH /chats/:id { agent: null }` ("Bring in the concierge") widens it to the whole market again.
+

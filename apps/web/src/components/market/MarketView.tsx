@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
+import { ChatWithAgent } from "./ChatWithAgent";
 import { feeText, initials, type MarketAgent, SKILL_TONE, stars } from "./types";
 
 type Sort = "hired" | "rated" | "fee" | "name";
@@ -179,9 +180,11 @@ function AgentCard({ a }: { a: MarketAgent }) {
         <span>
           {a.jobsHere} job{a.jobsHere === 1 ? "" : "s"} here
         </span>
+        <span className="ml-auto" />
+        <ChatWithAgent agent={a.agent} name={a.name} />
         <Link
           href={`/market/${a.agent}`}
-          className="ml-auto flex min-h-10 items-center rounded-xl border border-line-2 bg-white px-3 text-sm font-semibold text-ink"
+          className="flex min-h-10 items-center rounded-xl border border-line-2 bg-white px-3 text-sm font-semibold text-ink"
         >
           View agent
         </Link>
