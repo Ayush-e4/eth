@@ -1,6 +1,6 @@
 import { mandateRegistryAbi } from "@eth/mandates";
 import type { Card } from "@eth/shared";
-import { desc, eq, sum } from "drizzle-orm";
+import { and, desc, eq, sum } from "drizzle-orm";
 import { type Address, getAddress } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import type { Db } from "../db/client";
@@ -47,11 +47,16 @@ export function limitCard(
   };
 }
 
-export async function currentMandate(db: Db, chatId: string): Promise<MandateRow | null> {
+/** The chat's live limit on the current registry (limits on an older one can't pay any more). */
+export async function currentMandate(
+  db: Db,
+  env: Pick<HiringEnv, "registry">,
+  chatId: string,
+): Promise<MandateRow | null> {
   const [m] = await db
     .select()
     .from(mandates)
-    .where(eq(mandates.chatId, chatId))
+    .where(and(eq(mandates.chatId, chatId), eq(mandates.registry, env.registry.toLowerCase())))
     .orderBy(desc(mandates.createdAt))
     .limit(1);
   return m && m.expiresAt.getTime() > Date.now() ? m : null;
@@ -156,6 +161,7 @@ async function save(
     .values({
       chatId: chat.id,
       mandateId: m.mandateId,
+      registry: env.registry.toLowerCase(),
       owner: m.owner,
       payer: m.payer,
       budgetUnits: m.budget,

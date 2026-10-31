@@ -66,6 +66,13 @@ export function loadHiringEnv(env: NodeJS.ProcessEnv = process.env): HiringEnv |
   };
 }
 
+/** A client for the registry a saved limit lives on: the current one, or an older one. */
+export function mandateClientFor(env: HiringEnv, registry: string): MandateClient {
+  return registry.toLowerCase() === env.registry.toLowerCase()
+    ? env.mc
+    : new MandateClient(registry as Address, env.mc.chain);
+}
+
 /** The Hedera account behind an EVM address (MetaMask accounts get one when first funded). */
 export async function hederaAccountOf(mirrorUrl: string, evm: Address): Promise<string | null> {
   const res = await fetch(`${mirrorUrl}/api/v1/accounts/${evm}`);

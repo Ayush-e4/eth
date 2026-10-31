@@ -72,7 +72,10 @@ export function statusCheck(
       db
         .select({ units: sum(hires.feeUnits) })
         .from(hires)
-        .innerJoin(mandates, eq(mandates.mandateId, hires.mandateId))
+        .innerJoin(
+          mandates,
+          and(eq(mandates.mandateId, hires.mandateId), eq(mandates.registry, hires.registry)),
+        )
         .where(and(eq(mandates.demo, true), gt(hires.createdAt, new Date(Date.now() - 86_400_000))))
         .then(([r]) => BigInt(r?.units ?? 0)),
       db

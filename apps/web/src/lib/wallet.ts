@@ -1,4 +1,4 @@
-import { DEPLOYMENTS, erc20Abi, hederaTestnet, mandateRegistryAbi } from "@eth/mandates";
+import { erc20Abi, hederaTestnet, mandateRegistryAbi } from "@eth/mandates";
 import type { Card } from "@eth/shared";
 import {
   type AddEthereumChainParameter,
@@ -161,7 +161,7 @@ export async function createMandateInWallet(card: LimitCard): Promise<bigint> {
 }
 
 /** The owner cancels a limit on Hedera; no agent can be paid from it afterwards. */
-export async function revokeInWallet(mandateId: string): Promise<void> {
+export async function revokeInWallet(registry: string, mandateId: string): Promise<void> {
   await switchToHedera();
   const account = await connect();
   const wallet = createWalletClient({
@@ -171,7 +171,7 @@ export async function revokeInWallet(mandateId: string): Promise<void> {
   });
   const chain = createPublicClient({ chain: hederaTestnet, transport: http() });
   const hash = await wallet.writeContract({
-    address: DEPLOYMENTS.testnet.mandateRegistry,
+    address: registry as `0x${string}`, // the limit's own registry (older ones too)
     abi: mandateRegistryAbi,
     functionName: "revoke",
     args: [BigInt(mandateId)],

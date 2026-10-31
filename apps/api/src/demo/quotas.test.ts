@@ -44,6 +44,7 @@ const demoLimit = (chatId: string, mandateId: bigint) =>
   db.insert(mandates).values({
     chatId,
     mandateId,
+    registry: env.registry.toLowerCase(),
     owner: env.demo.evm,
     payer: "0.0.1001",
     budgetUnits: 300_000n,
@@ -55,6 +56,7 @@ const paid = (chatId: string, mandateId: bigint, feeUnits: bigint) =>
   db.insert(hires).values({
     chatId,
     mandateId,
+    registry: env.registry.toLowerCase(),
     skill: "flights",
     agent: AIRNEST,
     title: "AirNest",
@@ -150,6 +152,7 @@ describe("demo quotas", () => {
     await db.insert(mandates).values({
       chatId: w.chatId,
       mandateId: 9n,
+      registry: env.registry.toLowerCase(),
       owner: "0x0000000000000000000000000000000000000abc",
       payer: "0.0.2002",
       budgetUnits: 300_000n,

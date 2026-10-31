@@ -1,9 +1,10 @@
+import { hederaTestnet } from "@eth/mandates";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../app";
 import { loadConfig } from "../config";
 import type { Db } from "../db/client";
 import { hires, mandates } from "../db/schema";
-import type { HiringEnv } from "../hiring/env";
+import { type HiringEnv, mandateClientFor } from "../hiring/env";
 import type { HiringService } from "../hiring/service";
 import { testDb } from "../test/db";
 
@@ -24,7 +25,8 @@ const env = {
     evm: "0x0000000000000000000000000000000000000d3d",
     account: "0.0.1001",
   },
-  mc: { getMandate, revoke },
+  mc: { getMandate, revoke, chain: hederaTestnet },
+  registry: "0x00000000000000000000000000000000000000AA",
   mirrorUrl: "https://mirror",
   usdcTokenId: "0.0.429274",
 } as unknown as HiringEnv;
@@ -40,20 +42,25 @@ async function demoUserWithAHire() {
   const cookie = res.headers.get("set-cookie")?.split(";")[0] ?? "";
   const chat = ((await (await req("POST", "/chats", cookie)).json()) as { chat: { id: string } })
     .chat;
-  await db.insert(mandates).values({
-    chatId: chat.id,
-    mandateId: 28n,
-    owner: env.demo.evm,
-    payer: "0.0.1001",
-    budgetUnits: 300_000n,
-    payees: [AIRNEST],
-    payeeNames: { [AIRNEST]: "AirNest" },
-    demo: true,
-    expiresAt: new Date(Date.now() + 3_600_000),
-  });
+  const [limit] = await db
+    .insert(mandates)
+    .values({
+      chatId: chat.id,
+      mandateId: 28n,
+      registry: env.registry.toLowerCase(),
+      owner: env.demo.evm,
+      payer: "0.0.1001",
+      budgetUnits: 300_000n,
+      payees: [AIRNEST],
+      payeeNames: { [AIRNEST]: "AirNest" },
+      demo: true,
+      expiresAt: new Date(Date.now() + 3_600_000),
+    })
+    .returning();
   await db.insert(hires).values({
     chatId: chat.id,
     mandateId: 28n,
+    registry: env.registry.toLowerCase(),
     skill: "flights",
     agent: AIRNEST,
     title: "AirNest — budget flights",
@@ -63,7 +70,7 @@ async function demoUserWithAHire() {
     result: { reference: "FH-1" },
     logSeq: 34,
   });
-  return { cookie, chatId: chat.id };
+  return { cookie, chatId: chat.id, limitId: limit?.id ?? "" };
 }
 
 beforeEach(async () => {
@@ -109,33 +116,54 @@ describe("tasks and wallet", () => {
       shared: true,
       balances: { usdcUnits: "9620000", hbarTinybars: "4200000000" },
       spentUnits: "30000",
-      limits: [{ mandateId: "28", spentUnits: "30000", payees: ["AirNest"], status: "active" }],
+      limits: [
+        {
+          mandateId: "28",
+          retired: false,
+          spentUnits: "30000",
+          payees: ["AirNest"],
+          status: "active",
+        },
+      ],
       payments: [{ to: "AirNest", feeUnits: "30000" }],
     });
   });
 
   it("never shows another user's tasks, and won't revoke their limits", async () => {
-    await demoUserWithAHire();
+    const { limitId } = await demoUserWithAHire();
     const other =
       (await app.request("/auth/demo", { method: "POST", headers: { origin: ORIGIN } })).headers
         .get("set-cookie")
         ?.split(";")[0] ?? "";
     expect(await (await req("GET", "/tasks", other)).json()).toMatchObject({ tasks: [] });
-    expect((await req("POST", "/wallet/limits/28/revoke", other)).status).toBe(404);
+    expect((await req("POST", `/wallet/limits/${limitId}/revoke`, other)).status).toBe(404);
     expect(revoke).not.toHaveBeenCalled();
   });
 
   it("revokes a demo limit with the demo wallet, and leaves wallet users' limits to their wallet", async () => {
-    const { cookie } = await demoUserWithAHire();
-    expect((await req("POST", "/wallet/limits/28/revoke", cookie)).status).toBe(200);
+    const { cookie, limitId } = await demoUserWithAHire();
+    expect((await req("POST", "/wallet/limits/28/revoke", cookie)).status).toBe(404); // by row id
+    expect((await req("POST", `/wallet/limits/${limitId}/revoke`, cookie)).status).toBe(200);
     expect(revoke).toHaveBeenCalledWith(expect.anything(), 28n);
     expect(logWrite).toHaveBeenCalledWith({
       kind: "agentnet.mandate.revoked",
       mandateId: "28",
+      registry: env.registry.toLowerCase(),
       by: env.demo.evm,
     });
     await db.update(mandates).set({ demo: false });
-    expect((await req("POST", "/wallet/limits/28/revoke", cookie)).status).toBe(409);
+    expect((await req("POST", `/wallet/limits/${limitId}/revoke`, cookie)).status).toBe(409);
+  });
+
+  it("marks limits on an older registry as retired, and reads them there", async () => {
+    const { cookie } = await demoUserWithAHire();
+    await db.update(mandates).set({ registry: "0x2f30e8f1804fe163c76918db493a441d44394d5d" });
+    const w = (await (await req("GET", "/wallet", cookie)).json()) as {
+      limits: { retired: boolean; registry: string }[];
+    };
+    expect(w.limits[0]).toMatchObject({ retired: true });
+    expect(getMandate).not.toHaveBeenCalled(); // read through the old registry's own client
+    expect(mandateClientFor(env, env.registry.toUpperCase().replace("0X", "0x"))).toBe(env.mc);
   });
 
   it("reads the public spend log back from the mirror node, no sign-in needed", async () => {

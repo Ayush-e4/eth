@@ -68,7 +68,10 @@ export function demoQuotas(
     const [fees] = await db
       .select({ units: sum(hires.feeUnits) })
       .from(hires)
-      .innerJoin(mandates, eq(mandates.mandateId, hires.mandateId))
+      .innerJoin(
+        mandates,
+        and(eq(mandates.mandateId, hires.mandateId), eq(mandates.registry, hires.registry)),
+      )
       .where(and(eq(mandates.demo, true), gt(hires.createdAt, since())));
     const [limits] = await db
       .select({ n: count() })

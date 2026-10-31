@@ -113,6 +113,7 @@ describe("hiring in a chat with one agent", () => {
     await db.insert(mandates).values({
       chatId: chat.id,
       mandateId: 7n,
+      registry: env.registry.toLowerCase(),
       owner: env.demo.evm,
       payer: "0.0.1001",
       budgetUnits: 300_000n,

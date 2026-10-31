@@ -35,11 +35,11 @@ export function WalletView() {
   useEffect(load, [load]);
 
   const cancel = async (l: Limit) => {
-    setCancelling(l.mandateId);
+    setCancelling(l.id);
     setError(null);
     try {
-      if (l.demo) await api(`/wallet/limits/${l.mandateId}/revoke`, { method: "POST" });
-      else await revokeInWallet(l.mandateId);
+      if (l.demo) await api(`/wallet/limits/${l.id}/revoke`, { method: "POST" });
+      else await revokeInWallet(l.registry, l.mandateId);
       load();
     } catch (err) {
       const code = (err as { code?: number }).code;
@@ -157,7 +157,7 @@ export function WalletView() {
               : 0;
             return (
               <li
-                key={l.mandateId}
+                key={l.id}
                 className={`flex flex-wrap items-center gap-4 rounded-[14px] border border-line px-[18px] py-4 ${l.status === "active" ? "bg-white" : "bg-side"}`}
               >
                 <span className="flex min-w-0 flex-[1_1_260px] flex-col gap-1">
@@ -169,6 +169,14 @@ export function WalletView() {
                       {l.chatTitle}
                     </Link>
                     <span className="font-mono text-xs text-muted">#{l.mandateId}</span>
+                    {l.retired && (
+                      <span
+                        className="rounded-full bg-side px-2.5 py-0.5 text-xs text-ink-3"
+                        title="Made on our previous contract. New hires use a new limit."
+                      >
+                        older contract
+                      </span>
+                    )}
                     {l.logSeq !== null && w.logTopic && (
                       <a
                         className="font-mono text-xs text-teal"
@@ -206,11 +214,11 @@ export function WalletView() {
                 {l.status === "active" && (
                   <button
                     type="button"
-                    disabled={cancelling === l.mandateId}
+                    disabled={cancelling === l.id}
                     onClick={() => cancel(l)}
                     className="h-10 rounded-[10px] border border-[#E8B4AE] bg-white px-3.5 text-sm font-semibold text-bad disabled:opacity-50"
                   >
-                    {cancelling === l.mandateId
+                    {cancelling === l.id
                       ? "Cancelling…"
                       : l.demo
                         ? "Cancel limit"
