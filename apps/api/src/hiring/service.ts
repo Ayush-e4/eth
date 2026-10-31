@@ -25,6 +25,7 @@ import {
 } from "./mandates";
 import { saveHire } from "./record";
 import type { Reputation } from "./reputation";
+import type { UndoWindows } from "./undo";
 
 /** What hiring needs to know about a chat. */
 export type ChatLike = Pick<Chat, "id" | "mode" | "limitUnits">;
@@ -54,7 +55,7 @@ export type HireOutcome =
 export function hiringService(
   db: Db,
   env: HiringEnv,
-  opts: { requireHuman?: boolean; reputation?: Reputation } = {},
+  opts: { requireHuman?: boolean; reputation?: Reputation; undo?: UndoWindows } = {},
 ) {
   const held = new Map<string, Held[]>(); // chatId → quotes, newest last
   const approvals = approvalBook(opts.requireHuman);
@@ -146,7 +147,14 @@ export function hiringService(
     /** Reads "Approve abc123" / "Decline abc123" in what the user sent. */
     noteUserMessage: (chatId: string, text: string) => approvals.note(chatId, text),
 
-    async hire(chat: ChatLike, ref: string, reason: string, label: string): Promise<HireOutcome> {
+    /** `onScheduled`: an "auto" payment is waiting out its undo window (show it, with Cancel). */
+    async hire(
+      chat: ChatLike,
+      ref: string,
+      reason: string,
+      label: string,
+      onScheduled?: (card: Extract<Card, { type: "payment" }>) => void,
+    ): Promise<HireOutcome> {
       const h = find(chat.id, ref);
       if (!h)
         return {
@@ -198,6 +206,22 @@ export function hiringService(
           chainId: env.mc.chain.id,
           resolver: new MirrorResolver(env.mirrorUrl),
           maxAmount: PER_PAYMENT_CAP,
+          // "Auto" chats pay with an undo window: Hedera holds the payment, the user can cancel.
+          ...(chat.mode === "auto" && opts.undo?.seconds
+            ? {
+                undoSeconds: opts.undo.seconds,
+                onSigned: (key: string) =>
+                  void opts.undo?.watch(chat.id, key, (s) =>
+                    onScheduled?.({
+                      type: "payment",
+                      scheduleId: s.scheduleId,
+                      executesAt: new Date(s.executesAt).toISOString(),
+                      title: nameOf(h.option),
+                      feeUnits: h.option.feeUnits.toString(),
+                    }),
+                  ),
+              }
+            : {}),
         }),
         mandateId: m.mandateId,
         payer: m.payer,

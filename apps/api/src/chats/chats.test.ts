@@ -106,6 +106,7 @@ describe("sending a message", () => {
     const id = await newChat(me);
     const res = await req("POST", `/chats/${id}/messages`, me, { text: "Plan a Goa weekend" });
     expect(res.headers.get("content-type")).toContain("text/event-stream");
+    expect(res.headers.get("cache-control")).toContain("no-transform");
     const got = await events(res);
     expect(got.map((e) => e.type)).toEqual(["status", "text", "card", "text", "done"]);
 

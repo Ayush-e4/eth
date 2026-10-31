@@ -27,6 +27,8 @@ export function cardNote(card: Card): string {
       return `[app: hire_agent asked the user to approve a payment: ${card.title}, ${fee(card.feeUnits)}, code ${card.code}]`;
     case "task":
       return `[app: post_task posted open task ${card.task} on Arkiv for ${card.skill} ("${card.title}"), taking bids until ${card.closesAt}; read them with check_bids]`;
+    case "payment":
+      return `[app: hire_agent scheduled ${fee(card.feeUnits)} to ${card.title} on Hedera (schedule ${card.scheduleId}), running at ${card.executesAt} unless the user cancelled it]`;
     case "hired":
       return `[app: hire_agent hired ${card.title} for ${card.skill}, paid ${fee(card.feeUnits)}, tx ${card.hederaTx}: ${card.summary}]`;
   }

@@ -8,8 +8,10 @@ import type { Concierge } from "./concierge/concierge";
 import type { Config } from "./config";
 import type { Db } from "./db/client";
 import type { HiringEnv } from "./hiring/env";
+import { paymentRoutes } from "./hiring/payment-routes";
 import { mandateRoutes } from "./hiring/routes";
 import type { HiringService } from "./hiring/service";
+import type { UndoWindows } from "./hiring/undo";
 import { type LogNames, spendLogRoutes } from "./spend-log/routes";
 import { openTaskRoutes } from "./tasks/routes";
 import type { OpenTaskService } from "./tasks/service";
@@ -24,6 +26,7 @@ export interface AppDeps {
   logNames?: LogNames;
   humanChecks?: HumanChecks | null;
   tasks?: OpenTaskService | null;
+  undo?: UndoWindows | null;
 }
 
 export function createApp(db: Db, config: Config, deps: AppDeps = {}) {
@@ -59,6 +62,7 @@ export function createApp(db: Db, config: Config, deps: AppDeps = {}) {
   app.route("/", spendLogRoutes(hiring?.env ?? null, deps.logNames));
   app.route("/", humanCheckRoutes(db, deps.humanChecks ?? null, hiring?.service ?? null));
   app.route("/", openTaskRoutes(db, deps.tasks ?? null));
+  app.route("/", paymentRoutes(db, deps.undo ?? null));
 
   return app;
 }

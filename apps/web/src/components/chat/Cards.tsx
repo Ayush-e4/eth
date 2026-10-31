@@ -3,6 +3,7 @@
 import type { Card } from "@eth/shared";
 import { shortAddress, usdc } from "@/lib/api";
 import { ApprovalCard, type CardCtx, HiredCard, LimitCard, QuotesCard } from "./MoneyCards";
+import { PaymentCard } from "./PaymentCard";
 import { TaskCard } from "./TaskCard";
 
 type AgentsCard = Extract<Card, { type: "agents" }>;
@@ -39,6 +40,8 @@ export function CardView({ card, ctx }: { card: Card; ctx: CardCtx }) {
       return <TaskCard card={card} ctx={ctx} />;
     case "hired":
       return <HiredCard card={card} />;
+    case "payment":
+      return <PaymentCard card={card} ctx={ctx} />;
   }
 }
 

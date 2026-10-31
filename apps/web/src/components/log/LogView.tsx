@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import {
   api,
   arkivEntity,
+  hashscanSchedule,
   hashscanTopic,
   hashscanTx,
   type LogEntry,
@@ -28,6 +29,18 @@ function describe(
         tag: "Payment",
         what: `${usdc(str(e.amount))} USDC from ${who(e.payer)} to ${who(e.payTo)}, under limit #${str(e.mandateId)}`,
         proof: ["transfer", hashscanTx(str(e.transaction))],
+      };
+    case "x402.scheduled":
+      return {
+        tag: "Undo window",
+        what: `${usdc(str(e.amount))} USDC to ${who(e.payTo)} scheduled under limit #${str(e.mandateId)}; cancellable until ${new Date(str(e.executesAt)).toLocaleTimeString()}`,
+        proof: ["schedule", hashscanSchedule(str(e.scheduleId))],
+      };
+    case "x402.schedule.cancelled":
+      return {
+        tag: "Cancelled",
+        what: `Scheduled payment ${str(e.scheduleId)} cancelled in its undo window; nothing was paid`,
+        proof: ["schedule", hashscanSchedule(str(e.scheduleId))],
       };
     case "agentnet.hired":
       return {
@@ -57,6 +70,7 @@ const TAG: Record<string, string> = {
   Hire: "bg-[#EEEAF8] text-[#4E3D8F]",
   "New limit": "bg-ok-soft text-ok",
   Slice: "bg-saffron-soft text-saffron-ink",
+  "Undo window": "bg-saffron-soft text-saffron-ink",
   Cancelled: "bg-bad-soft text-bad",
   Note: "bg-bubble text-ink-3",
 };
