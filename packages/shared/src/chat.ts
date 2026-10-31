@@ -112,6 +112,8 @@ export const HiredCardSchema = z.object({
       deliveredTx: z.string().optional(),
       releasedTx: z.string().optional(),
       releaseFailed: z.string().optional(),
+      /** Held for the user's review until then (ISO): pay now or dispute from the card. */
+      reviewUntil: z.string().optional(),
     })
     .optional(),
   /** For an agent that hires agents: the slice of the limit it got, and who it paid from it. */

@@ -4,7 +4,7 @@ import { chatStore } from "../chats/store";
 import type { Db } from "../db/client";
 import { chats, hires, mandates, users } from "../db/schema";
 import { testDb } from "../test/db";
-import type { HiringEnv } from "./env";
+import { AIRNEST, env, option, round } from "../test/hiring";
 import { hiringService } from "./service";
 
 vi.mock("@eth/agents/hiring", () => ({
@@ -16,39 +16,6 @@ vi.mock("@eth/arkiv", () => ({
   arkivReader: vi.fn(() => ({})),
   arkivWriter: vi.fn(() => ({})),
 }));
-
-const AIRNEST = "0x65F8E30A61635AFEB3F33B5221F05B8A6FCE3E13";
-const env = {
-  concierge: { key: `0x${"11".repeat(32)}`, evm: "0xeE7bb1b4204C4384CFb7E497256eA1d061b397C8" },
-  demo: {
-    key: `0x${"22".repeat(32)}`,
-    evm: "0x0000000000000000000000000000000000000d3d",
-    account: "0.0.1001",
-  },
-  mc: { publicClient: {}, chain: { id: 296 } },
-  registry: "0x2f30e8F1804Fe163C76918db493a441D44394D5d",
-  registryId: "0.0.11102395",
-  usdc: "0x0000000000000000000000000000000000068cda",
-  usdcTokenId: "0.0.429274",
-  mirrorUrl: "https://mirror",
-} as unknown as HiringEnv;
-
-const option = {
-  key: "0xquote",
-  agent: AIRNEST,
-  title: "AirNest — budget flights",
-  note: "IX1163 ₹14,282",
-  feeUnits: 30_000n,
-  endpoint: "http://a",
-};
-const round = {
-  skill: "flights",
-  task: "t",
-  input: {},
-  options: [option],
-  bestReason: "lowest total",
-  skipped: [],
-};
 
 let db: Db;
 let chat: Awaited<ReturnType<ReturnType<typeof chatStore>["create"]>>;
@@ -139,17 +106,28 @@ describe("hiring from a chat", () => {
     expect((await s.hire(chat, "q1", "again", "flights")).status).toBe("refused"); // quote used up
   });
 
-  it("paid on delivery: the card shows the escrow, and the concierge releases it", async () => {
+  it("paid on delivery: paid out at once, or held for the user's review first", async () => {
     await giveMandate([AIRNEST]);
-    const escrow = { id: "0xe5", deliveredTx: "0.0.5005@7.7", releasedTx: "0xrel" };
+    const escrow = { id: "0xe5", deliveredTx: "0.0.5005@7.7" };
     const base = await (buy as unknown as () => Promise<object>)(); // the usual hire
-    vi.mocked(buy).mockResolvedValueOnce({ ...base, escrow } as never);
+    vi.mocked(buy).mockResolvedValue({ ...base, escrow } as never);
     const release = vi.fn();
-    const s = hiringService(db, { ...env, release });
+    const withEscrow = { ...env, escrow: { release, dispute: vi.fn(), read: vi.fn() } };
+    const s = hiringService(db, withEscrow);
     await s.quotes(chat, "flights", {});
     const out = await s.hire(chat, "q1", "x", "flights");
     expect(out.status === "hired" && out.card.escrow).toEqual(escrow);
     expect(vi.mocked(buy).mock.calls.at(-1)?.[3]).toMatchObject({ release });
+
+    const hold = vi.fn(async () => new Date("2026-11-01T10:02:00Z"));
+    const reviewed = hiringService(db, withEscrow, { review: { hold } as never });
+    await reviewed.quotes(chat, "flights", {});
+    const held = await reviewed.hire(chat, "q2", "x", "flights");
+    expect(held.status === "hired" && held.card.escrow?.reviewUntil).toBe(
+      "2026-11-01T10:02:00.000Z",
+    );
+    expect(hold).toHaveBeenCalledWith(chat.id, "0xe5", "AirNest");
+    expect(vi.mocked(buy).mock.calls.at(-1)?.[3]).not.toHaveProperty("release");
   });
 
   it("writes each hire to the public spend log and links its entry from the card", async () => {

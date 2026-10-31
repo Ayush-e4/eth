@@ -81,15 +81,23 @@ checks, but the USDC lands in MandateRegistry, not with the agent. Then:
 
 1. **Delivered.** After the job, the agent calls `markDelivered(escrowId, sha256(result))` from
    its own Hedera account, before it answers, and its job view carries `escrow { id, deliveredTx }`.
-2. **Paid out.** The buyer releases it once it has the result: the API with the concierge's key,
-   TripMint for the agents it hires. The chat card shows held → delivered → paid out, each
-   linked on HashScan.
+2. **Your review, then paid out.** In the chat the fee waits a review window
+   (`ESCROW_REVIEW_SECONDS`, default 2 min; 0 pays at once), counting down on the card with
+   **Looks good, pay now** and **Dispute**. When it ends, the concierge releases it. TripMint
+   releases the agents it hires at once. Each step is linked on HashScan.
+   - **Dispute** (after the agent marked it delivered): the concierge calls `dispute`, which
+     freezes the fee on-chain; the timer never pays it. Our agents answer a dispute by refunding
+     (their sweep sees it within a minute), and the card says the fee is back on the limit. Until
+     then the user can **pay anyway** (`release` works on a disputed fee).
+   - The review is kept in Postgres (`escrow_reviews`): after a restart, timers come back, and a
+     click cut off half-way is settled by what the chain says (a dispute that went through stays
+     disputed).
 3. **Failed job.** The agent calls `refund(escrowId)`: the USDC goes back to the payer and the
    spent amount back to the limit.
 
-Every 2 minutes each agent sweeps its open escrows (`escrow.ts`): it retries a delivery or
-refund that failed, closes the ones the buyer released, and **claims** a fee the buyer didn't
-release within the review window. A buyer that doesn't release (the MCP server has no HBAR)
+Every minute each agent sweeps its open escrows (`escrow.ts`): it retries a delivery or refund
+that failed, closes the ones the buyer released, refunds the disputed ones, and **claims** a fee
+the buyer didn't release within the agent's review window (15 min, on-chain). A buyer that doesn't release (the MCP server has no HBAR)
 therefore still pays, 15 minutes later. Every move needs a little HBAR for gas (about 0.06 HBAR
 each): `pnpm setup:testnet --fix` tops up the concierge and the agents.
 

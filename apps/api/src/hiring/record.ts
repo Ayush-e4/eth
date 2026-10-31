@@ -7,6 +7,7 @@ import { hires } from "../db/schema";
 import { recordSubHires } from "./delegate";
 import type { HiringEnv } from "./env";
 import type { Reputation } from "./reputation";
+import type { EscrowReviews } from "./review";
 
 export interface PaidHire {
   chatId: string;
@@ -77,9 +78,17 @@ export async function finishHire(
     hire: Hire;
     delegation?: Granted;
     reputation?: Reputation;
+    /** Pay on delivery: hold the fee for the user's review instead of paying it out now. */
+    review?: EscrowReviews;
   },
 ): Promise<Extract<Card, { type: "hired" }>> {
   const { hire, delegation } = h;
+  const title = hire.agentTitle.split(" — ")[0] ?? hire.agentTitle;
+  const e = hire.escrow;
+  const reviewUntil =
+    e && !e.releasedTx && h.review
+      ? (await h.review.hold(h.chatId, e.id, title)).toISOString()
+      : undefined;
   // The payer reviews the agent on its ERC-8004 identity, in the background.
   void h.reputation?.rate(hire.agent, hire.skill, hire.endpoint);
   const log = await saveHire(db, env, {
@@ -100,13 +109,13 @@ export async function finishHire(
   return {
     type: "hired",
     skill: hire.skill,
-    title: hire.agentTitle.split(" — ")[0] ?? hire.agentTitle,
+    title,
     summary: hire.quoteNote,
     feeUnits: hire.feeUnits.toString(),
     hederaTx: hire.hederaTx,
     jobKey: hire.jobKey,
     log,
-    ...(hire.escrow ? { escrow: hire.escrow } : {}),
+    ...(e ? { escrow: { ...e, ...(reviewUntil ? { reviewUntil } : {}) } } : {}),
     subMandateId: delegation?.mandateId,
     subHires,
   };

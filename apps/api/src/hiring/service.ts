@@ -28,6 +28,7 @@ import type { PendingHires } from "./pending";
 import { quoteRefs } from "./quote-refs";
 import { finishHire } from "./record";
 import type { Reputation } from "./reputation";
+import type { EscrowReviews } from "./review";
 import type { UndoWindows } from "./undo";
 
 /** What hiring needs to know about a chat. */
@@ -57,6 +58,7 @@ export function hiringService(
     requireHuman?: boolean;
     reputation?: Reputation;
     undo?: UndoWindows;
+    review?: EscrowReviews; // pay on delivery: hold fees for the user's review, else pay at once
     pending?: PendingHires;
     demo?: DemoQuotaCheck; // daily allowances when the shared demo wallet pays
   } = {},
@@ -200,7 +202,7 @@ export function hiringService(
         ...(await quoteDeps()),
         buyerWriter: arkivWriter(env.concierge.key),
         platformWriter: arkivWriter(env.demo.key),
-        ...(env.release ? { release: env.release } : {}), // pay on delivery: we pay it out
+        ...(env.escrow && !opts.review ? { release: env.escrow.release } : {}), // see `review`
         payingFetch: createPayingFetch({
           agent: privateKeyToAccount(env.concierge.key),
           mandateId: m.mandateId,
@@ -281,6 +283,7 @@ export function hiringService(
           hire,
           delegation,
           reputation: opts.reputation,
+          review: opts.review,
         });
         if (tracked) await opts.pending?.end(tracked);
         return { status: "hired", result: hire.result, card };

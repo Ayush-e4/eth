@@ -205,10 +205,10 @@ export function ApprovalCard({ card, ctx }: { card: Of<"approval">; ctx: CardCtx
 }
 
 /** An agent was paid and did the job, with proof anyone can check. */
-export function HiredCard({ card }: { card: Of<"hired"> }) {
+export function HiredCard({ card, ctx }: { card: Of<"hired">; ctx?: CardCtx }) {
   return (
     <div className="flex flex-col gap-2">
-      <HiredRow card={card} />
+      <HiredRow card={card} ctx={ctx} />
       {card.subHires?.length ? (
         <section
           aria-label={`Agents ${card.title} hired`}
@@ -230,7 +230,7 @@ export function HiredCard({ card }: { card: Of<"hired"> }) {
   );
 }
 
-function HiredRow({ card }: { card: Of<"hired"> }) {
+function HiredRow({ card, ctx }: { card: Of<"hired">; ctx?: CardCtx }) {
   return (
     <section
       aria-label={`${card.title} hired`}
@@ -278,7 +278,7 @@ function HiredRow({ card }: { card: Of<"hired"> }) {
           </a>
         )}
       </span>
-      <EscrowSteps card={card} />
+      <EscrowSteps card={card} ctx={ctx} />
     </section>
   );
 }
