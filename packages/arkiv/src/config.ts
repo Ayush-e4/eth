@@ -1,5 +1,5 @@
 import { createPublicClient, createWalletClient, ExpirationTime } from "@arkiv-network/sdk";
-import { tiramisu } from "@arkiv-network/sdk/chains";
+import { rabdi } from "@arkiv-network/sdk/chains";
 import { type Hex, http } from "viem";
 import { nonceManager, privateKeyToAccount } from "viem/accounts";
 
@@ -16,43 +16,35 @@ export const LIFETIME = {
   quote: (seconds = 180) => ExpirationTime.fromSeconds(seconds - (seconds % 2)),
   job: () => ExpirationTime.fromDays(7),
   receipt: () => ExpirationTime.fromDays(90),
-  rating: () => ExpirationTime.fromDays(365),
+  rating: () => ExpirationTime.fromDays(180), // Rabdi caps lifetimes at ~182 days (7,884,000 blocks)
   invoice: () => ExpirationTime.fromDays(30),
   task: (seconds = 600) => ExpirationTime.fromSeconds(seconds - (seconds % 2)),
   claim: () => ExpirationTime.fromDays(7),
 } as const;
 
-export const ARKIV_CHAIN = tiramisu;
-/** Tiramisu block explorer (data.arkiv.network does not list Tiramisu yet). */
+/**
+ * Rabdi, Arkiv's testnet (it replaced Tiramisu in Oct 2026). The access key from
+ * hub.arkiv.network rides in the RPC URL's path; without one we get the small public budget.
+ */
+export const ARKIV_CHAIN = rabdi({ accessKey: process.env.ARKIV_API_KEY ?? "" });
 export const ARKIV_EXPLORER = {
-  tx: (hash: string) => `https://tiramisu.explorer.arkiv.network/tx/${hash}`,
-  entity: (key: string) => `https://tiramisu.explorer.arkiv.network/entity/${key}`,
+  tx: (hash: string) => `https://rabdi.explorer.arkiv.network/tx/${hash}`,
+  entity: (key: string) => `https://rabdi.explorer.arkiv.network/entity/${key}`,
 } as const;
 
-/**
- * The RPC connection. Keyless use has a small query budget; with ARKIV_API_KEY (an access key
- * from hub.arkiv.network, kept on the server) queries count against that key's quota instead.
- * When the budget runs out the node answers 429: fail after one retry instead of backing off
- * for minutes, so callers see an error rather than a hang.
- */
-function transport(rpcUrl?: string, apiKey = process.env.ARKIV_API_KEY) {
-  return http(rpcUrl, {
-    retryCount: 1,
-    timeout: 15_000,
-    ...(apiKey ? { fetchOptions: { headers: { "X-API-KEY": apiKey } } } : {}),
-  });
-}
+/** When the budget runs out the node answers 429: fail after one retry instead of backing off for minutes. */
+const transport = () => http(undefined, { retryCount: 1, timeout: 15_000 });
 
 /** Reads need no wallet and are safe anywhere. */
-export function arkivReader(rpcUrl?: string) {
-  return createPublicClient({ chain: tiramisu, transport: transport(rpcUrl) });
+export function arkivReader() {
+  return createPublicClient({ chain: ARKIV_CHAIN, transport: transport() });
 }
 
 /** Writes are signed by the given wallet; the nonce manager allows parallel writes from one process. */
-export function arkivWriter(privateKey: Hex, rpcUrl?: string) {
+export function arkivWriter(privateKey: Hex) {
   return createWalletClient({
-    chain: tiramisu,
-    transport: transport(rpcUrl),
+    chain: ARKIV_CHAIN,
+    transport: transport(),
     account: privateKeyToAccount(privateKey, { nonceManager }),
   });
 }

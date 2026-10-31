@@ -237,14 +237,16 @@ function HiredRow({ card }: { card: Of<"hired"> }) {
         >
           paid {usdc(card.feeUnits)} USDC
         </a>
-        <a
-          className="text-teal"
-          href={`https://tiramisu.explorer.arkiv.network/entity/${card.jobKey}`}
-          target="_blank"
-          rel="noreferrer"
-        >
-          job on Arkiv
-        </a>
+        {card.jobKey !== "0x" && ( // "0x": paid, but Arkiv didn't take the job record
+          <a
+            className="text-teal"
+            href={`https://rabdi.explorer.arkiv.network/entity/${card.jobKey}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            job on Arkiv
+          </a>
+        )}
         {card.log && (
           <a
             className="text-teal"

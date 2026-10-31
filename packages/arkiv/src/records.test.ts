@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { PROJECT } from "./config";
 import { decodeEntity, type RawEntity } from "./decode";
-import { attributesFor, type Quote, toPayloadJson } from "./records";
+import { type Quote, toPayloadJson } from "./records";
+import { ARKIV_SCHEMAS, attributesFor } from "./schemas";
 
 const AGENT = "0x1111111111111111111111111111111111111111" as const;
 const OTHER = "0x2222222222222222222222222222222222222222" as const;
@@ -41,10 +42,10 @@ const quoteAttrs = (over: Record<string, { type: string; value: unknown }> = {})
 });
 
 describe("attributes", () => {
-  it("tag every record with our project and kind", () => {
+  it("go through one named schema per kind, scoped to our project", () => {
+    expect(ARKIV_SCHEMAS.quote.name).toBe(`${PROJECT}.quote`);
+    expect(ARKIV_SCHEMAS.task.name).toBe(`${PROJECT}.task`);
     const a = attributesFor.quote(quote) as Record<string, unknown>;
-    expect(a.project).toBeDefined();
-    expect(a.kind).toBeDefined();
     expect(Object.keys(a)).toEqual(
       expect.arrayContaining(["agent", "task", "skill", "price_units"]),
     );
@@ -147,8 +148,6 @@ describe("invoices", () => {
 
   it("indexes who issued it, who owes it, the task and the amount", () => {
     expect(Object.keys(attributesFor.invoice(invoice))).toEqual([
-      "project",
-      "kind",
       "agent",
       "buyer",
       "task",

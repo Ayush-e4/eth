@@ -10,3 +10,4 @@ allowBuilds:
 
 minimumReleaseAgeExclude:
   - '@anthropic-ai/sdk@1.0.0'
+  - '@arkiv-network/sdk@1.0.0'

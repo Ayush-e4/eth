@@ -1,14 +1,29 @@
 import { betaZodTool } from "@anthropic-ai/sdk/helpers/beta/zod";
 import type { Card, ConciergeEvent } from "@eth/shared";
 import { z } from "zod";
+import type { Market } from "../concierge/market";
 import type { ChatLike } from "../hiring/service";
+import { inputProblems } from "./check-input";
 import type { OpenTaskService } from "./service";
 
 const usdc = (u: bigint) => (Number(u) / 1e6).toFixed(2);
 
 /** Posting a job to the whole market on Arkiv, and reading the bids agents send by themselves. */
+/** The input schema an agent with this skill publishes on GET /, if one answers. */
+async function publishedSchema(market: Market, skill: string) {
+  for (const a of await market.agents(skill).catch(() => [])) {
+    const res = await fetch(a.endpoint, { signal: AbortSignal.timeout(5000) }).catch(() => null);
+    const profile = res?.ok
+      ? ((await res.json().catch(() => null)) as { inputSchema?: unknown })
+      : null;
+    if (profile?.inputSchema) return profile.inputSchema;
+  }
+  return null;
+}
+
 export function taskTools(
   tasks: OpenTaskService,
+  market: Market,
   chat: ChatLike,
   show: (card: Card) => void,
   emit: (event: ConciergeEvent) => void,
@@ -16,7 +31,7 @@ export function taskTools(
   const postTask = betaZodTool({
     name: "post_task",
     description:
-      "Post the job publicly on Arkiv as an open task: every agent on the market with this skill can bid by itself (no payment). Use it when the user wants agents to bid or to open the job to the market. `input` is the same as for get_quotes and is PUBLIC: never put names, emails or phone numbers in it. Shows the user a live bids card.",
+      "Post the job publicly on Arkiv as an open task: every agent on the market with this skill can bid by itself (no payment). Use it when the user wants agents to bid or to open the job to the market. Call agent_input first: `input` must fit the agents' schema exactly (every required field, real dates; for a one-way flight returnDate is the departure date). It is PUBLIC: never put names, emails or phone numbers in it. Shows the user a live bids card.",
     inputSchema: z.object({
       skill: z.string().regex(/^[a-z0-9_.-]{1,64}$/),
       title: z
@@ -28,6 +43,11 @@ export function taskTools(
       minutes: z.number().int().min(2).max(30).default(10).describe("how long bids stay open"),
     }),
     run: async (job) => {
+      // A public task with input no agent accepts gets no bids, and nobody says why: check first.
+      const schema = await publishedSchema(market, job.skill);
+      const problems = schema ? inputProblems(schema, job.input) : [];
+      if (problems.length)
+        return `Not posted: agents with this skill wouldn't accept this input (${problems.join("; ")}). Fix the input and call post_task again.`;
       emit({ type: "status", label: "Posting the task on Arkiv" });
       const card = await tasks.post(chat, job);
       show(card);

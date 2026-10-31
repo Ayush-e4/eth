@@ -77,32 +77,47 @@ export async function buy(
   const hederaTx = paid.settlement.transaction;
   d.log(`[${skill}] paid ${Number(pick.feeUnits) / 1e6} USDC via mandate → ${hederaTx}`);
 
+  // From here the agent is paid and the job done. The public records below must never lose that:
+  // if Arkiv refuses one, log it and still return the hire (the payment is proof on Hedera).
   const buyer = d.buyerWriter.account.address;
-  const job = await openJob(d.buyerWriter, {
-    task,
-    buyer,
-    seller: pick.agent,
-    quote: pick.key,
-    status: "paid",
-    mandateId: d.mandateId,
-    description: `${label}: ${choice}`.slice(0, 1000),
-  });
-  await recordReceipt(d.platformWriter, {
-    job: job.entityKey,
-    task,
-    mandateId: d.mandateId,
-    payer: d.payer,
-    payTo: paid.requirements.payTo,
-    amountUnits: pick.feeUnits,
-    hederaTx,
-  });
-  await rateAgent(d.buyerWriter, {
-    agent: pick.agent,
-    job: job.entityKey,
-    rater: buyer,
-    score: 5,
-    comment: "Delivered as quoted",
-  });
+  const record = async <T>(what: string, write: () => Promise<T>) =>
+    write().catch((err: unknown) => {
+      d.log(`[${skill}] couldn't record the ${what} on Arkiv: ${String(err).slice(0, 200)}`);
+      return null;
+    });
+  const job = await record("job", () =>
+    openJob(d.buyerWriter, {
+      task,
+      buyer,
+      seller: pick.agent,
+      quote: pick.key,
+      status: "paid",
+      mandateId: d.mandateId,
+      description: `${label}: ${choice}`.slice(0, 1000),
+    }),
+  );
+  if (job) {
+    await record("receipt", () =>
+      recordReceipt(d.platformWriter, {
+        job: job.entityKey,
+        task,
+        mandateId: d.mandateId,
+        payer: d.payer,
+        payTo: paid.requirements.payTo,
+        amountUnits: pick.feeUnits,
+        hederaTx,
+      }),
+    );
+    await record("rating", () =>
+      rateAgent(d.buyerWriter, {
+        agent: pick.agent,
+        job: job.entityKey,
+        rater: buyer,
+        score: 5,
+        comment: "Delivered as quoted",
+      }),
+    );
+  }
 
   return {
     skill,
@@ -115,7 +130,7 @@ export async function buy(
     itemCurrency: pick.itemCurrency,
     choice,
     hederaTx,
-    jobKey: job.entityKey,
+    jobKey: job?.entityKey ?? "0x", // "0x": paid, but Arkiv didn't take the job record
     result: body.result,
     rejected: otherOptions(round, pick.key),
   };

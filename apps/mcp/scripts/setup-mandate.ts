@@ -65,7 +65,7 @@ if ((await arkivReader().getBalance({ address: agent.address })) < parseEther("0
     to: agent.address,
     value: parseEther("0.05"),
   });
-  console.log("Sent 0.05 Tiramisu test ETH to the MCP key for Arkiv records");
+  console.log("Sent 0.05 test GLM (Arkiv Rabdi) to the MCP key for Arkiv records");
 }
 
 saveConfig({

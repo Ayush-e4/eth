@@ -125,9 +125,10 @@ export function claudeConcierge(
       input.emit({ type: "card", card });
     };
     const tools = conciergeTools(market, show, input.emit);
-    const award = async (ref: string) => tasks?.award(input.chat.id, ref);
+    const award = async (held: Parameters<OpenTaskService["award"]>[1]) =>
+      tasks?.award(input.chat.id, held);
     const spend = hiring ? hireTools(hiring, market, input.chat, show, input.emit, award) : null;
-    const open = tasks && spend ? taskTools(tasks, input.chat, show, input.emit) : null;
+    const open = tasks && spend ? taskTools(tasks, market, input.chat, show, input.emit) : null;
     const runner = anthropic.beta.messages.toolRunner(
       {
         model: MODEL,

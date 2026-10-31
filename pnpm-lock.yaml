@@ -409,8 +409,8 @@ importers:
   packages/arkiv:
     dependencies:
       '@arkiv-network/sdk':
-        specifier: 0.8.1
-        version: 0.8.1(typescript@5.9.3)(viem@2.57.7(typescript@5.9.3)(zod@4.6.7))
+        specifier: 1.0.0
+        version: 1.0.0(typescript@5.9.3)(viem@2.57.7(typescript@5.9.3)(zod@4.6.7))
       viem:
         specifier: 2.57.7
         version: 2.57.7(typescript@5.9.3)(zod@4.6.7)
@@ -563,8 +563,8 @@ packages:
       zod:
         optional: true
 
-  '@arkiv-network/sdk@0.8.1':
-    resolution: {integrity: sha512-J2Qn7OOPZet5qGtN2XwLkSEnzk70FZCYDNclS/a4vrYBmsW4xgblTXWrczZXAhD2x4unSgGQwqpGZkBta/x7ow==}
+  '@arkiv-network/sdk@1.0.0':
+    resolution: {integrity: sha512-UadvpitgdDJMhrFLveEJrsG4dFbI7uh01T+NE7d4mFBha7CDXT1jeiiepwDgFgsbkBnXlJkohrlt9mz2DbNYrw==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
       typescript: '>=5.0.0'
@@ -1859,10 +1859,6 @@ packages:
     resolution: {integrity: sha512-Ifk1KcLrxaGt1occQagQNFNNOqRt1LFuehEnHHzB8Z6cRgIxRU1TBaiIsUiCdA+gy5PL7Y1IX31DNKkRmxtXjQ==}
     engines: {node: '>=18'}
 
-  brotli-wasm@3.0.1:
-    resolution: {integrity: sha512-U3K72/JAi3jITpdhZBqzSUq+DUY697tLxOuFXB+FpAE/Ug+5C3VZrv4uA674EUZHxNAuQ9wETXNqQkxZD6oL4A==}
-    engines: {node: '>=v18.0.0'}
-
   buffer-from@1.1.2:
     resolution: {integrity: sha512-E+XQCRwSbaaiChtv6k6Dwgc+bx+Bs6vuKJHHl5kox/BaKbhiXzqQOwK4cO22yElGp2OCmjwVhT3HmxgyPGnJfQ==}
 
@@ -3148,9 +3144,8 @@ snapshots:
     optionalDependencies:
       zod: 4.6.7
 
-  '@arkiv-network/sdk@0.8.1(typescript@5.9.3)(viem@2.57.7(typescript@5.9.3)(zod@4.6.7))':
+  '@arkiv-network/sdk@1.0.0(typescript@5.9.3)(viem@2.57.7(typescript@5.9.3)(zod@4.6.7))':
     dependencies:
-      brotli-wasm: 3.0.1
       viem: 2.57.7(typescript@5.9.3)(zod@4.6.7)
     optionalDependencies:
       typescript: 5.9.3
@@ -4022,8 +4017,6 @@ snapshots:
       type-is: 2.1.0
     transitivePeerDependencies:
       - supports-color
-
-  brotli-wasm@3.0.1: {}
 
   buffer-from@1.1.2: {}
 

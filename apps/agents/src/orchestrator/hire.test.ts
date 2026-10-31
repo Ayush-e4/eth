@@ -185,4 +185,18 @@ describe("hire", () => {
     expect(openJob).not.toHaveBeenCalled();
     expect(recordReceipt).not.toHaveBeenCalled();
   });
+
+  it("never loses a paid hire when Arkiv refuses a record afterwards", async () => {
+    vi.mocked(rateAgent).mockRejectedValueOnce(
+      new Error("expiry beyond the chain's maximum lifetime"),
+    );
+    const log = vi.fn();
+    const h = await hire("flights", "t1", trip, deps({ log }));
+    expect(h).toMatchObject({ agent: A, hederaTx: "0.0.1@1.1", jobKey: "0xjob" });
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("couldn't record the rating"));
+
+    vi.mocked(openJob).mockRejectedValueOnce(new Error("Arkiv down"));
+    const noJob = await hire("flights", "t1", trip, deps());
+    expect(noJob).toMatchObject({ hederaTx: "0.0.1@1.1", jobKey: "0x" }); // paid, still returned
+  });
 });

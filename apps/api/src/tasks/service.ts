@@ -110,11 +110,13 @@ export function openTaskService(
       };
     },
 
-    /** After a hire: if the ref was a bid on our open task, record the award on Arkiv. */
-    async award(chatId: string, ref: string) {
-      const h = hiring.held(chatId, ref);
-      const p = h ? posted.get(h.round.task) : undefined;
-      if (!h || !p || p.chatId !== chatId || p.awarded) return;
+    /** After a hire: if what was hired was a bid on our open task, record the award on Arkiv. */
+    async award(
+      chatId: string,
+      h: { round: { task: string }; option: { key: string; agent: `0x${string}` } },
+    ) {
+      const p = posted.get(h.round.task);
+      if (!p || p.chatId !== chatId || p.awarded) return;
       p.awarded = true;
       await claimTask(arkiv.writer, {
         task: h.round.task,
