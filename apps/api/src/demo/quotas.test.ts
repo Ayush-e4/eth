@@ -163,4 +163,15 @@ describe("demo quotas", () => {
     await s.hire(own, "q2", "x", "flights");
     expect(buy).toHaveBeenCalledOnce(); // went on to pay: no demo allowance applies
   });
+
+  it("pauses demo hires before the shared wallet runs dry", async () => {
+    const a = await account();
+    await demoLimit(a.chatId, 1n);
+    const low = demoQuotas(db, small, { usdcLeft: async () => 520_000n }); // 0.52 USDC left
+    expect(await low.canHire(a.chatId, 30_000n)).toContain("nearly out of test USDC");
+    const fine = demoQuotas(db, small, { usdcLeft: async () => 5_000_000n });
+    expect(await fine.canHire(a.chatId, 30_000n)).toBeNull();
+    const unknown = demoQuotas(db, small, { usdcLeft: async () => null }); // can't read it: don't block
+    expect(await unknown.canHire(a.chatId, 30_000n)).toBeNull();
+  });
 });

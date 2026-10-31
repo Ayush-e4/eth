@@ -210,3 +210,15 @@ created, and the hire is refused before anything is paid, each with a line sayin
 signing in with MetaMask (your own test wallet) has no such limits. The Wallet page shows a demo
 account what it has left today (`GET /demo/quota`).
 
+## Status (`GET /status`, public page `/status`)
+
+Is everything up? The API pings the payment service (facilitator) and every agent listed on the
+market, checks Hedera's mirror and Arkiv, and reads the shared demo wallet's balances, today's
+demo spending and the latest payment (`src/status/check.ts`, cached 30 s). Nothing private is in
+it: balances and payments are public on Hedera anyway. No sign-in needed.
+
+- **Low balance**: under 1 test USDC or 20 HBAR the page warns, with where to top up (the faucets
+  need a CAPTCHA, so topping up stays a manual, one-minute job).
+- **Before it runs dry**: under 0.50 test USDC (plus the fee), demo hires are refused with a plain
+  reason instead of failing mid-payment. If the balance can't be read, nothing is blocked.
+

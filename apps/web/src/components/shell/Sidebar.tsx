@@ -15,6 +15,7 @@ import {
   MarketIcon,
   PlusIcon,
   SearchIcon,
+  ShieldIcon,
   TasksIcon,
   WalletIcon,
 } from "../icons";
@@ -25,6 +26,7 @@ const LIVE = [
   { href: "/wallet", label: "Wallet", Icon: WalletIcon },
   { href: "/board", label: "Open tasks", Icon: BoardIcon },
   { href: "/log", label: "Public log", Icon: LedgerIcon },
+  { href: "/status", label: "Status", Icon: ShieldIcon },
 ];
 
 // Screens from the mocks that arrive in later PRs: shown so the app's shape is clear.
