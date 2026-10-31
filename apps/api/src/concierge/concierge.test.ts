@@ -112,6 +112,7 @@ describe("concierge tools", () => {
         title: "best-value hotel",
         feeUsdc: "0.04",
         description: "x".repeat(300),
+        identity: "no on-chain identity",
       },
     ]);
     expect(cards).toEqual([{ type: "agents", skill: "hotels", agents: [agent] }]);

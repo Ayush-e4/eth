@@ -113,7 +113,8 @@ describe("hiring from a chat", () => {
 
   it("hires in an auto chat once the mandate covers the agent, and records it", async () => {
     await giveMandate([AIRNEST.toLowerCase()]);
-    const s = hiringService(db, env);
+    const rate = vi.fn(async (): Promise<`0x${string}` | null> => "0xreview");
+    const s = hiringService(db, env, { reputation: { rate } });
     await s.quotes(chat, "flights", {});
     const out = await s.hire(chat, "q1", "cheapest", "flights");
     expect(out).toMatchObject({
@@ -121,6 +122,7 @@ describe("hiring from a chat", () => {
       card: { hederaTx: "0.0.1001@1.2", feeUnits: "30000" },
     });
     expect(vi.mocked(buy).mock.calls[0]?.[3]).toMatchObject({ mandateId: 7n, payer: "0.0.1001" });
+    expect(rate).toHaveBeenCalledOnce(); // the payer reviews the agent on ERC-8004
     expect((await s.hire(chat, "q1", "again", "flights")).status).toBe("refused"); // quote used up
   });
 

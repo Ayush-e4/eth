@@ -67,6 +67,20 @@ function Agents({ card }: { card: AgentsCard }) {
             <span className="flex min-w-0 flex-[1_1_220px] flex-col gap-0.5">
               <span className="text-sm font-semibold">{a.name}</span>
               <span className="truncate text-xs text-muted">{a.title}</span>
+              {a.identity && (
+                <a
+                  className="text-xs text-teal"
+                  href={`https://hashscan.io/testnet/contract/0x8004A818BFB912233c491871b3d84c89A494BD9e`}
+                  target="_blank"
+                  rel="noreferrer"
+                  title="Its identity in the ERC-8004 agent registry on Hedera; reviews come from clients who paid it"
+                >
+                  ERC-8004 #{a.identity.erc8004Id}
+                  {a.identity.paidJobs > 0
+                    ? ` · ${a.identity.paidJobs} paid ${a.identity.paidJobs === 1 ? "job" : "jobs"}, ${a.identity.averageScore}/100`
+                    : " · no reviews yet"}
+                </a>
+              )}
             </span>
             <span className="flex flex-col items-end gap-0.5">
               <span className="font-mono text-[13px]">{usdc(a.priceUnits)} USDC</span>

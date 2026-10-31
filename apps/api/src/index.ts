@@ -5,6 +5,7 @@ import { arkivMarket } from "./concierge/market";
 import { loadConfig } from "./config";
 import { connectDb } from "./db/client";
 import { loadHiringEnv } from "./hiring/env";
+import { reputation } from "./hiring/reputation";
 import { hiringService } from "./hiring/service";
 import { arkivNames } from "./spend-log/routes";
 import { openTaskService } from "./tasks/service";
@@ -19,7 +20,9 @@ const { db } = await connectDb(config.databaseUrl);
 const env = loadHiringEnv();
 // World ID (optional): "Ask first" approvals then need a fresh human check before paying.
 const world = loadWorldConfig();
-const hiring = env ? { env, service: hiringService(db, env, { requireHuman: !!world }) } : null;
+const hiring = env
+  ? { env, service: hiringService(db, env, { requireHuman: !!world, reputation: reputation(env) }) }
+  : null;
 const checks =
   world && hiring
     ? humanChecks(db, worldClient(world), (chatId, code) => hiring.service.markHuman(chatId, code))
@@ -32,7 +35,12 @@ if (!hiring)
     "hiring is off: set HEDERA_* in .env and run `pnpm --filter @eth/agents identities`",
   );
 const concierge = process.env.ANTHROPIC_API_KEY
-  ? claudeConcierge(arkivMarket(), hiring?.service ?? null, undefined, tasks)
+  ? claudeConcierge(
+      arkivMarket(undefined, hiring ? [hiring.env.demo.evm] : []),
+      hiring?.service ?? null,
+      undefined,
+      tasks,
+    )
   : null;
 if (!concierge) console.warn("ANTHROPIC_API_KEY not set: the concierge is off");
 

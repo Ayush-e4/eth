@@ -34,6 +34,9 @@ export function conciergeTools(
               title: a.title,
               feeUsdc: (Number(a.priceUnits) / 1e6).toFixed(2),
               description: a.description.slice(0, 300),
+              identity: a.identity
+                ? `ERC-8004 #${a.identity.erc8004Id} on Hedera; ${a.identity.paidJobs} paid jobs reviewed, average ${a.identity.averageScore ?? "n/a"}/100`
+                : "no on-chain identity",
             }))
           : { none: `No agent on the market offers ${skill ?? "anything"} right now.` },
       );

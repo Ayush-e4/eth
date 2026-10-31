@@ -11,7 +11,8 @@
     "probe": "tsx --env-file=../../.env scripts/probe.ts",
     "manage": "tsx --env-file=../../.env scripts/manage.ts",
     "priceguard": "tsx --env-file=../../.env scripts/priceguard.ts",
-    "serve": "tsx --env-file=../../.env scripts/serve.ts"
+    "serve": "tsx --env-file=../../.env scripts/serve.ts",
+    "erc8004": "tsx --env-file=../../.env scripts/erc8004.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "1.0.0",
