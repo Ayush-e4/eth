@@ -125,3 +125,55 @@ describe("paymentScheduler.outcome", () => {
     expect(await mirror({ executed_timestamp: null }).outcome(pending())).toBe("failed");
   });
 });
+
+describe("paymentScheduler.sweep (facilitator start)", () => {
+  const OP = "0.0.2";
+  const later = String(Math.floor(Date.now() / 1000) + 60);
+  const s = (over: object) => ({
+    schedule_id: "0.0.800",
+    creator_account_id: OP,
+    memo: "AgentNet payment, undo window",
+    deleted: false,
+    executed_timestamp: null,
+    expiration_time: later,
+    ...over,
+  });
+
+  it("deletes only our own undo-window payments that are still pending", async () => {
+    const deleted: string[] = [];
+    const schedules = [
+      s({}),
+      s({ schedule_id: "0.0.801", deleted: true }),
+      s({ schedule_id: "0.0.802", executed_timestamp: "1.2" }),
+      s({ schedule_id: "0.0.803", memo: "something else" }),
+      s({ schedule_id: "0.0.804", creator_account_id: "0.0.9" }),
+      s({ schedule_id: "0.0.805", expiration_time: "1" }),
+    ];
+    const sched = paymentScheduler({
+      hedera: {} as never,
+      adminKey: {} as never,
+      feePayerId: OP,
+      mirrorUrl: "https://mirror",
+      fetchImpl: (async () => Response.json({ schedules })) as unknown as typeof fetch,
+      deleteSchedule: async (id) => {
+        deleted.push(id);
+      },
+    });
+    expect(await sched.sweep()).toEqual(["0.0.800"]);
+    expect(deleted).toEqual(["0.0.800"]);
+  });
+
+  it("does nothing when the mirror can't be read", async () => {
+    const sched = paymentScheduler({
+      hedera: {} as never,
+      adminKey: {} as never,
+      feePayerId: OP,
+      mirrorUrl: "https://mirror",
+      fetchImpl: (async () => new Response("", { status: 503 })) as unknown as typeof fetch,
+      deleteSchedule: async () => {
+        throw new Error("should not delete");
+      },
+    });
+    expect(await sched.sweep()).toEqual([]);
+  });
+});

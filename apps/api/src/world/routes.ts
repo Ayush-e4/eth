@@ -29,15 +29,15 @@ export function humanCheckRoutes(db: Db, checks: HumanChecks | null, hiring: Hir
     const user = c.get("user");
     const chat = await store.get(user.id, c.req.param("id")).catch(() => null);
     const code = c.req.param("code");
-    if (!chat || !hiring.pendingApproval(chat.id, code))
+    if (!chat || !(await hiring.pendingApproval(chat.id, code)))
       return c.json({ error: "no such approval waiting" }, 404);
     const check = await checks.start(user.id, chat.id, code).catch((err: Error) => err);
     if (check instanceof Error) return c.json({ error: check.message }, 502);
     return c.json({ check: view(check) }, 201);
   });
 
-  app.get("/human-checks/:id", (c) => {
-    const check = checks?.get(c.req.param("id"), c.get("user").id);
+  app.get("/human-checks/:id", async (c) => {
+    const check = await checks?.get(c.req.param("id"), c.get("user").id);
     return check ? c.json({ check: view(check) }) : c.json({ error: "not found" }, 404);
   });
 

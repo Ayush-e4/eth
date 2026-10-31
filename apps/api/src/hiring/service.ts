@@ -23,6 +23,7 @@ import {
   type Payee,
   PER_PAYMENT_CAP,
 } from "./mandates";
+import { quoteRefs } from "./quote-refs";
 import { saveHire } from "./record";
 import type { Reputation } from "./reputation";
 import type { UndoWindows } from "./undo";
@@ -30,15 +31,7 @@ import type { UndoWindows } from "./undo";
 /** What hiring needs to know about a chat. */
 export type ChatLike = Pick<Chat, "id" | "mode" | "limitUnits">;
 
-const QUOTE_TTL_MS = 170_000;
-const usdc = (u: bigint) => (Number(u) / 1e6).toFixed(2); // agents hold a quote for 3 minutes; stop a little earlier
-
-interface Held {
-  ref: string; // "q1": what the user and Claude use; quote keys are long
-  round: QuoteRound;
-  option: QuoteOption;
-  at: number;
-}
+const usdc = (u: bigint) => (Number(u) / 1e6).toFixed(2);
 
 export type HireOutcome =
   | { status: "hired"; card: Extract<Card, { type: "hired" }>; result: unknown }
@@ -57,15 +50,9 @@ export function hiringService(
   env: HiringEnv,
   opts: { requireHuman?: boolean; reputation?: Reputation; undo?: UndoWindows } = {},
 ) {
-  const held = new Map<string, Held[]>(); // chatId → quotes, newest last
-  const approvals = approvalBook(opts.requireHuman);
-  const names = new Map<string, string>(); // agent address → name, for limit cards
-  let nextRef = 1;
+  const refs = quoteRefs(db);
+  const approvals = approvalBook(db, opts.requireHuman);
   const nameOf = (o: QuoteOption) => o.title.split(" — ")[0] ?? o.title;
-
-  const live = (chatId: string) =>
-    (held.get(chatId) ?? []).filter((h) => Date.now() - h.at < QUOTE_TTL_MS);
-  const find = (chatId: string, ref: string) => live(chatId).find((h) => h.ref === ref);
 
   const quoteDeps = async () => ({
     arkiv: arkivReader(),
@@ -88,41 +75,30 @@ export function hiringService(
           const sub = await vetSubcontract(qd.arkiv, o.agent, o.subcontract).catch(() => null);
           if (sub) options.push({ ...o, subcontract: sub });
           else round.skipped.push(`${nameOf(o)}: its plan names agents we couldn't verify`);
-          for (const p of sub?.payees ?? []) names.set(p.agent.toLowerCase(), p.name);
         }
       }
       round.options = options;
-      return { round, refs: this.hold(chat.id, round) };
+      return { round, refs: await this.hold(chat.id, round) };
     },
 
-    /**
-     * Keeps a round's offers under short refs (q1, q2…) for a few minutes. An offer already held
-     * (an open task's bids are read again and again) keeps its ref and its clock.
-     */
-    hold(chatId: string, round: QuoteRound) {
-      const now = live(chatId);
-      const refs = round.options.map(
-        (option) =>
-          now.find((h) => h.option.key === option.key) ?? {
-            ref: `q${nextRef++}`,
-            round,
-            option,
-            at: Date.now(),
-          },
-      );
-      held.set(chatId, [...now, ...refs.filter((r) => !now.includes(r))]);
-      for (const o of round.options) names.set(o.agent.toLowerCase(), nameOf(o));
-      return refs;
-    },
+    /** Keeps a round's offers under short refs (q1, q2…) for a few minutes. */
+    hold: (chatId: string, round: QuoteRound) => refs.hold(chatId, round),
 
     /** What a ref points at, while it's live (for recording an open task's award). */
-    held(chatId: string, ref: string) {
-      const h = find(chatId, ref);
+    async held(chatId: string, ref: string) {
+      const h = await refs.find(chatId, ref);
       return h ? { round: h.round, option: h.option } : null;
     },
 
     /** Agents the user would be asked to allow: everyone quoting now, plus those already allowed. */
-    payees(chatId: string, current: MandateRow | null): Payee[] {
+    async payees(chatId: string, current: MandateRow | null): Promise<Payee[]> {
+      const live = await refs.live(chatId);
+      const names = new Map<string, string>(); // agent address → name, from the quotes
+      for (const h of live) {
+        names.set(h.option.agent.toLowerCase(), nameOf(h.option));
+        for (const p of h.option.subcontract?.payees ?? [])
+          names.set(p.agent.toLowerCase(), p.name);
+      }
       const seen = new Map<string, Payee>();
       const add = (agent: string) =>
         seen.set(agent.toLowerCase(), {
@@ -132,7 +108,7 @@ export function hiringService(
             `agent ${agent.slice(0, 6)}…${agent.slice(-4)}`,
           agent: agent as `0x${string}`,
         });
-      for (const h of live(chatId)) {
+      for (const h of live) {
         add(h.option.agent);
         for (const p of h.option.subcontract?.payees ?? []) add(p.agent);
       }
@@ -155,7 +131,7 @@ export function hiringService(
       label: string,
       onScheduled?: (card: Extract<Card, { type: "payment" }>) => void,
     ): Promise<HireOutcome> {
-      const h = find(chat.id, ref);
+      const h = await refs.find(chat.id, ref);
       if (!h)
         return {
           status: "refused",
@@ -173,11 +149,15 @@ export function hiringService(
             reason:
               "this chat's spending limit is used up; the user can raise it with the pill under the message box",
           };
-        return { status: "needs_limit", card: limitCard(env, left, this.payees(chat.id, mandate)) };
+        const payees = await this.payees(chat.id, mandate);
+        return { status: "needs_limit", card: limitCard(env, left, payees) };
       }
       // "Ask first": one approval, one payment (taken here, or asked for with a card).
-      if (chat.mode === "ask" && !approvals.take(chat.id, ref, h.option.agent, h.option.feeUnits)) {
-        const code = approvals.ask(chat.id, ref, h.option.agent, h.option.feeUnits);
+      if (
+        chat.mode === "ask" &&
+        !(await approvals.take(chat.id, ref, h.option.agent, h.option.feeUnits))
+      ) {
+        const code = await approvals.ask(chat.id, ref, h.option.agent, h.option.feeUnits);
         return {
           status: "needs_approval",
           card: {
@@ -246,10 +226,7 @@ export function hiringService(
           reason,
           delegation && { mandateId: delegation.mandateId, payer: delegation.payer }, // sent as JSON
         );
-        held.set(
-          chat.id,
-          live(chat.id).filter((x) => x.round !== h.round),
-        ); // that job is done
+        await refs.drop(chat.id, h.round.task); // that job is done
         // The payer reviews the agent on its ERC-8004 identity, in the background.
         void opts.reputation?.rate(hire.agent, hire.skill, hire.endpoint);
         const log = await saveHire(db, env, {

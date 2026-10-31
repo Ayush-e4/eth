@@ -39,7 +39,7 @@ function describe(
     case "x402.schedule.cancelled":
       return {
         tag: "Cancelled",
-        what: `Scheduled payment ${str(e.scheduleId)} cancelled in its undo window; nothing was paid`,
+        what: `Scheduled payment ${str(e.scheduleId)} cancelled in its undo window; nothing was paid${e.reason ? ` (${str(e.reason)})` : ""}`,
         proof: ["schedule", hashscanSchedule(str(e.scheduleId))],
       };
     case "agentnet.hired":

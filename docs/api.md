@@ -173,3 +173,19 @@ and limits; `/tasks`, `/wallet` and the hired card return it with `logTopic`.
 
 `pnpm --filter @eth/api dev` loads the repo's `.env` if it exists (Hedera keys, Claude key).
 
+## Restarts
+
+Nothing a chat is in the middle of lives only in memory. A restart (a deploy, a crash, `tsx watch`)
+picks up where it left off:
+
+| What | Kept in | After a restart |
+|---|---|---|
+| Quote refs (q1, q2…) | `quote_refs` (bigints as `{"$bigint": "…"}`) | still hireable until they expire; numbering keeps counting up |
+| "Ask first" approvals | `approvals` | the card can still be approved; taking one is a single `DELETE … RETURNING`, so it pays once |
+| World ID checks | `human_checks` (device code stays server-side) | waiting checks resume polling; ones that ran out are marked expired |
+| Open tasks | `open_tasks` | bids, refs and the award carry on; the award is a conditional update, so it's recorded once |
+| Undo-window payments | `scheduled_payments` | still in their window: **cancelled** (the hire waiting on them is gone); later: status from Hedera |
+| A turn in progress | (replies are saved when a turn ends) | the chat gets a short note that it was cut off, so the page stops waiting |
+
+Only caches stay in memory (bid reads, INR rates). Startup work is in `src/index.ts`.
+

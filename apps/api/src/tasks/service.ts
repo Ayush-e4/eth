@@ -1,20 +1,14 @@
 import { fetchInrRates, type InrRates, readBids } from "@eth/agents/hiring";
 import { arkivReader, arkivWriter, claimTask, postTask, setTaskStatus } from "@eth/arkiv";
 import type { Card } from "@eth/shared";
+import { and, eq } from "drizzle-orm";
+import type { Db } from "../db/client";
+import { openTasks } from "../db/schema";
 import type { HiringEnv } from "../hiring/env";
 import { PER_PAYMENT_CAP } from "../hiring/mandates";
 import type { ChatLike, HiringService } from "../hiring/service";
 
 type TaskCard = Extract<Card, { type: "task" }>;
-
-interface Posted {
-  chatId: string;
-  key: `0x${string}`;
-  skill: string;
-  input: Record<string, unknown>;
-  closesAt: number; // ms
-  awarded: boolean;
-}
 
 const RATES_MS = 60_000;
 const BIDS_MS = 8_000; // card polls and the concierge share one Arkiv read per task
@@ -26,11 +20,19 @@ const BIDS_MS = 8_000; // card polls and the concierge share one Arkiv read per 
  * on Arkiv as a read-only claim.
  */
 export function openTaskService(
+  db: Db,
   env: HiringEnv,
   hiring: HiringService,
   arkiv = { reader: arkivReader(), writer: arkivWriter(env.concierge.key) },
 ) {
-  const posted = new Map<string, Posted>(); // task id → what we posted
+  // What we posted lives in the database (a restart keeps it); bid reads are only cached here.
+  const mine = async (chatId: string, task: string) =>
+    (
+      await db
+        .select()
+        .from(openTasks)
+        .where(and(eq(openTasks.task, task), eq(openTasks.chatId, chatId)))
+    )[0] ?? null;
   const reads = new Map<string, { at: number; round: ReturnType<typeof readBids> }>();
   let rates: { at: number; value: Promise<InrRates> } | null = null;
   const inrRates = () => {
@@ -60,13 +62,13 @@ export function openTaskService(
         minutes * 60,
       );
       const closesAt = Date.now() + minutes * 60_000;
-      posted.set(task, {
+      await db.insert(openTasks).values({
+        task,
         chatId: chat.id,
-        key: entityKey,
+        entityKey,
         skill: job.skill,
         input: job.input,
-        closesAt,
-        awarded: false,
+        closesAt: new Date(closesAt),
       });
       return {
         type: "task",
@@ -81,8 +83,8 @@ export function openTaskService(
 
     /** The bids so far, ranked, each held under a ref the concierge can hire. Null if not ours. */
     async bids(chatId: string, task: string) {
-      const p = posted.get(task);
-      if (!p || p.chatId !== chatId) return null;
+      const p = await mine(chatId, task);
+      if (!p) return null;
       let read = reads.get(task);
       if (!read || Date.now() - read.at > BIDS_MS) {
         read = {
@@ -101,12 +103,12 @@ export function openTaskService(
         read.round.catch(() => reads.delete(task)); // don't keep serving a failed read
       }
       const round = await read.round;
-      const status = p.awarded ? "awarded" : Date.now() > p.closesAt ? "closed" : "open";
+      const status = p.awarded ? "awarded" : Date.now() > p.closesAt.getTime() ? "closed" : "open";
       return {
         status,
-        closesAt: new Date(p.closesAt).toISOString(),
+        closesAt: p.closesAt.toISOString(),
         round,
-        refs: hiring.hold(chatId, round),
+        refs: await hiring.hold(chatId, round),
       };
     },
 
@@ -115,16 +117,26 @@ export function openTaskService(
       chatId: string,
       h: { round: { task: string }; option: { key: string; agent: `0x${string}` } },
     ) {
-      const p = posted.get(h.round.task);
-      if (!p || p.chatId !== chatId || p.awarded) return;
-      p.awarded = true;
+      // Only the first award of a task gets the row back (a task is awarded once).
+      const [p] = await db
+        .update(openTasks)
+        .set({ awarded: true })
+        .where(
+          and(
+            eq(openTasks.task, h.round.task),
+            eq(openTasks.chatId, chatId),
+            eq(openTasks.awarded, false),
+          ),
+        )
+        .returning();
+      if (!p) return;
       await claimTask(arkiv.writer, {
         task: h.round.task,
         poster: env.concierge.evm,
         quote: h.option.key as `0x${string}`,
         agent: h.option.agent,
       });
-      await setTaskStatus(arkiv.writer, p.key, "awarded");
+      await setTaskStatus(arkiv.writer, p.entityKey as `0x${string}`, "awarded");
     },
   };
 }

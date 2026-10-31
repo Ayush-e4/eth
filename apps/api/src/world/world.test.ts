@@ -1,7 +1,7 @@
 import { createLocalJWKSet, exportJWK, generateKeyPair, type JWK, SignJWT } from "jose";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "../db/client";
-import { users } from "../db/schema";
+import { chats, humanChecks as humanCheckRows, users } from "../db/schema";
 import { testDb } from "../test/db";
 import { humanChecks } from "./checks";
 import { type Poll, worldClient } from "./oidc";
@@ -59,6 +59,7 @@ describe("World ID ID-token checks", () => {
 
 let db: Db;
 let userId: string;
+let chatId: string;
 const poll = vi.fn<(code: string) => Promise<Poll>>();
 const verified = vi.fn();
 const fakeWorld = () => ({
@@ -73,13 +74,19 @@ const fakeWorld = () => ({
   })),
   poll,
 });
-const settle = () => new Promise((r) => setTimeout(r, 20));
+// The check runs in the background; wait until it has ended (written to the database).
+let h: ReturnType<typeof humanChecks>;
+let c: { id: string };
+const settle = () =>
+  vi.waitFor(async () => expect((await h.get(c.id, userId))?.status).not.toBe("waiting"));
 
 beforeEach(async () => {
   vi.clearAllMocks();
   db = await testDb();
   const [u] = await db.insert(users).values({ isDemo: true }).returning();
   userId = u?.id ?? "";
+  const [c] = await db.insert(chats).values({ userId, title: "t" }).returning();
+  chatId = c?.id ?? "";
 });
 
 describe("human checks for payment approvals", () => {
@@ -89,16 +96,16 @@ describe("human checks for payment approvals", () => {
     poll
       .mockResolvedValueOnce({ status: "pending" })
       .mockResolvedValueOnce({ status: "done", idToken: await token() });
-    const h = checks();
-    const c = await h.start(userId, "chat-1", "abc123");
+    h = checks();
+    c = await h.start(userId, chatId, "abc123");
     expect(c).toMatchObject({ status: "waiting", userCode: "ABCD-EFGH" });
     expect(JSON.stringify(c)).not.toContain("private-device-code"); // never leaves the server
     await settle();
-    expect(h.get(c.id, userId)?.status).toBe("verified");
-    expect(verified).toHaveBeenCalledWith("chat-1", "abc123");
+    expect((await h.get(c.id, userId))?.status).toBe("verified");
+    expect(verified).toHaveBeenCalledWith(chatId, "abc123");
     const [me] = await db.select().from(users);
     expect(me).toMatchObject({ worldIss: ISS, worldSub: "human-1" });
-    expect(h.get(c.id, "someone-else")).toBeNull();
+    expect(await h.get(c.id, "someone-else")).toBeNull();
   });
 
   it.each([
@@ -107,20 +114,20 @@ describe("human checks for payment approvals", () => {
     ["unavailable", { status: "failed", error: "HTTP 503" }, "failed"],
   ] as const)("unlocks nothing when %s", async (_, result, status) => {
     poll.mockResolvedValueOnce(result as Poll);
-    const h = checks();
-    const c = await h.start(userId, "chat-1", "abc123");
+    h = checks();
+    c = await h.start(userId, chatId, "abc123");
     await settle();
-    expect(h.get(c.id, userId)?.status).toBe(status);
+    expect((await h.get(c.id, userId))?.status).toBe(status);
     expect(verified).not.toHaveBeenCalled();
   });
 
   it("refuses a different World ID than the one linked to the account", async () => {
     await db.update(users).set({ worldIss: ISS, worldSub: "human-1" });
     poll.mockResolvedValueOnce({ status: "done", idToken: await token({ sub: "human-2" }) });
-    const h = checks();
-    const c = await h.start(userId, "chat-1", "abc123");
+    h = checks();
+    c = await h.start(userId, chatId, "abc123");
     await settle();
-    expect(h.get(c.id, userId)).toMatchObject({
+    expect(await h.get(c.id, userId)).toMatchObject({
       status: "mismatch",
       reason: "a different World ID",
     });
@@ -130,10 +137,10 @@ describe("human checks for payment approvals", () => {
   it("won't link one World ID to two accounts", async () => {
     await db.insert(users).values({ isDemo: true, worldIss: ISS, worldSub: "human-1" });
     poll.mockResolvedValueOnce({ status: "done", idToken: await token() });
-    const h = checks();
-    const c = await h.start(userId, "chat-1", "abc123");
+    h = checks();
+    c = await h.start(userId, chatId, "abc123");
     await settle();
-    expect(h.get(c.id, userId)?.reason).toBe("this World ID is linked to another account");
+    expect((await h.get(c.id, userId))?.reason).toBe("this World ID is linked to another account");
   });
 
   it("refuses a token that isn't fresh for this attempt", async () => {
@@ -141,10 +148,47 @@ describe("human checks for payment approvals", () => {
       status: "done",
       idToken: await token({ auth_time: now() - 3600 }),
     });
-    const h = checks();
-    const c = await h.start(userId, "chat-1", "abc123");
+    h = checks();
+    c = await h.start(userId, chatId, "abc123");
     await settle();
-    expect(h.get(c.id, userId)?.status).toBe("failed");
+    expect((await h.get(c.id, userId))?.status).toBe("failed");
     expect(verified).not.toHaveBeenCalled();
+  });
+});
+
+describe("human checks across a restart", () => {
+  const row = (expiresInMs: number) => ({
+    id: crypto.randomUUID(),
+    userId,
+    chatId,
+    code: "abc123",
+    userCode: "ABCD-EFGH",
+    link: "https://auth.world.org/device",
+    deviceCode: "private-device-code",
+    intervalS: 5,
+    startedAtS: now(),
+    expiresAt: new Date(Date.now() + expiresInMs),
+  });
+
+  it("keeps polling a check that was waiting, and unlocks its approval when it passes", async () => {
+    const waiting = row(600_000);
+    await db.insert(humanCheckRows).values(waiting);
+    poll.mockResolvedValueOnce({ status: "done", idToken: await token() });
+    h = humanChecks(db, fakeWorld(), verified, async () => {}); // restarted
+    c = waiting;
+    expect(await h.resume()).toBe(1);
+    await settle();
+    expect((await h.get(c.id, userId))?.status).toBe("verified");
+    expect(poll).toHaveBeenCalledWith("private-device-code");
+    expect(verified).toHaveBeenCalledWith(chatId, "abc123");
+  });
+
+  it("marks a check that ran out of time while the server was down as expired", async () => {
+    const stale = row(-1_000);
+    await db.insert(humanCheckRows).values(stale);
+    h = humanChecks(db, fakeWorld(), verified, async () => {});
+    await h.resume();
+    expect((await h.get(stale.id, userId))?.status).toBe("expired");
+    expect(poll).not.toHaveBeenCalled();
   });
 });

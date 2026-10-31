@@ -49,9 +49,11 @@ The facilitator holds the schedule's admin key, so a cancel can't come from anyo
   the token transfer, so the check saw "payee credited 0" for a payment that went through. We
   fetch the whole family and keep the scheduled call plus its children
   (`packages/x402/src/mirror-records.ts`).
-- The schedule state lives in memory in the facilitator and API. After a restart the card can't
-  follow a pending payment any more; it shows "see Hedera for the outcome" (Hedera still runs or
-  has deleted it).
+- A restart can't leave a payment running that nobody is waiting for. The hire waiting on it
+  dies with the process, so the agent would never deliver. On start, the facilitator deletes its
+  own pending undo-window schedules, and the API cancels the ones its chats were waiting on.
+  Payments are kept in the database (`scheduled_payments`); when the facilitator has forgotten
+  one, the card's status comes from Hedera's mirror node. See [api.md](api.md#restarts).
 - The chat's live events were gzipped, and so held back, by the Next.js `/api` proxy; the stream now
   sends `Cache-Control: no-transform`.
 

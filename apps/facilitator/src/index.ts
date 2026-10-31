@@ -6,6 +6,7 @@ import { buildFacilitator } from "./build";
 const facilitator = buildFacilitator({
   hedera: loadConfig(),
   spendLogTopicId: process.env.SPEND_LOG_TOPIC_ID || undefined,
+  sweepOnStart: true,
 });
 const port = Number(process.env.PORT ?? 8402);
 

@@ -7,6 +7,8 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
+  serial,
   text,
   timestamp,
   uniqueIndex,
@@ -138,6 +140,84 @@ export const hires = pgTable(
   },
   (t) => [index("hires_chat_idx").on(t.chatId, t.createdAt)],
 );
+
+// ── Work in progress that must survive a restart (it used to live in memory) ──
+
+const chatRef = () =>
+  uuid("chat_id")
+    .notNull()
+    .references(() => chats.id, { onDelete: "cascade" });
+const at = (name: string) => timestamp(name, { withTimezone: true });
+
+/** Quotes held under short refs: ref = "q" + n. Round and option are JSON (bigints encoded). */
+export const quoteRefs = pgTable(
+  "quote_refs",
+  {
+    n: serial("n").primaryKey(),
+    chatId: chatRef(),
+    task: text("task").notNull(), // the round's task id (dropped together after a hire)
+    optionKey: text("option_key").notNull(),
+    round: jsonb("round").$type<unknown>().notNull(),
+    option: jsonb("option").$type<unknown>().notNull(),
+    heldAt: at("held_at").notNull().defaultNow(),
+  },
+  (t) => [index("quote_refs_chat_idx").on(t.chatId, t.heldAt)],
+);
+
+/** "Ask first" approvals: one code per payment the concierge asked for. */
+export const approvals = pgTable(
+  "approvals",
+  {
+    chatId: chatRef(),
+    code: text("code").notNull(),
+    ref: text("ref").notNull(),
+    agent: text("agent").notNull(),
+    feeUnits: bigint("fee_units", { mode: "bigint" }).notNull(),
+    approved: boolean("approved").notNull().default(false),
+    humanAt: at("human_at"), // when a World ID check for this approval passed
+    createdAt: at("created_at").notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.chatId, t.code] })],
+);
+
+/** World ID checks in progress. The device code never leaves the server. */
+export const humanChecks = pgTable("human_checks", {
+  id: uuid("id").primaryKey(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  chatId: chatRef(),
+  code: text("code").notNull(),
+  userCode: text("user_code").notNull(),
+  link: text("link").notNull(),
+  deviceCode: text("device_code").notNull(),
+  intervalS: integer("interval_s").notNull(),
+  startedAtS: integer("started_at_s").notNull(),
+  expiresAt: at("expires_at").notNull(),
+  status: text("status").notNull().default("waiting"),
+  reason: text("reason"),
+});
+
+/** Jobs the concierge posted on Arkiv for agents to bid on. */
+export const openTasks = pgTable("open_tasks", {
+  task: text("task").primaryKey(),
+  chatId: chatRef(),
+  entityKey: text("entity_key").notNull(),
+  skill: text("skill").notNull(),
+  input: jsonb("input").$type<Record<string, unknown>>().notNull(),
+  closesAt: at("closes_at").notNull(),
+  awarded: boolean("awarded").notNull().default(false),
+});
+
+/** Payments in their undo window (Hedera schedules), and how they ended. */
+export const scheduledPayments = pgTable("scheduled_payments", {
+  scheduleId: text("schedule_id").primaryKey(),
+  chatId: chatRef(),
+  paymentKey: text("payment_key").notNull(),
+  executesAt: at("executes_at").notNull(),
+  status: text("status").notNull().default("scheduled"),
+  createdAt: at("created_at").notNull().defaultNow(),
+});
 
 export type User = typeof users.$inferSelect;
 export type Chat = typeof chats.$inferSelect;

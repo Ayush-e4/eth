@@ -1,66 +1,65 @@
 import { randomBytes } from "node:crypto";
+import { and, eq } from "drizzle-orm";
+import type { Db } from "../db/client";
+import { approvals } from "../db/schema";
 
-interface Approval {
-  ref: string;
-  agent: string; // a fresh quote from the same agent at no higher fee keeps the approval
-  feeUnits: bigint;
-  approved: boolean;
-  humanAt?: number; // when a World ID check for this exact approval passed
-}
+type Approval = typeof approvals.$inferSelect;
 
 const HUMAN_FRESH_MS = 5 * 60_000; // a human check unlocks its payment for 5 minutes
 
 /**
  * "Ask first" approvals: one code per payment the concierge wants to make. With `requireHuman`,
  * an approval counts only after a World ID check for it passed, within 5 minutes. One approval
- * pays once.
+ * pays once. Kept in the database, so a restart doesn't lose a card the user is answering.
  */
-export function approvalBook(requireHuman = false) {
-  const book = new Map<string, Map<string, Approval>>(); // chatId → code → approval
+export function approvalBook(db: Db, requireHuman = false) {
   const human = (a: Approval) =>
-    !requireHuman || (!!a.humanAt && Date.now() - a.humanAt < HUMAN_FRESH_MS);
-  const of = (chatId: string) => {
-    const mine = book.get(chatId) ?? new Map<string, Approval>();
-    book.set(chatId, mine);
-    return mine;
-  };
+    !requireHuman || (!!a.humanAt && Date.now() - a.humanAt.getTime() < HUMAN_FRESH_MS);
+  const one = (chatId: string, code: string) =>
+    and(eq(approvals.chatId, chatId), eq(approvals.code, code));
+  const get = async (chatId: string, code: string) =>
+    (await db.select().from(approvals).where(one(chatId, code)))[0] ?? null;
 
   return {
     requireHuman,
 
     /** Takes (uses up) an approval for this offer, if the user gave one. */
-    take(chatId: string, ref: string, agent: string, feeUnits: bigint) {
-      const mine = of(chatId);
+    async take(chatId: string, ref: string, agent: string, feeUnits: bigint) {
+      const mine = await db.select().from(approvals).where(eq(approvals.chatId, chatId));
       // A quote can lapse during a slow human check; the approval was for this agent and fee.
       const same = (a: Approval) => a.ref === ref || (a.agent === agent && feeUnits <= a.feeUnits);
-      const ok = [...mine.entries()].find(([, a]) => same(a) && a.approved && human(a));
-      if (ok) mine.delete(ok[0]);
-      return !!ok;
+      const ok = mine.find((a) => same(a) && a.approved && human(a));
+      if (!ok) return false;
+      // Only one caller gets the row back, so an approval can't pay twice.
+      const gone = await db.delete(approvals).where(one(chatId, ok.code)).returning();
+      return gone.length === 1;
     },
 
     /** Asks for one: returns the code the card shows. */
-    ask(chatId: string, ref: string, agent: string, feeUnits: bigint) {
+    async ask(chatId: string, ref: string, agent: string, feeUnits: bigint) {
       const code = randomBytes(3).toString("hex");
-      of(chatId).set(code, { ref, agent, feeUnits, approved: false });
+      await db.insert(approvals).values({ chatId, code, ref, agent, feeUnits });
       return code;
     },
 
-    pending(chatId: string, code: string) {
-      const a = book.get(chatId)?.get(code);
+    async pending(chatId: string, code: string) {
+      const a = await get(chatId, code);
       return !!a && !a.approved;
     },
 
-    markHuman(chatId: string, code: string) {
-      const a = book.get(chatId)?.get(code);
-      if (a) a.humanAt = Date.now();
+    async markHuman(chatId: string, code: string) {
+      await db.update(approvals).set({ humanAt: new Date() }).where(one(chatId, code));
     },
 
     /** Reads "Approve abc123" / "Decline abc123" in what the user sent. */
-    note(chatId: string, text: string) {
+    async note(chatId: string, text: string) {
       for (const m of text.matchAll(/\b(approve|decline)\s+([a-z0-9]{6})\b/gi)) {
-        const entry = book.get(chatId)?.get((m[2] ?? "").toLowerCase());
+        const code = (m[2] ?? "").toLowerCase();
+        const entry = await get(chatId, code);
+        if (!entry) continue;
         // "Approve" only counts once the human check passed; "Decline" always counts.
-        if (entry) entry.approved = (m[1] ?? "").toLowerCase() === "approve" && human(entry);
+        const approved = (m[1] ?? "").toLowerCase() === "approve" && human(entry);
+        await db.update(approvals).set({ approved }).where(one(chatId, code));
       }
     },
   };

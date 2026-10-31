@@ -34,10 +34,12 @@ export interface SchedulerDeps {
   mirrorUrl: string;
   fetchImpl?: typeof fetch;
   wait?: (ms: number) => Promise<void>;
+  deleteSchedule?: (scheduleId: string) => Promise<void>; // tests replace the Hedera call
 }
 
 export const MIN_UNDO_S = 10;
 export const MAX_UNDO_S = 600;
+const MEMO = "AgentNet payment, undo window";
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 export function paymentScheduler(d: SchedulerDeps) {
@@ -53,6 +55,16 @@ export function paymentScheduler(d: SchedulerDeps) {
     const s = (await res.json()) as { deleted?: boolean; executed_timestamp?: string | null };
     return s.deleted ? "cancelled" : s.executed_timestamp ? "executed" : "scheduled";
   }
+
+  /** Deletes a schedule with our admin key: it can never run. */
+  async function deleteOnHedera(scheduleId: string) {
+    const tx = await new ScheduleDeleteTransaction()
+      .setScheduleId(scheduleId)
+      .freezeWith(d.hedera)
+      .sign(d.adminKey);
+    await (await tx.execute(d.hedera)).getReceipt(d.hedera);
+  }
+  const remove = d.deleteSchedule ?? deleteOnHedera;
 
   return {
     async create(args: {
@@ -75,7 +87,7 @@ export function paymentScheduler(d: SchedulerDeps) {
         .setPayerAccountId(AccountId.fromString(d.feePayerId))
         .setExpirationTime(Timestamp.fromDate(new Date(executesAt)))
         .setWaitForExpiry(true)
-        .setScheduleMemo("AgentNet payment, undo window")
+        .setScheduleMemo(MEMO)
         .execute(d.hedera);
       const receipt = await res.getReceipt(d.hedera);
       if (!receipt.scheduleId || !receipt.scheduledTransactionId)
@@ -109,13 +121,47 @@ export function paymentScheduler(d: SchedulerDeps) {
     async cancel(scheduleId: string) {
       const p = byId.get(scheduleId);
       if (p?.status !== "scheduled") return false;
-      const tx = await new ScheduleDeleteTransaction()
-        .setScheduleId(scheduleId)
-        .freezeWith(d.hedera)
-        .sign(d.adminKey);
-      await (await tx.execute(d.hedera)).getReceipt(d.hedera);
+      await remove(scheduleId);
       p.status = "cancelled";
       return true;
+    },
+
+    /**
+     * At startup: our undo-window payments still pending on Hedera belong to a settle that died
+     * with the last run, so the agent was told it failed and won't do the job. Delete them so
+     * they can't pay for nothing. Returns the schedules deleted.
+     */
+    async sweep(): Promise<string[]> {
+      const url = `${d.mirrorUrl}/api/v1/schedules?account.id=${d.feePayerId}&order=desc&limit=100`;
+      const res = await fetchImpl(url).catch(() => null);
+      if (!res?.ok) return [];
+      const { schedules = [] } = (await res.json()) as {
+        schedules?: {
+          schedule_id: string;
+          creator_account_id: string;
+          memo: string;
+          deleted: boolean;
+          executed_timestamp: string | null;
+          expiration_time: string | null;
+        }[];
+      };
+      const pending = schedules.filter(
+        (s) =>
+          s.memo === MEMO &&
+          s.creator_account_id === d.feePayerId &&
+          !s.deleted &&
+          !s.executed_timestamp &&
+          Number(s.expiration_time ?? 0) * 1000 > Date.now(),
+      );
+      const swept: string[] = [];
+      for (const s of pending) {
+        if (byId.has(s.schedule_id)) continue; // one of this run's own: someone is waiting on it
+        await remove(s.schedule_id).then(
+          () => swept.push(s.schedule_id),
+          (err) => console.error(`couldn't delete schedule ${s.schedule_id}:`, err),
+        );
+      }
+      return swept;
     },
 
     byKey: (key: string) => byKey.get(key) ?? null,
