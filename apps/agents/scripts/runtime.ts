@@ -9,7 +9,7 @@ import {
   openTasks,
   type Task,
 } from "@eth/arkiv";
-import { createClient, loadConfig, NETWORKS, transferToken } from "@eth/hedera";
+import { loadConfig, NETWORKS } from "@eth/hedera";
 import {
   DEPLOYMENTS,
   hederaTestnet,
@@ -28,6 +28,7 @@ import { buy, type HireDeps } from "../src/orchestrator/hire";
 import { fetchInrRates } from "../src/orchestrator/procure";
 import { collectQuotes } from "../src/orchestrator/quotes";
 import { airnest } from "../src/specialists/airnest";
+import { jobStore } from "../src/specialists/jobs";
 import { priceGuard, type Watch } from "../src/specialists/priceguard";
 import { createSpecialist } from "../src/specialists/server";
 import { skyhop } from "../src/specialists/skyhop";
@@ -35,6 +36,7 @@ import { staywise } from "../src/specialists/staywise";
 import type { BookingRecord } from "../src/specialists/staywise-manage";
 import { tripmint } from "../src/specialists/tripmint";
 import { JsonStore } from "../src/store";
+import { jobsFile, paymentChecker, refunder } from "./agent-money";
 
 export function requireEnv(keys: string[]) {
   for (const k of keys) if (!process.env[k]) throw new Error(`${k} is empty in .env`);
@@ -68,24 +70,7 @@ export async function startFacilitator() {
   return { client: new HttpFacilitator("http://localhost:8402"), stop: () => child.kill() };
 }
 
-/** Refunds come from the agent's own Hedera account, signed with its own key. */
-function refunder(identity: SpecialistIdentity) {
-  const client = createClient({
-    network: "testnet",
-    operatorId: identity.hederaAccount,
-    operatorKey: identity.key.replace(/^0x/, ""),
-  });
-  return (to: string, units: bigint, memo: string) =>
-    transferToken(client, {
-      tokenId: net.usdcTokenId,
-      from: identity.hederaAccount,
-      to,
-      units,
-      memo,
-    });
-}
-
-type AgentName = "skyhop" | "airnest" | "staywise" | "priceguard" | "tripmint";
+export type AgentName = "skyhop" | "airnest" | "staywise" | "priceguard" | "tripmint";
 const PORTS: Record<AgentName, number> = {
   skyhop: 8411,
   staywise: 8412,
@@ -95,7 +80,6 @@ const PORTS: Record<AgentName, number> = {
 };
 const BIDDERS = new Set<AgentName>(["skyhop", "airnest", "staywise"]);
 const PRICEGUARD_STORE = fileURLToPath(new URL("../.priceguard.local.json", import.meta.url));
-
 /** Starts the chosen specialist agents and lists them on Arkiv. */
 export async function startAgents(
   which: AgentName[],
@@ -104,6 +88,7 @@ export async function startAgents(
 ) {
   const liteKey = process.env.LITEAPI_KEY ?? "";
   let guard: ReturnType<typeof priceGuard> | undefined;
+  const checkPayment = paymentChecker();
   const make = (name: AgentName) => {
     const identity = ids.agents[name];
     const ctx = {
@@ -113,6 +98,9 @@ export async function startAgents(
       usdcTokenId: net.usdcTokenId,
       executorId: DEPLOYMENTS.testnet.mandateRegistryId,
       refund: refunder(identity),
+      jobs: jobStore(jobsFile(name)),
+      paymentState: checkPayment,
+      log,
     };
     if (name === "skyhop")
       return createSpecialist(skyhop(new DuffelClient(process.env.DUFFEL_ACCESS_TOKEN ?? "")), ctx);
@@ -140,6 +128,9 @@ export async function startAgents(
   const unwatch: (() => void)[] = [];
   const bidders: { considerTask: (t: Decoded<Task>, log: (l: string) => void) => void }[] = [];
   for (const [i, { s }] of started.entries()) {
+    // Finish or refund the jobs a previous run left half-way (see specialists/work.ts).
+    const left = "recover" in s ? s.recover() : 0;
+    if (left) console.log(`   ${s.name}: picking up ${left} unfinished job(s) from the last run`);
     const r = await s.publish();
     console.log(
       `   ${s.name} ${r.alreadyListed ? "already listed on Arkiv" : `listed on Arkiv ${ARKIV_EXPLORER.tx(r.txHash)}`}`,

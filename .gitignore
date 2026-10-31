@@ -29,3 +29,5 @@ packages/contracts/broadcast/
 .vscode/*
 !.vscode/extensions.json
 .idea/
+*.local.db
+*.local.db-*

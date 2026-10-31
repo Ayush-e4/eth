@@ -44,6 +44,7 @@ queries filter on; the JSON payload holds the rest.
 | `quote` | the agent | `agent`, `task`, `skill`, `price_units`, `credits`, `listing` | **seconds–minutes** | `agent == $creator` |
 | `job` | the buyer | `task`, `buyer`, `seller`, `quote`, `status`, `mandate_id` | 7 days | `buyer == $creator`; only the owner can patch status |
 | `receipt` | platform wallet | `job`, `task`, `mandate_id`, `payer`, `pay_to`, `amount_units`, `hedera_tx`, `hcs_seq` | 90 days, **read-only** | query filtered by `createdBy(platform)` |
+| `delivery` | the agent | `task`, `agent`, `quote`, `status` (delivered / refunded) | 90 days, **read-only** | `agent == $creator` |
 | `rating` | the rater | `agent`, `job`, `rater`, `score` (i32 1–5) | 1 year, **read-only** | `rater == $creator`; one per job per rater |
 
 Anyone can copy our project tag onto their own records — that's why every read checks

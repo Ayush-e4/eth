@@ -6,6 +6,8 @@ import {
   AgentSchema,
   type Claim,
   ClaimSchema,
+  type Delivery,
+  DeliverySchema,
   type Invoice,
   InvoiceSchema,
   type JOB_STATUS,
@@ -159,6 +161,18 @@ export async function claimTask(w: ArkivWriter, claim: Claim) {
     ARKIV_SCHEMAS.claim,
     { ...attributesFor.claim(c), body: bodyOf(c) } as AnyValues,
     { expiration: LIFETIME.claim(), flags: { readonly: true } },
+  );
+}
+
+/** The seller records how a paid job ended. Read-only, kept 90 days like the receipt. */
+export async function recordDelivery(w: ArkivWriter, delivery: Delivery) {
+  const d = DeliverySchema.parse(delivery);
+  if (d.agent.toLowerCase() !== w.account.address.toLowerCase())
+    throw new Error("Deliveries must be written by the agent that did the job");
+  return w.createEntity(
+    ARKIV_SCHEMAS.delivery,
+    { ...attributesFor.delivery(d), body: bodyOf(d) } as AnyValues,
+    { expiration: LIFETIME.delivery(), flags: { readonly: true } },
   );
 }
 

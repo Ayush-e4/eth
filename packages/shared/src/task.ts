@@ -89,4 +89,5 @@ export const TASK_ERRORS = {
   unknownQuote: "unknown_or_expired_quote",
   noOffer: "no_offer", // nothing to quote for this input (sold out, no route…); detail says why
   workFailed: "work_failed",
+  quoteUsed: "quote_already_used", // a job was already paid for this quote (by someone else)
 } as const;

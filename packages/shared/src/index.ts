@@ -18,4 +18,5 @@ export const APP = {
   tagline: "AI agents that do real-world tasks, hire and pay each other — within onchain mandates.",
 } as const;
 export * from "./chat";
+export * from "./json";
 export * from "./task";
