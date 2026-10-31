@@ -37,6 +37,7 @@ import type { BookingRecord } from "../src/specialists/staywise-manage";
 import { tripmint } from "../src/specialists/tripmint";
 import { JsonStore } from "../src/store";
 import { jobsFile, paymentChecker, refunder } from "./agent-money";
+import { keepListed } from "./keep-listed";
 
 export function requireEnv(keys: string[]) {
   for (const k of keys) if (!process.env[k]) throw new Error(`${k} is empty in .env`);
@@ -140,6 +141,13 @@ export async function startAgents(
   // Flight and hotel agents also bid on open tasks posted to Arkiv. One shared read of the
   // board for all of them keeps us well inside Arkiv's query budget.
   if (bidders.length) unwatch.push(watchBoard(bidders));
+  // Listings expire after 30 days; renew them while the market runs.
+  unwatch.push(
+    keepListed(
+      which.map((name) => ({ name, key: ids.agents[name].key })),
+      log,
+    ),
+  );
   return {
     priceGuard: guard,
     stop: () => {
