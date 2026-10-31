@@ -31,6 +31,7 @@ docs/
   arkiv.md    Why Arkiv, what lives where, what we kept off Arkiv, live demo
   agents.md   The agents, procurement, one run step by step, safety rules, how to run the demo
   priceguard.md  PriceGuard: rebooks when hotel prices drop, paid 20% of the saving on proof
+  identity.md Agents' ERC-8004 identities on Hedera and reviews from paying clients
   api.md      API server: Postgres, Sign-In with Ethereum, sessions, roles, chats + concierge
   web.md      The web app: routes, how it talks to the API, running it
   mcp.md      AgentNet as a paid MCP server: tools, spending limits, setup

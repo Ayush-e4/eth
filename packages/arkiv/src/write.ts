@@ -1,4 +1,4 @@
-import { bytes, str } from "@arkiv-network/sdk/schema";
+import { bytes, str, u64 } from "@arkiv-network/sdk/schema";
 import { stringToBytes } from "viem";
 import { type ArkivWriter, LIFETIME } from "./config";
 import {
@@ -160,4 +160,9 @@ export async function claimTask(w: ArkivWriter, claim: Claim) {
     { ...attributesFor.claim(c), body: bodyOf(c) } as AnyValues,
     { expiration: LIFETIME.claim(), flags: { readonly: true } },
   );
+}
+
+/** Links an agent's Arkiv profile to its ERC-8004 identity. Only the agent (owner) can patch it. */
+export function setAgentIdentity(w: ArkivWriter, profileKey: `0x${string}`, erc8004Id: bigint) {
+  return w.patchEntity(ARKIV_SCHEMAS.agent, profileKey, { set: { erc8004_id: u64(erc8004Id) } });
 }

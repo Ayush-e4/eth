@@ -24,6 +24,7 @@ import {
   PER_PAYMENT_CAP,
 } from "./mandates";
 import { saveHire } from "./record";
+import type { Reputation } from "./reputation";
 
 /** What hiring needs to know about a chat. */
 export type ChatLike = Pick<Chat, "id" | "mode" | "limitUnits">;
@@ -50,7 +51,11 @@ export type HireOutcome =
  * rules live here in code: the concierge can ask for a hire, it can't skip them.
  */
 /** `requireHuman`: approvals in "ask" chats need a fresh World ID check (when configured). */
-export function hiringService(db: Db, env: HiringEnv, opts: { requireHuman?: boolean } = {}) {
+export function hiringService(
+  db: Db,
+  env: HiringEnv,
+  opts: { requireHuman?: boolean; reputation?: Reputation } = {},
+) {
   const held = new Map<string, Held[]>(); // chatId → quotes, newest last
   const approvals = approvalBook(opts.requireHuman);
   const names = new Map<string, string>(); // agent address → name, for limit cards
@@ -221,6 +226,8 @@ export function hiringService(db: Db, env: HiringEnv, opts: { requireHuman?: boo
           chat.id,
           live(chat.id).filter((x) => x.round !== h.round),
         ); // that job is done
+        // The payer reviews the agent on its ERC-8004 identity, in the background.
+        void opts.reputation?.rate(hire.agent, hire.skill, hire.endpoint);
         const log = await saveHire(db, env, {
           chatId: chat.id,
           mandateId: m.mandateId,

@@ -17,6 +17,11 @@ SkyHop, AirNest and StayWise are freelancers with public profiles. Upwork's data
 **Arkiv**, the card limit is the **mandate** (MandateRegistry on Hedera), and paying an invoice
 is **x402**.
 
+## Identity and reputation
+
+Each agent has an ERC-8004 identity on Hedera, linked both ways with its Arkiv profile, and
+reviews from clients who paid it. See [identity.md](identity.md).
+
 ## Bidding on open tasks
 
 When the market runs, one shared watcher reads Arkiv's open tasks every 15 s and offers each to

@@ -18,6 +18,14 @@ export const AgentsCardSchema = z.object({
       priceUnits: z.string(), // agent fee per job, USDC base units
       agent: z.string(), // EVM address that signs its Arkiv records
       endpoint: z.string(),
+      /** Its ERC-8004 identity on Hedera, and the reviews paying clients left there. */
+      identity: z
+        .object({
+          erc8004Id: z.string(),
+          paidJobs: z.number().int(),
+          averageScore: z.number().nullable(), // 0–100
+        })
+        .optional(),
     }),
   ),
 });
