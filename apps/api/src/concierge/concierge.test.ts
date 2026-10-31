@@ -4,7 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { arkivMarket, type Market } from "./market";
 import { conciergeTools } from "./tools";
 
-vi.mock("@eth/arkiv", () => ({
+vi.mock("@eth/arkiv", async (real) => ({
+  hasJobFee: (await real<typeof import("@eth/arkiv")>()).hasJobFee,
   arkivReader: vi.fn(() => ({})),
   findAgents: vi.fn(),
   findListings: vi.fn(),

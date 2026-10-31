@@ -1,4 +1,5 @@
 import type { Hire, QuoteOption, QuoteRound } from "@eth/agents/hiring";
+import { hasJobFee } from "@eth/arkiv";
 
 export interface MarketAgent {
   name: string;
@@ -48,7 +49,7 @@ export function marketTools(d: ToolDeps) {
           name: a.name,
           skill: a.skill,
           does: a.title,
-          fee: usdc(a.feeUnits),
+          fee: hasJobFee(a.feeUnits) ? usdc(a.feeUnits) : "no fee per job (see what it does)",
           agent: a.agent,
         })),
       );

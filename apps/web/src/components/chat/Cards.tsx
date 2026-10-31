@@ -86,7 +86,10 @@ function Agents({ card }: { card: AgentsCard }) {
               )}
             </span>
             <span className="flex flex-col items-end gap-0.5">
-              <span className="font-mono text-[13px]">{usdc(a.priceUnits)} USDC</span>
+              <span className="font-mono text-[13px]">
+                {/* 1 base unit = no fee per job (NO_JOB_FEE in @eth/arkiv), e.g. PriceGuard */}
+                {Number(a.priceUnits) > 1 ? `${usdc(a.priceUnits)} USDC` : "no fee per job"}
+              </span>
               <span className="font-mono text-[11px] text-muted">{shortAddress(a.agent)}</span>
             </span>
           </li>

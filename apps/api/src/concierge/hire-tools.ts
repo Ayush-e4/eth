@@ -73,8 +73,17 @@ export function hireTools(
           agent: o.title,
           note: o.note,
           feeUsdc: (Number(o.feeUnits) / 1e6).toFixed(2),
-          totalInr: o.priced?.totalInr,
+          // The rupee split is computed for you (today's rates); Claude's own maths has slipped.
+          ...(o.priced
+            ? {
+                itemInr: Math.round(o.priced.itemInr),
+                feeInr: Math.round(o.priced.feeInr),
+                totalInr: Math.round(o.priced.totalInr),
+              }
+            : {}),
         })),
+        amounts:
+          "Quote itemInr, feeInr and totalInr exactly as given; never convert currencies yourself.",
         best: refs[0]?.ref ?? null,
         why: round.bestReason,
         problems: round.skipped.map((s) => trim(s, 400)),

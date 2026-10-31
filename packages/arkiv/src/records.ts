@@ -35,6 +35,13 @@ export const AgentSchema = z.object({
 });
 
 /** One paid service an agent offers (relationship entity: one per service). */
+/**
+ * Listing prices must be positive, so an agent with no fee per job (it's paid from what it saves
+ * you, like PriceGuard's share of a price drop) lists this placeholder. Show it as "no fee per job".
+ */
+export const NO_JOB_FEE = 1n;
+export const hasJobFee = (units: bigint | string | number) => BigInt(units) > NO_JOB_FEE;
+
 export const ListingSchema = z.object({
   agent: address,
   skill: slug,
