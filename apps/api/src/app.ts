@@ -7,6 +7,8 @@ import { chatRoutes } from "./chats/routes";
 import type { Concierge } from "./concierge/concierge";
 import type { Config } from "./config";
 import type { Db } from "./db/client";
+import type { DemoQuotaCheck } from "./demo/quotas";
+import { demoRoutes } from "./demo/routes";
 import type { HiringEnv } from "./hiring/env";
 import { paymentRoutes } from "./hiring/payment-routes";
 import { mandateRoutes } from "./hiring/routes";
@@ -27,6 +29,7 @@ export interface AppDeps {
   humanChecks?: HumanChecks | null;
   tasks?: OpenTaskService | null;
   undo?: UndoWindows | null;
+  demo?: DemoQuotaCheck | null;
 }
 
 export function createApp(db: Db, config: Config, deps: AppDeps = {}) {
@@ -55,9 +58,15 @@ export function createApp(db: Db, config: Config, deps: AppDeps = {}) {
   const { concierge = null, hiring = null } = deps;
   app.route(
     "/",
-    chatRoutes(db, concierge, (id, text) => hiring?.service.noteUserMessage(id, text)),
+    chatRoutes(
+      db,
+      concierge,
+      (id, text) => hiring?.service.noteUserMessage(id, text),
+      deps.demo ?? null,
+    ),
   );
-  app.route("/", mandateRoutes(db, hiring?.env ?? null));
+  app.route("/", mandateRoutes(db, hiring?.env ?? null, deps.demo ?? null));
+  app.route("/", demoRoutes(db, deps.demo ?? null));
   app.route("/", accountRoutes(db, hiring?.env ?? null));
   app.route("/", spendLogRoutes(hiring?.env ?? null, deps.logNames));
   app.route("/", humanCheckRoutes(db, deps.humanChecks ?? null, hiring?.service ?? null));

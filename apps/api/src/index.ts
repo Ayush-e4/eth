@@ -5,6 +5,7 @@ import { claudeConcierge } from "./concierge/concierge";
 import { arkivMarket } from "./concierge/market";
 import { loadConfig } from "./config";
 import { connectDb } from "./db/client";
+import { demoQuotas } from "./demo/quotas";
 import { loadHiringEnv } from "./hiring/env";
 import { pendingHires } from "./hiring/pending";
 import { reputation } from "./hiring/reputation";
@@ -29,6 +30,8 @@ const undo = env && undoSeconds > 0 ? undoWindows(db, env, undoSeconds) : null;
 // Hires written down before paying, read back from the agent if a turn couldn't finish them.
 const rate = env ? reputation(env) : undefined;
 const pending = env ? pendingHires(db, env, { reputation: rate }) : null;
+// Demo accounts share one test wallet: daily allowances per account and for the wallet.
+const demo = config.demoMode ? demoQuotas(db) : null;
 const hiring = env
   ? {
       env,
@@ -37,6 +40,7 @@ const hiring = env
         reputation: rate,
         undo: undo ?? undefined,
         pending: pending ?? undefined,
+        demo: demo ?? undefined,
       }),
     }
   : null;
@@ -81,6 +85,7 @@ serve(
       humanChecks: checks,
       tasks,
       undo,
+      demo,
     }).fetch,
     port: config.port,
   },

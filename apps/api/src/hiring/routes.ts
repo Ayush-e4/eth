@@ -5,6 +5,7 @@ import { type AuthEnv, requireUser } from "../auth/routes";
 import { chatStore } from "../chats/store";
 import type { Db } from "../db/client";
 import type { MandateRow } from "../db/schema";
+import type { DemoQuotaCheck } from "../demo/quotas";
 import type { HiringEnv } from "./env";
 import {
   adoptUserMandate,
@@ -34,7 +35,7 @@ const mandateJson = (m: MandateRow, remaining?: bigint) => ({
  * A chat's spending limit. Demo users approve with the shared test wallet; wallet users create
  * the mandate in MetaMask and hand us its id, which we check on-chain before using it.
  */
-export function mandateRoutes(db: Db, env: HiringEnv | null) {
+export function mandateRoutes(db: Db, env: HiringEnv | null, demo: DemoQuotaCheck | null = null) {
   const store = chatStore(db);
   const app = new Hono<AuthEnv>();
   app.use("/chats/:id/mandate", requireUser(db));
@@ -67,6 +68,8 @@ export function mandateRoutes(db: Db, env: HiringEnv | null) {
     try {
       if ("demo" in body.data) {
         if (!user.isDemo) return c.json({ error: "approve the limit with your own wallet" }, 403);
+        const over = await demo?.canCreateLimit(user.id);
+        if (over) return c.json({ error: over }, 429);
         return c.json({ mandate: mandateJson(await createDemoMandate(db, env, chat, card)) }, 201);
       }
       const m = await adoptUserMandate(db, env, chat, user, BigInt(body.data.mandateId), card);

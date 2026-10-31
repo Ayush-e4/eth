@@ -7,6 +7,7 @@ import { type AuthEnv, requireUser } from "../auth/routes";
 import type { Concierge } from "../concierge/concierge";
 import type { Db } from "../db/client";
 import { type Chat, hires, type Message } from "../db/schema";
+import type { DemoQuotaCheck } from "../demo/quotas";
 import { limitUnitsSchema } from "../limits";
 import { withCardNotes } from "./card-notes";
 import { chatStore } from "./store";
@@ -40,6 +41,7 @@ export function chatRoutes(
   db: Db,
   concierge: Concierge | null,
   onUserMessage: (chatId: string, text: string) => unknown = () => {},
+  demo: DemoQuotaCheck | null = null,
 ) {
   const hiredIn = (chatId: string) =>
     db.select().from(hires).where(eq(hires.chatId, chatId)).orderBy(asc(hires.createdAt));
@@ -90,6 +92,8 @@ export function chatRoutes(
     const body = SendMessageSchema.safeParse(await c.req.json().catch(() => null));
     if (!body.success) return c.json({ error: "send text (1 to 4000 characters)" }, 400);
     if (!concierge) return c.json({ error: "the concierge is not configured" }, 503);
+    const over = user.isDemo ? await demo?.canSend(user.id) : null;
+    if (over) return c.json({ error: over }, 429);
 
     const history = (await store.recent(chat.id)).map((m) => ({
       role: m.role,
