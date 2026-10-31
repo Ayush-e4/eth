@@ -13,7 +13,9 @@
     "priceguard": "tsx --env-file=../../.env scripts/priceguard.ts",
     "serve": "tsx --env-file=../../.env scripts/serve.ts",
     "erc8004": "tsx --env-file=../../.env scripts/erc8004.ts",
-    "setup-testnet": "tsx --env-file=../../.env scripts/testnet/setup-testnet.ts"
+    "setup-testnet": "tsx --env-file=../../.env scripts/testnet/setup-testnet.ts",
+    "new-agent": "tsx --env-file=../../.env scripts/kit/new-agent.ts",
+    "run-agent": "tsx --env-file=../../.env scripts/kit/run-agent.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "1.0.0",

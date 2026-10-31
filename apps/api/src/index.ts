@@ -1,5 +1,8 @@
+import { NETWORKS } from "@eth/hedera";
+import { DEPLOYMENTS } from "@eth/mandates";
 import { serve } from "@hono/node-server";
 import { createApp } from "./app";
+import { agentChecker } from "./builders/check";
 import { closeInterruptedTurns } from "./chats/interrupted";
 import { claudeConcierge } from "./concierge/concierge";
 import { arkivMarket } from "./concierge/market";
@@ -39,6 +42,13 @@ const quotaConfig = loadDemoQuotas();
 const status = statusCheck(db, env, { market, quotas: config.demoMode ? quotaConfig : null });
 // The Market page: every agent, its reviews, whether it's up, what it did here (public).
 const catalog = marketCatalog(db, { market, status });
+// "List your agent": checks a builder's agent the way buyers will use it.
+const checkAgent = agentChecker({
+  mirrorUrl: NETWORKS.testnet.mirrorUrl,
+  usdcTokenId: NETWORKS.testnet.usdcTokenId,
+  executorId: DEPLOYMENTS.testnet.mandateRegistryId,
+  production: config.production,
+});
 // Demo accounts share one test wallet: daily allowances per account and for the wallet, and a
 // pause before it runs dry.
 const demo = config.demoMode
@@ -95,6 +105,7 @@ serve(
       demo,
       status,
       catalog,
+      checkAgent,
     }).fetch,
     port: config.port,
   },

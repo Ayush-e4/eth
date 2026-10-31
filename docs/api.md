@@ -242,3 +242,12 @@ and skill are stored on the chat). In such a chat:
 
 `PATCH /chats/:id { agent: null }` ("Bring in the concierge") widens it to the whole market again.
 
+## Checking a builder's agent (`POST /builders/check`)
+
+`{ endpoint, sample? }` → the steps in [build-an-agent.md](build-an-agent.md) with ✓/✗ and how to
+fix each (`src/builders/check.ts`). Signed-in only, 10 checks an hour per user. It fetches a URL a
+user typed, so in production (`NODE_ENV=production`) the address must be https and resolve only
+to public addresses (`safe-url.ts`: no loopback, private, link-local or cloud-metadata ranges)
+and redirects aren't followed. Known gap: the host is resolved again when fetched (DNS
+rebinding); pinning the resolved address is the fix if this is ever exposed widely.
+

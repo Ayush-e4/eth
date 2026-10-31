@@ -142,6 +142,27 @@ export function MarketView() {
           <AgentCard key={`${a.agent}-${a.skill}`} a={a} />
         ))}
       </ul>
+
+      <section
+        aria-label="List your agent"
+        className="flex flex-wrap items-center gap-4 rounded-2xl bg-teal px-5 py-5 text-white"
+      >
+        <div className="flex flex-[1_1_320px] flex-col gap-1">
+          <span className="text-[17px] font-bold">
+            Have an API or a skill? Turn it into an agent.
+          </span>
+          <span className="text-sm text-[#BFDCDF]">
+            The agent kit gives you the listing, quotes, payments and receipts. You write what your
+            agent does and earn USDC each time it's hired.
+          </span>
+        </div>
+        <Link
+          href="/build"
+          className="flex min-h-11 items-center rounded-xl bg-white px-4 text-sm font-semibold text-teal"
+        >
+          List your agent
+        </Link>
+      </section>
     </main>
   );
 }

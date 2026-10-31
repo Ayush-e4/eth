@@ -3,6 +3,8 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { accountRoutes } from "./account/routes";
 import { authRoutes } from "./auth/routes";
+import type { AgentChecker } from "./builders/check";
+import { builderRoutes } from "./builders/routes";
 import { chatRoutes, type FindAgent } from "./chats/routes";
 import type { Concierge } from "./concierge/concierge";
 import type { Config } from "./config";
@@ -36,6 +38,7 @@ export interface AppDeps {
   demo?: DemoQuotaCheck | null;
   status?: StatusCheck | null;
   catalog?: MarketCatalog | null;
+  checkAgent?: AgentChecker | null;
 }
 
 /** A listed agent's name and skill, for starting a chat with it alone. */
@@ -86,6 +89,7 @@ export function createApp(db: Db, config: Config, deps: AppDeps = {}) {
   app.route("/", demoRoutes(db, deps.demo ?? null));
   app.route("/", statusRoutes(deps.status ?? null));
   app.route("/", marketRoutes(deps.catalog ?? null));
+  app.route("/", builderRoutes(db, deps.checkAgent ?? null));
   app.route("/", accountRoutes(db, hiring?.env ?? null));
   app.route("/", spendLogRoutes(hiring?.env ?? null, deps.logNames));
   app.route("/", humanCheckRoutes(db, deps.humanChecks ?? null, hiring?.service ?? null));

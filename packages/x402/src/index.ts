@@ -18,6 +18,7 @@ export {
   paymentResponseHeader,
   paywall,
   readPaymentHeader,
+  readRequiredHeader,
 } from "./paywall";
 export { checkSettlement, type MirrorTx, MirrorTxSchema } from "./record-checks";
 export { assetToEvm, longZero, MirrorResolver } from "./resolve";

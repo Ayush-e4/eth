@@ -1,4 +1,5 @@
 import {
+  decodePaymentRequiredHeader,
   decodePaymentSignatureHeader,
   encodePaymentRequiredHeader,
   encodePaymentResponseHeader,
@@ -21,6 +22,16 @@ export function readPaymentHeader(header: string | undefined): PaymentPayload | 
   if (!header) return null;
   try {
     return decodePaymentSignatureHeader(header) as PaymentPayload;
+  } catch {
+    return null;
+  }
+}
+
+/** What a 402 asks for (its PAYMENT-REQUIRED header), or null if absent/unreadable. */
+export function readRequiredHeader(header: string | null | undefined): PaymentRequired | null {
+  if (!header) return null;
+  try {
+    return decodePaymentRequiredHeader(header) as PaymentRequired;
   } catch {
     return null;
   }
