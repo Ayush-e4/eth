@@ -1,6 +1,7 @@
 # Arkiv friction report
 
-Honest notes from building on Arkiv (Tiramisu, SDK 0.8.1). Dated entries; newest last.
+Honest notes from building on Arkiv: Tiramisu with SDK 0.8.1 until 31 Oct 2026, then Rabdi with
+SDK 1.0.0. Dated entries; newest last.
 
 ## 2026-10-21
 
@@ -24,6 +25,16 @@ Honest notes from building on Arkiv (Tiramisu, SDK 0.8.1). Dated entries; newest
 | 11 | **The keyless query budget runs out quietly.** With three agents watching the board and a live bids card polling, `arkiv_query` started returning HTTP 429 `ANON_COST_LIMITED` ("unauthenticated query budget exhausted"), while `eth_blockNumber` still worked | viem's default transport retries 429 with back-off, so our reads **hung for minutes instead of failing**; the chat looked frozen. We found the cause only with a raw `curl` | Transport now uses `retryCount: 1` and a 15 s timeout, and sends `X-API-KEY` when `ARKIV_API_KEY` is set. One shared board watcher for all agents (every 15 s), bid reads cached 8 s, slower polling |
 | 12 | **The budget and its reset aren't visible.** Nothing tells you how much of the keyless budget is left or when it resets | Hard to size polling before you hit the wall | Budgeted our reads (above); asked for an access key |
 | 13 | No subscription for "new entities matching a query" | Bidders and the bids card must poll | Polling, cached and shared. A websocket "watch query" would remove most reads |
+
+### Moving to Rabdi + SDK 1.0 (same day)
+
+| # | Friction | Impact | What we did |
+|---|---|---|---|
+| 14 | **The testnet changed under us, with no notice we saw.** Tiramisu vanished from the Hub (Networks and Access Keys list only Rabdi), its keyless budget was exhausted, and keys can't be made for it | Our running app stopped reading Arkiv | Moved to Rabdi |
+| 15 | **SDK 0.8.1 can't write to Rabdi.** A 0.8.1 `createEntity` fails with `"$contentType" is owned by the engine and cannot be written. Only $payload and $contentType are yours to set`. The message contradicts itself | Hard to tell whether to fix our code or upgrade | Upgraded to 1.0.0 (released 30 Oct, one day earlier) |
+| 16 | **SDK 1.0 is a rewrite:** no `attr` module, records are `defineSchema` schemas, writes take `(schema, values, options)`, payloads become `bytes` columns, queries go `select().from(schema)` | Our whole Arkiv layer (~700 lines) had to change | Kept our trust rules: one named schema per kind, a `body` bytes column with the JSON record, the same `decodeEntity` checks |
+| 17 | **Rabdi caps lifetimes at 7,884,000 blocks (~182 days).** Our 365-day ratings failed with "more than the chain's maximum lifetime" | A rating written **after an agent was paid** threw, and the paid hire was lost (twice, as the concierge retried) | Ratings now 180 days; post-payment Arkiv records are best-effort and never discard a paid hire |
+| 18 | The access key is sent **in the RPC URL path** (`rabdi({ accessKey })`) | Easy to leak in logs or a browser bundle | Server-side only; the docs note it's "not a secret" but should be origin/IP-restricted |
 
 **Suggestion:** return the remaining budget and reset time as response headers on
 `arkiv_query`, and document that 429 + viem's default retries looks like a hang.

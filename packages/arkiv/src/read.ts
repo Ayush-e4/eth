@@ -1,6 +1,7 @@
-import { addr, str, u64 } from "@arkiv-network/sdk/attr";
-import { eq, lte } from "@arkiv-network/sdk/query";
-import { type ArkivReader, PROJECT } from "./config";
+import { and, eq, lte } from "@arkiv-network/sdk/query";
+import { addr, str, u64 } from "@arkiv-network/sdk/schema";
+import { hexToBytes, isHex } from "viem";
+import type { ArkivReader } from "./config";
 import { type Decoded, decodeEntity, type RawEntity } from "./decode";
 import type {
   Agent,
@@ -14,17 +15,27 @@ import type {
   Receipt,
   Task,
 } from "./records";
+import { ARKIV_SCHEMAS } from "./schemas";
 
-const FIELDS = {
-  key: true,
-  creator: true,
-  expiresAt: true,
-  payload: true,
-  attributes: true,
-} as const;
 const BLOCK_SECONDS = 2n;
 
 type Filter = ReturnType<typeof eq>;
+
+/** A query row (SDK 1.0) as the raw entity our decoder checks: system fields, columns, body. */
+function toRaw(row: Record<string, unknown>): RawEntity {
+  const attributes: RawEntity["attributes"] = {};
+  for (const [name, v] of Object.entries(row))
+    if (!name.startsWith("$") && name !== "body" && v && typeof v === "object")
+      attributes[name] = v as { type: string; value: unknown };
+  const b = (row.body as { value?: unknown } | undefined)?.value;
+  return {
+    key: row.$key as `0x${string}`,
+    creator: row.$creator as `0x${string}`,
+    expiresAt: BigInt(row.$expiresAt as bigint),
+    payload: b instanceof Uint8Array ? b : isHex(b) ? hexToBytes(b) : new Uint8Array(),
+    attributes,
+  };
+}
 
 async function query<K extends Kind>(
   r: ArkivReader,
@@ -32,14 +43,19 @@ async function query<K extends Kind>(
   filters: Filter[],
   opts: { createdBy?: `0x${string}`; limit?: number } = {},
 ) {
-  let builder = r
-    .select(FIELDS)
-    .where(eq("project", str(PROJECT)), eq("kind", str(kind)), ...filters)
-    .limit(opts.limit ?? 100);
+  // A named schema only matches its own kind of our records; `where` narrows further.
+  let builder = r.select().from(ARKIV_SCHEMAS[kind] as never) as unknown as {
+    where(e: unknown): typeof builder;
+    limit(n: number): typeof builder;
+    createdBy(a: `0x${string}`): typeof builder;
+    fetch(): Promise<{ entities: Record<string, unknown>[] }>;
+  };
+  if (filters.length) builder = builder.where(filters.length === 1 ? filters[0] : and(...filters));
+  builder = builder.limit(opts.limit ?? 100);
   if (opts.createdBy) builder = builder.createdBy(opts.createdBy);
   const page = await builder.fetch();
   return page.entities
-    .map((e) => decodeEntity(kind, e as unknown as RawEntity))
+    .map((e) => decodeEntity(kind, toRaw(e)))
     .filter((d): d is NonNullable<typeof d> => d !== null);
 }
 

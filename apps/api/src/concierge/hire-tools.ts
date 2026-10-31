@@ -20,7 +20,9 @@ export function hireTools(
   chat: ChatLike,
   show: (card: Card) => void,
   emit: (event: ConciergeEvent) => void,
-  afterHire: (ref: string) => Promise<void> = async () => {},
+  afterHire: (
+    held: NonNullable<ReturnType<HiringService["held"]>>,
+  ) => Promise<void> = async () => {},
 ) {
   const agentInput = betaZodTool({
     name: "agent_input",
@@ -93,9 +95,10 @@ export function hireTools(
     }),
     run: async ({ quote, reason }) => {
       emit({ type: "status", label: "Hiring" });
+      const held = hiring.held(chat.id, quote); // a hire drops its refs, so read it first
       const out = await hiring.hire(chat, quote, reason, `booked from an AgentNet chat`);
       if (out.status !== "refused") show(out.card);
-      if (out.status === "hired") await afterHire(quote).catch(() => {}); // e.g. award an open task
+      if (out.status === "hired" && held) await afterHire(held).catch(() => {}); // e.g. award an open task
       if (out.status === "hired")
         return JSON.stringify({
           status: "hired",

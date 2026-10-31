@@ -238,7 +238,10 @@ export function createSpecialist<I, D, R>(def: SpecialistDef<I, D, R>, ctx: Spec
     seen.add(t.key);
     if (t.record.maxFeeUnits < def.priceUnits) return; // too cheap for us
     const input = def.input.safeParse(t.record.input);
-    if (!input.success) return;
+    if (!input.success) {
+      const why = input.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
+      return log(`${def.name} can't bid on ${t.record.task}: ${why.slice(0, 160)}`);
+    }
     bid({ task: t.record.task, skill: def.skill, input: input.data })
       .then(() => log(`${def.name} bid on task ${t.record.task}`))
       .catch((err) => log(`${def.name} passed on ${t.record.task}: ${String(err).slice(0, 120)}`));

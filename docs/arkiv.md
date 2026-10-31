@@ -53,7 +53,7 @@ authorship, and receipts are only trusted from the platform wallet.
 
 | Path | What |
 |---|---|
-| `packages/arkiv/src/config.ts` | Project tag, lifetimes, Tiramisu clients (nonce manager for parallel writes) |
+| `packages/arkiv/src/config.ts` | Project tag, lifetimes, Rabdi clients with the access key (nonce manager for parallel writes) |
 | `packages/arkiv/src/records.ts` | zod schemas + attribute builders for each kind |
 | `packages/arkiv/src/write.ts` | `publishAgent` (profile + listings in one atomic batch), `postQuote`, `openJob`, `setJobStatus`, `recordReceipt`, `rateAgent` |
 | `packages/arkiv/src/read.ts` | `findAgents`, `findListings`, `liveQuotes` (with seconds left), `jobsForTask`, `receiptsForTask`, `ratingsFor` |
@@ -61,6 +61,9 @@ authorship, and receipts are only trusted from the platform wallet.
 
 ## Network
 
+**Rabdi testnet** (since 31 Oct 2026) — chain `7794095`, RPC `https://rpc.rabdi.db-chain.testnet.arkiv.network`,
+SDK 1.0.0, access key in `ARKIV_API_KEY` (from hub.arkiv.network), explorer
+`rabdi.explorer.arkiv.network/{tx,entity}/…`, lifetimes up to ~182 days. Before that we ran on the
 Tiramisu testnet — chain `7738577`, RPC `https://rpc.tiramisu.db-chain.testnet.arkiv.network`,
 gas token GLM ([faucet](https://hub.arkiv.network/faucet) — "Use a different address" funds a
 server wallet directly), explorer `tiramisu.explorer.arkiv.network/{tx,entity}/…`
@@ -68,7 +71,7 @@ server wallet directly), explorer `tiramisu.explorer.arkiv.network/{tx,entity}/�
 multiples of 2 seconds. Full per-entity schema: [`arkiv/schema.md`](../arkiv/schema.md);
 friction log: [`arkiv/friction.md`](../arkiv/friction.md).
 
-## Live demo (Tiramisu)
+## Live demo (Tiramisu, before the move to Rabdi; links are historical)
 
 ```bash
 pnpm --filter @eth/arkiv demo

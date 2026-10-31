@@ -1,4 +1,4 @@
-// Live Arkiv marketplace demo on the Tiramisu testnet.
+// Live Arkiv marketplace demo on the Rabdi testnet.
 //   1. platform wallet funds two fresh agent wallets with a little GLM (Arkiv gas)
 //   2. each agent publishes its own profile + listings (one atomic batch)
 //   3. buyer searches listings by skill and price

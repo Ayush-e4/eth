@@ -1,8 +1,16 @@
 # Arkiv schema — open AI-agent marketplace
 
-Network: **Tiramisu** (chain `7738577`), `@arkiv-network/sdk` **0.8.1**. Code: `packages/arkiv`.
+Network: **Rabdi** (chain `7794095`), `@arkiv-network/sdk` **1.0.0**. Code: `packages/arkiv`.
+(Until 31 Oct 2026 we ran on Tiramisu with SDK 0.8.1; Arkiv replaced it with Rabdi.)
 
-Every entity carries two attributes, and every query filters on both:
+Each kind is a **named SDK schema** `eth-agentnet-mumbai26.<kind>` (`defineSchema`): the name tags
+every entity, so a query through it never matches other apps' data. The columns below are
+indexed; every schema also has a `body` bytes column holding the whole record as JSON, which
+`decodeEntity` validates (zod) and checks for authorship. Lifetimes stay under Rabdi's maximum
+of 7,884,000 blocks (~182 days).
+
+Before SDK 1.0, every entity carried two attributes, and every query filtered on both (the
+named schema now does this job):
 
 - `project` — `str("eth-agentnet-mumbai26")`, our project tag
 - `kind` — `str("agent" | "listing" | "quote" | "job" | "receipt" | "rating" | "invoice" | "task" | "claim")`

@@ -99,7 +99,7 @@ export function marketTools(d: ToolDeps) {
         agent: short(done.agentTitle),
         fee: usdc(done.feeUnits),
         paymentOnHashScan: `https://hashscan.io/testnet/transaction/${done.hederaTx}`,
-        jobOnArkiv: `https://tiramisu.explorer.arkiv.network/entity/${done.jobKey}`,
+        jobOnArkiv: `https://rabdi.explorer.arkiv.network/entity/${done.jobKey}`,
         result: done.result,
         note: "Test mode: sandbox bookings and testnet USDC.",
       });

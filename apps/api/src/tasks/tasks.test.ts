@@ -101,8 +101,11 @@ describe("open tasks on Arkiv", () => {
     });
     vi.mocked(readBids).mockResolvedValue(roundFor(task) as never);
     await tasks.bids(chat.id, task);
-    await tasks.award(chat.id, "q1");
-    await tasks.award(chat.id, "q1");
+    // the hire tool reads the bid before paying (a hire drops its refs) and hands it over
+    const held = hiring.held(chat.id, "q1");
+    expect(held).not.toBeNull();
+    await tasks.award(chat.id, held as NonNullable<typeof held>);
+    await tasks.award(chat.id, held as NonNullable<typeof held>);
     expect(claimTask).toHaveBeenCalledOnce();
     expect(vi.mocked(claimTask).mock.calls[0]?.[1]).toEqual({
       task,
@@ -119,7 +122,7 @@ describe("open tasks on Arkiv", () => {
 
     // a plain quote (not a bid on a task we posted) awards nothing
     hiring.hold(chat.id, roundFor("chat-plain-quote") as never);
-    await tasks.award(chat.id, "q2");
+    await tasks.award(chat.id, { round: { task: "chat-plain-quote" }, option: bid as never });
     expect(claimTask).toHaveBeenCalledOnce();
   });
 });

@@ -1,6 +1,4 @@
-import { addr, bool, i32, key, str, u64 } from "@arkiv-network/sdk/attr";
 import { z } from "zod";
-import { PROJECT } from "./config";
 
 /**
  * The marketplace's public records. Attributes are what we filter on (typed, ≤128-byte
@@ -146,84 +144,6 @@ export type Rating = z.infer<typeof RatingSchema>;
 export type Invoice = z.infer<typeof InvoiceSchema>;
 export type Task = z.infer<typeof TaskSchema>;
 export type Claim = z.infer<typeof ClaimSchema>;
-
-const base = (kind: Kind) => ({ project: str(PROJECT), kind: str(kind) });
-
-/** Typed attributes per record. Only these are indexed; the rest goes in the payload. */
-export const attributesFor = {
-  agent: (a: Agent) => ({
-    ...base("agent"),
-    agent: addr(a.agent),
-    skill: str(a.skill),
-    hedera_account: str(a.hederaAccount),
-    ...(a.erc8004Id !== undefined ? { erc8004_id: u64(a.erc8004Id) } : {}),
-  }),
-  listing: (l: Listing) => ({
-    ...base("listing"),
-    agent: addr(l.agent),
-    skill: str(l.skill),
-    price_units: u64(l.priceUnits),
-    accepts_credits: bool(l.acceptsCredits),
-  }),
-  quote: (q: Quote) => ({
-    ...base("quote"),
-    agent: addr(q.agent),
-    task: str(q.task),
-    skill: str(q.skill),
-    price_units: u64(q.priceUnits),
-    ...(q.credits !== undefined ? { credits: u64(q.credits) } : {}),
-    ...(q.listing ? { listing: key(q.listing) } : {}),
-  }),
-  job: (j: Job) => ({
-    ...base("job"),
-    task: str(j.task),
-    buyer: addr(j.buyer),
-    seller: addr(j.seller),
-    quote: key(j.quote),
-    status: str(j.status),
-    mandate_id: u64(j.mandateId),
-  }),
-  receipt: (r: Receipt) => ({
-    ...base("receipt"),
-    job: key(r.job),
-    task: str(r.task),
-    mandate_id: u64(r.mandateId),
-    payer: str(r.payer),
-    pay_to: str(r.payTo),
-    amount_units: u64(r.amountUnits),
-    hedera_tx: str(r.hederaTx),
-    ...(r.hcsSequence !== undefined ? { hcs_seq: u64(r.hcsSequence) } : {}),
-  }),
-  rating: (r: Rating) => ({
-    ...base("rating"),
-    agent: addr(r.agent),
-    job: key(r.job),
-    rater: addr(r.rater),
-    score: i32(r.score),
-  }),
-  invoice: (i: Invoice) => ({
-    ...base("invoice"),
-    agent: addr(i.agent),
-    buyer: addr(i.buyer),
-    task: str(i.task),
-    amount_units: u64(i.amountUnits),
-  }),
-  task: (t: Task) => ({
-    ...base("task"),
-    task: str(t.task),
-    poster: addr(t.poster),
-    skill: str(t.skill),
-    max_fee_units: u64(t.maxFeeUnits),
-    status: str(t.status),
-  }),
-  claim: (c: Claim) => ({
-    ...base("claim"),
-    task: str(c.task),
-    poster: addr(c.poster),
-    quote: key(c.quote),
-    agent: addr(c.agent),
-  }),
-} as const;
 
 /** JSON payloads can't hold bigint; store them as decimal strings. */
 export function toPayloadJson(record: object): Record<string, unknown> {

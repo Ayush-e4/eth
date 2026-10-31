@@ -12,7 +12,7 @@
     "demo": "tsx --env-file=../../.env scripts/demo.ts"
   },
   "dependencies": {
-    "@arkiv-network/sdk": "0.8.1",
+    "@arkiv-network/sdk": "1.0.0",
     "viem": "2.57.7",
     "zod": "^4.6.7"
   },
