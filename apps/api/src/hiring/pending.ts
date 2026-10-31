@@ -15,6 +15,7 @@ import type { HiringEnv } from "./env";
 import { finishHire, type Granted } from "./record";
 import type { Reputation } from "./reputation";
 import type { EscrowReviews } from "./review";
+import type { FareWatchFollower } from "./watches";
 
 type Row = typeof table.$inferSelect;
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -40,6 +41,7 @@ export function pendingHires(
   d: {
     reputation?: Reputation;
     review?: EscrowReviews;
+    watches?: FareWatchFollower;
     read?: typeof readJob;
     wait?: typeof sleep;
   } = {},
@@ -93,10 +95,11 @@ export function pendingHires(
       reputation: d.reputation,
       review: d.review,
     });
+    const watch = await d.watches?.add(p.chatId, hire).catch(() => null);
     await say(
       p.chatId,
       `${card.title} finished the job from earlier (${option.note}). Here's what it delivered.`,
-      [card],
+      [card, ...(watch ? [watch] : [])],
     );
   }
 

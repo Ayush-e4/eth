@@ -14,8 +14,9 @@ import { loadHiringEnv } from "./hiring/env";
 import { pendingHires } from "./hiring/pending";
 import { reputation } from "./hiring/reputation";
 import { escrowReviews } from "./hiring/review";
-import { hiringService } from "./hiring/service";
+import { type HiringService, hiringService } from "./hiring/service";
 import { undoWindows } from "./hiring/undo";
+import { type FareWatchFollower, fareWatchFollower } from "./hiring/watches";
 import { marketCatalog } from "./market/catalog";
 import { arkivNames } from "./spend-log/routes";
 import { statusCheck } from "./status/check";
@@ -39,10 +40,21 @@ const undo = env && undoSeconds > 0 ? undoWindows(db, env, undoSeconds) : null;
 const reviewSeconds = Number(process.env.ESCROW_REVIEW_SECONDS ?? 120);
 const review =
   env?.escrow && reviewSeconds > 0 ? escrowReviews(db, env.escrow, reviewSeconds) : null;
+// Fare watches the user hired: their alerts are posted in the chat (and booked, if asked).
+const watches: FareWatchFollower | null = env
+  ? fareWatchFollower(db, env, {
+      hiring: (): HiringService | null => hiring?.service ?? null,
+      simulate: process.env.FAREWATCH_SIMULATE === "1",
+    })
+  : null;
 // Hires written down before paying, read back from the agent if a turn couldn't finish them.
 const rate = env ? reputation(env) : undefined;
 const pending = env
-  ? pendingHires(db, env, { reputation: rate, review: review ?? undefined })
+  ? pendingHires(db, env, {
+      reputation: rate,
+      review: review ?? undefined,
+      watches: watches ?? undefined,
+    })
   : null;
 // The open market on Arkiv, shared by the concierge and the status page.
 const market = arkivMarket(undefined, env ? [env.demo.evm] : []);
@@ -71,6 +83,7 @@ const hiring = env
         reputation: rate,
         undo: undo ?? undefined,
         review: review ?? undefined,
+        watches: watches ?? undefined,
         pending: pending ?? undefined,
         demo: demo ?? undefined,
       }),
@@ -123,6 +136,7 @@ serve(
       tasks,
       undo,
       review,
+      watches,
       demo,
       status,
       catalog,

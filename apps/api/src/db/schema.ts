@@ -267,3 +267,18 @@ export const escrowReviews = pgTable("escrow_reviews", {
   error: text("error"),
   createdAt: at("created_at").notNull().defaultNow(),
 });
+
+/**
+ * Fare watches the user hired (FareWatch): the API reads each one back from the agent, posts its
+ * alerts in the chat, and books on one when the user asked it to (an "Auto" chat, a target).
+ */
+export const fareWatches = pgTable("fare_watches", {
+  watchId: text("watch_id").primaryKey(), // the agent's id for it (its quote key)
+  chatId: chatRef(),
+  agent: text("agent").notNull(),
+  endpoint: text("endpoint").notNull(),
+  input: jsonb("input").$type<Record<string, unknown>>().notNull(), // route, date, target…
+  alertsSeen: integer("alerts_seen").notNull().default(0),
+  status: text("status").notNull().default("watching"), // watching | ended | stopped | booked
+  createdAt: at("created_at").notNull().defaultNow(),
+});

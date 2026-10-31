@@ -30,6 +30,7 @@ import { finishHire } from "./record";
 import type { Reputation } from "./reputation";
 import type { EscrowReviews } from "./review";
 import type { UndoWindows } from "./undo";
+import type { FareWatchFollower } from "./watches";
 
 /** What hiring needs to know about a chat. */
 export type ChatLike = Pick<Chat, "id" | "mode" | "limitUnits"> & {
@@ -37,7 +38,7 @@ export type ChatLike = Pick<Chat, "id" | "mode" | "limitUnits"> & {
 };
 
 export type HireOutcome =
-  | { status: "hired"; card: Extract<Card, { type: "hired" }>; result: unknown }
+  | { status: "hired"; card: Extract<Card, { type: "hired" }>; result: unknown; more?: Card[] }
   | { status: "needs_limit"; card: Extract<Card, { type: "limit" }> }
   | { status: "needs_approval"; card: Extract<Card, { type: "approval" }> }
   | { status: "pending"; reason: string } // paid (or paying); the result is posted when it's in
@@ -57,6 +58,7 @@ export function hiringService(
     reputation?: Reputation;
     undo?: UndoWindows;
     review?: EscrowReviews; // pay on delivery: hold fees for the user's review, else pay at once
+    watches?: FareWatchFollower; // a fare watch that was hired: followed, with a live card
     pending?: PendingHires;
     demo?: DemoQuotaCheck; // daily allowances when the shared demo wallet pays
   } = {},
@@ -274,7 +276,8 @@ export function hiringService(
           review: opts.review,
         });
         if (tracked) await opts.pending?.end(tracked);
-        return { status: "hired", result: hire.result, card };
+        const watch = await opts.watches?.add(chat.id, hire).catch(() => null);
+        return { status: "hired", result: hire.result, card, ...(watch ? { more: [watch] } : {}) };
       } catch (err) {
         return {
           status: "refused",

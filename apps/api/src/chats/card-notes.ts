@@ -31,6 +31,8 @@ export function cardNote(card: Card): string {
       return `[app: hire_agent scheduled ${fee(card.feeUnits)} to ${card.title} on Hedera (schedule ${card.scheduleId}), running at ${card.executesAt} unless the user cancelled it]`;
     case "hired":
       return `[app: hire_agent hired ${card.title} for ${card.skill}, paid ${fee(card.feeUnits)}, tx ${card.hederaTx}: ${card.summary}]`;
+    case "watch":
+      return `[app: ${card.title} is watching this fare (watch ${card.watchId}); the app posts its alerts in this chat by itself]`;
   }
 }
 

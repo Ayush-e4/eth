@@ -17,6 +17,8 @@ import type { EscrowReviews } from "./hiring/review";
 import { mandateRoutes } from "./hiring/routes";
 import type { HiringService } from "./hiring/service";
 import type { UndoWindows } from "./hiring/undo";
+import { watchRoutes } from "./hiring/watch-routes";
+import type { FareWatchFollower } from "./hiring/watches";
 import type { MarketCatalog } from "./market/catalog";
 import { marketRoutes } from "./market/routes";
 import { type LogNames, spendLogRoutes } from "./spend-log/routes";
@@ -37,6 +39,7 @@ export interface AppDeps {
   tasks?: OpenTaskService | null;
   undo?: UndoWindows | null;
   review?: EscrowReviews | null;
+  watches?: FareWatchFollower | null;
   demo?: DemoQuotaCheck | null;
   status?: StatusCheck | null;
   catalog?: MarketCatalog | null;
@@ -97,6 +100,7 @@ export function createApp(db: Db, config: Config, deps: AppDeps = {}) {
   app.route("/", humanCheckRoutes(db, deps.humanChecks ?? null, hiring?.service ?? null));
   app.route("/", openTaskRoutes(db, deps.tasks ?? null));
   app.route("/", paymentRoutes(db, deps.undo ?? null, deps.review ?? null));
+  app.route("/", watchRoutes(db, deps.watches ?? null));
 
   return app;
 }
