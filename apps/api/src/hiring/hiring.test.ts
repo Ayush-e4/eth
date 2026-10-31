@@ -60,6 +60,14 @@ describe("hiring from a chat", () => {
     expect(refs.map((r) => r.ref)).toEqual(["q1"]);
   });
 
+  it("leaves out an agent an admin hid", async () => {
+    vi.mocked(collectQuotes).mockResolvedValueOnce(structuredClone(round) as never); // own copy
+    const s = hiringService(db, env, { hidden: (a) => a.toLowerCase() === AIRNEST.toLowerCase() });
+    const out = await s.quotes(chat, "flights", {});
+    expect(out.refs).toEqual([]);
+    expect(out.round.skipped.at(-1)).toMatch(/not offered on AgentNet/);
+  });
+
   it("asks for a spending limit naming the quoting agents before paying anyone", async () => {
     const s = hiringService(db, env);
     await s.quotes(chat, "flights", {});

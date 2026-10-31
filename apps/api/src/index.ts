@@ -22,6 +22,7 @@ import { marketCatalog } from "./market/catalog";
 import { notifier } from "./notify/notifier";
 import { chatNudge, chatPoster } from "./notify/post";
 import { telegramBot } from "./notify/telegram";
+import { hiddenAgentStore, visibleMarket } from "./ops/hidden";
 import { arkivNames } from "./spend-log/routes";
 import { statusCheck } from "./status/check";
 import { openTaskService } from "./tasks/service";
@@ -95,7 +96,11 @@ const pending = env
     })
   : null;
 // The open market on Arkiv, shared by the concierge and the status page.
-const market = arkivMarket(undefined, env ? [env.demo.evm] : []);
+// Agents an admin hid on the ops page are left out of everything users see.
+const hidden = hiddenAgentStore(db);
+await hidden.refresh();
+const allMarket = arkivMarket(undefined, env ? [env.demo.evm] : []);
+const market = visibleMarket(allMarket, hidden);
 // Is everything up? Services, networks and the shared demo wallet (public at GET /status).
 const quotaConfig = loadDemoQuotas();
 const status = statusCheck(db, env, { market, quotas: config.demoMode ? quotaConfig : null });
@@ -124,6 +129,7 @@ const hiring = env
         watches: watches ?? undefined,
         pending: pending ?? undefined,
         demo: demo ?? undefined,
+        hidden: (agent) => hidden.isHidden(agent),
       }),
     }
   : null;
@@ -192,6 +198,14 @@ serve(
       catalog,
       checkAgent,
       wallets,
+      ops: {
+        env,
+        status,
+        allAgents: marketCatalog(db, { market: allMarket, status }),
+        market: allMarket,
+        hidden,
+        giftsPerDay: Number(process.env.WALLET_GIFTS_PER_DAY ?? 20),
+      },
     }).fetch,
     port: config.port,
   },

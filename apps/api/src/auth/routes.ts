@@ -46,7 +46,7 @@ export function publicUser(user: User, config: Config) {
     defaultMode: user.defaultMode,
     defaultLimitUnits: user.defaultLimitUnits.toString(),
     onboarded: user.onboardedAt !== null,
-    roles: rolesFor(user, config.admins),
+    roles: rolesFor(user, config.admins, config.adminUsers),
   };
 }
 

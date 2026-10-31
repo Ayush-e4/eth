@@ -16,6 +16,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 export * from "./auth-schema";
+export * from "./ops-schema";
 
 /** A person using the app. Wallet users have an address; demo users don't. */
 export const users = pgTable(
