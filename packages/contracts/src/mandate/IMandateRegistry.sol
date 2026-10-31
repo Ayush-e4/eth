@@ -40,6 +40,38 @@ interface IMandateRegistry {
         uint256 validBefore;
     }
 
+    /// What an agent signs to pay on delivery: the money waits in the registry until the job
+    /// is delivered (or comes back if it isn't). Same checks as a PaymentAuth, plus the terms.
+    struct EscrowAuth {
+        uint256 mandateId;
+        address payTo;
+        uint256 amount;
+        uint256 nonce;
+        uint256 validBefore;
+        uint64 deliverBy; // the payee must mark it delivered by then, or the payer can reclaim
+        uint32 reviewSeconds; // after delivery, the buyer can dispute for this long
+    }
+
+    enum EscrowState {
+        None,
+        Held, // paid in, waiting for delivery
+        Delivered, // the payee says it's done; the buyer may release, dispute, or let it lapse
+        Disputed, // the buyer objected: frozen until the payee refunds or the buyer releases
+        Released, // paid out to the payee
+        Refunded // back to the payer
+    }
+
+    struct Escrow {
+        uint256 mandateId;
+        address payee;
+        uint64 deliverBy;
+        uint32 reviewSeconds;
+        uint128 amount;
+        uint64 deliveredAt;
+        EscrowState state;
+        bytes32 resultHash; // what the payee says it delivered (a hash; the result stays private)
+    }
+
     /// What a parent mandate's agent signs to create a sub-mandate for another agent.
     struct SubMandateAuth {
         uint256 parentId;
@@ -63,6 +95,17 @@ interface IMandateRegistry {
     );
     event Paid(uint256 indexed mandateId, address indexed payTo, uint256 amount, uint256 nonce);
     event Revoked(uint256 indexed mandateId, address indexed by);
+    event Escrowed(
+        bytes32 indexed id,
+        uint256 indexed mandateId,
+        address indexed payee,
+        uint256 amount,
+        uint64 deliverBy
+    );
+    event Delivered(bytes32 indexed id, bytes32 resultHash);
+    event EscrowReleased(bytes32 indexed id, address indexed by);
+    event EscrowRefunded(bytes32 indexed id, address indexed by);
+    event EscrowDisputed(bytes32 indexed id);
 
     error InvalidParams();
     error UnknownMandate();
@@ -76,4 +119,9 @@ interface IMandateRegistry {
     error NotAuthorized();
     error TooDeep();
     error WrongOwnerOrAsset(); // x402 executeTransfer: from/asset don't match the mandate
+    error UnknownEscrow();
+    error WrongEscrowState();
+    error TooEarly();
+    error TooLate();
+    error AssociationFailed(int64 code); // Hedera: the registry couldn't hold this token
 }

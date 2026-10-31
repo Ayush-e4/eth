@@ -33,21 +33,62 @@ are enforced by public code nobody (not even us) can change or bypass.
 
 | Path | What |
 |---|---|
-| `packages/contracts/src/MandateRegistry.sol` | The contract |
+| `packages/contracts/src/MandateRegistry.sol` | The contract: create, pay directly, revoke |
+| `packages/contracts/src/mandate/MandateStore.sol` | Storage, views, and the checks every payment shares |
+| `packages/contracts/src/mandate/MandateEscrow.sol` | Pay on delivery (v2) |
 | `packages/contracts/src/mandate/IMandateRegistry.sol` | Structs, events, errors |
 | `packages/contracts/src/mandate/MandateSignatures.sol` | EIP-712 hashing + signature checks |
-| `packages/contracts/test/mandate/*.t.sol` | 54 tests: create, pay, sub-mandates, revoke, x402, fuzz, invariants |
-| `packages/mandates/src/` | TypeScript client: ABI, signing, `MandateClient` |
+| `packages/contracts/test/mandate/*.t.sol` | 65 tests: create, pay, escrow, sub-mandates, revoke, x402, fuzz, invariants |
+| `packages/mandates/src/` | TypeScript client: ABI, signing, `MandateClient`, `EscrowClient` |
 | `packages/mandates/scripts/demo.ts` | Live testnet walkthrough |
+| `packages/mandates/scripts/escrow-demo.ts` | Live pay-on-delivery walkthrough |
+| `packages/mandates/scripts/deploy-registry.ts` | Deploy a registry and let it hold test USDC |
 
-Invariants (checked over 128,000 random calls): a mandate never spends + delegates more than
-its budget; the owner loses exactly what was paid; the registry never holds funds; only
-allowed payees ever receive money.
+Invariants (checked over 128,000 random calls, escrow included): a mandate never spends +
+delegates more than its budget; the owner loses exactly what was paid out or is still held; the
+registry holds exactly what's in open escrows (nothing else, nothing stuck); only allowed payees
+ever receive money.
+
+## Pay on delivery (v2)
+
+A payment can wait in the registry until the job is done, instead of going straight to the
+payee. It passes exactly the same checks (one shared `_authorize`), and the agent's EIP-712
+`EscrowAuth` signs the terms too, so nobody can stretch them:
+
+| Move | Who | When |
+|---|---|---|
+| `executeEscrowTransfer` / `payIntoEscrow` | the facilitator / anyone, with the agent's signature | money goes into the registry, `Held` |
+| `markDelivered(id, resultHash)` | the payee | before `deliverBy`; records a hash of what it delivered |
+| `release` | the buyer (mandate agent or owner) | any time before it's paid out |
+| `claim` | anyone (the payee) | `reviewSeconds` after delivery, if not disputed |
+| `dispute` | the buyer | within the review window: frozen until refund or release |
+| `refund` | the payee | any time before it's paid out; **the budget comes back** |
+| `reclaim` | anyone | not delivered by `deliverBy`: back to the payer |
+
+Hedera detail: an account (a contract too) must opt in to each token, so the registry calls the
+token service precompile once (`associate(USDC)`; `deploy-registry` does it). The escrow id is
+`keccak256(abi.encode(mandateId, nonce))`, so it follows from the payment itself.
 
 ## Deployment (Hedera testnet)
 
-- `MandateRegistry`: `0x2f30e8F1804Fe163C76918db493a441D44394D5d` (`0.0.11102395`)
+- `MandateRegistry` v2 (pay on delivery): `0xc854860e659d5e70fd4e47146643abec6db634b6` (`0.0.11254658`)
+- `MandateRegistry` v1: `0x2f30e8F1804Fe163C76918db493a441D44394D5d` (`0.0.11102395`)
 - Admin key is the contract itself — no external party can modify it.
+
+## Live pay-on-delivery result (testnet, v2)
+
+```
+pnpm --filter @eth/mandates escrow-demo
+```
+
+| Step | Result |
+|---|---|
+| Limit #1 on v2: 0.10 USDC, only to a fresh payee | ✅ |
+| Agent-signed 0.02 USDC into escrow: the registry holds it, not the payee | ✅ [HashScan](https://hashscan.io/testnet/transaction/0xccf220fff45b9265819ae03ec2fbf5a6701d86df848e79aede79bd87ce560182) |
+| Payee marks it delivered (with a result hash) | ✅ [HashScan](https://hashscan.io/testnet/transaction/0x4ca2fbd87888a0cce529fb770c75ab2a813586fd3cb2cc0aa2478b47d2a2a940) |
+| Buyer releases: payee gets exactly 0.02, registry back to 0 | ✅ [HashScan](https://hashscan.io/testnet/transaction/0x2ac21e14baf5d8cd886ed611d845071f9f8bc7fcf5b6cf5db5145bfc7ccbbc00) |
+| 0.01 into escrow for a job that fails; payee refunds | ✅ [HashScan](https://hashscan.io/testnet/transaction/0x7e169897179ca389d44f51d24dd3c737f21391442e5c8dfe57e410568331f7e6) |
+| The refund comes back to the limit: 0.08 of 0.10 left | ✅ |
 
 ## Live demo result (testnet)
 

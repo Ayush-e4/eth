@@ -1,4 +1,4 @@
-export { erc20Abi, mandateRegistryAbi } from "./abi";
+export { ESCROW_STATES, type EscrowState, erc20Abi, mandateRegistryAbi } from "./abi";
 export { DEPLOYMENTS, hederaTestnet, tokenIdToEvmAddress } from "./chain";
 export { type Mandate, MandateClient, type MandateParams, revertName } from "./client";
 export {
@@ -11,6 +11,7 @@ export {
   registrationFile,
   reputationAbi,
 } from "./erc8004";
+export { EscrowClient } from "./escrow";
 export {
   decodeX402Authorization,
   type PaymentCheckDeps,
@@ -18,13 +19,18 @@ export {
   paymentState,
 } from "./paid";
 export {
+  type EscrowAuth,
   encodeX402Authorization,
+  encodeX402EscrowAuthorization,
+  escrowAuthTypes,
+  escrowIdOf,
   hashPayees,
   mandateDomain,
   type PaymentAuth,
   paymentAuthTypes,
   randomNonce,
   type SubMandateAuth,
+  signEscrowAuth,
   signPaymentAuth,
   signSubMandateAuth,
   subMandateAuthTypes,
