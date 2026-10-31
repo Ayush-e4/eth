@@ -15,16 +15,25 @@ export interface NewAccount {
 }
 
 /**
- * Creates a new account with a fresh ECDSA key (used for users and agents).
+ * Creates a new account with a fresh ECDSA key (used for users and agents), or with an existing
+ * key (`privateKey`): after a testnet reset that keeps an agent's EVM address, and so everything
+ * it owns elsewhere (Arkiv listings, ERC-8004 identity), while giving it a new Hedera account.
  * The operator pays the fee and funds the initial HBAR balance.
  * ECDSA + alias means the account also has a normal EVM address (0x…),
  * so the same key can sign EIP-712 messages for our contracts.
  */
 export async function createAccount(
   client: Client,
-  opts: { initialHbar?: number; memo?: string; autoAssociations?: number } = {},
+  opts: {
+    initialHbar?: number;
+    memo?: string;
+    autoAssociations?: number;
+    privateKey?: string;
+  } = {},
 ): Promise<NewAccount> {
-  const key = PrivateKey.generateECDSA();
+  const key = opts.privateKey
+    ? PrivateKey.fromStringECDSA(opts.privateKey.replace(/^0x/, ""))
+    : PrivateKey.generateECDSA();
   const tx = await new AccountCreateTransaction()
     .setECDSAKeyWithAlias(key)
     .setInitialBalance(new Hbar(opts.initialHbar ?? 1))

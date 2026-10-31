@@ -9,11 +9,17 @@ export const hederaTestnet = defineChain({
   blockExplorers: { default: { name: "HashScan", url: "https://hashscan.io/testnet" } },
 });
 
-/** Where our contracts live, per network. */
+const env: Record<string, string | undefined> = typeof process === "undefined" ? {} : process.env;
+
+/**
+ * Where our contracts live, per network. After a testnet reset the registry is redeployed
+ * (`pnpm setup:testnet --fix`) and its new address set in .env (see docs/testnet-reset.md).
+ */
 export const DEPLOYMENTS = {
   testnet: {
-    mandateRegistry: "0x2f30e8F1804Fe163C76918db493a441D44394D5d" as const,
-    mandateRegistryId: "0.0.11102395",
+    mandateRegistry: (env.MANDATE_REGISTRY_ADDRESS ||
+      "0x2f30e8F1804Fe163C76918db493a441D44394D5d") as `0x${string}`,
+    mandateRegistryId: env.MANDATE_REGISTRY_ID || "0.0.11102395",
   },
 } as const;
 

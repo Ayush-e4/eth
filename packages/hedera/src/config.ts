@@ -21,6 +21,9 @@ export interface HederaConfig {
   operatorEvmAddress?: string;
 }
 
+// After a testnet reset, Circle's test USDC comes back under a new id: set USDC_TOKEN_ID.
+const env: Record<string, string | undefined> = typeof process === "undefined" ? {} : process.env;
+
 /** Well-known addresses per network. */
 export const NETWORKS = {
   testnet: {
@@ -28,7 +31,7 @@ export const NETWORKS = {
     jsonRpcUrl: "https://testnet.hashio.io/api",
     hashscanUrl: "https://hashscan.io/testnet",
     /** Circle USDC on Hedera testnet (6 decimals). Faucet: https://faucet.circle.com */
-    usdcTokenId: "0.0.429274",
+    usdcTokenId: env.USDC_TOKEN_ID || "0.0.429274",
   },
   mainnet: {
     mirrorUrl: "https://mainnet.mirrornode.hedera.com",
