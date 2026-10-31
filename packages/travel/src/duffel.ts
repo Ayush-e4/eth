@@ -10,6 +10,15 @@ import type { FlightLeg, Traveller } from "./types";
 
 const BASE = "https://api.duffel.com";
 
+export const SegmentSchema = z.object({
+  departing_at: z.string(),
+  arriving_at: z.string(),
+  origin: z.object({ iata_code: z.string() }),
+  destination: z.object({ iata_code: z.string() }),
+  marketing_carrier: z.object({ name: z.string(), iata_code: z.string().optional() }),
+  marketing_carrier_flight_number: z.string().optional(),
+});
+
 const OfferRequestResponse = z.object({
   data: z.object({
     passengers: z.array(z.object({ id: z.string() })),
@@ -18,20 +27,8 @@ const OfferRequestResponse = z.object({
         id: z.string(),
         total_amount: z.string(),
         total_currency: z.string(),
-        slices: z.array(
-          z.object({
-            segments: z.array(
-              z.object({
-                departing_at: z.string(),
-                arriving_at: z.string(),
-                origin: z.object({ iata_code: z.string() }),
-                destination: z.object({ iata_code: z.string() }),
-                marketing_carrier: z.object({ name: z.string(), iata_code: z.string().optional() }),
-                marketing_carrier_flight_number: z.string().optional(),
-              }),
-            ),
-          }),
-        ),
+        owner: z.object({ iata_code: z.string() }).optional(),
+        slices: z.array(z.object({ segments: z.array(SegmentSchema) })),
       }),
     ),
   }),
@@ -53,6 +50,7 @@ export interface DuffelOffer {
   inbound?: FlightLeg; // present for round trips
   total: string; // whole itinerary, all passengers — kept as Duffel's string for the payment
   currency: string;
+  airline?: string; // the airline selling it (IATA), e.g. "ZZ" for Duffel Airways in test mode
 }
 
 export interface DuffelBooking {
@@ -72,20 +70,23 @@ export class DuffelClient {
     }
   }
 
-  private async post(path: string, body: unknown): Promise<unknown> {
+  /** One Duffel API call (body wrapped in `data`); throws with Duffel's message on failure. */
+  async call(method: "GET" | "POST", path: string, body?: unknown): Promise<unknown> {
     const res = await this.fetchImpl(`${BASE}${path}`, {
-      method: "POST",
+      method,
       headers: {
         Accept: "application/json",
         "Content-Type": "application/json",
         "Duffel-Version": "v2",
         Authorization: `Bearer ${this.token}`,
       },
-      body: JSON.stringify({ data: body }),
+      ...(body === undefined ? {} : { body: JSON.stringify({ data: body }) }),
     });
     if (!res.ok) throw new Error(`Duffel ${path} → HTTP ${res.status}: ${await res.text()}`);
     return res.json();
   }
+
+  private post = (path: string, body: unknown) => this.call("POST", path, body);
 
   /** One-way, or round trip when `returnDate` is set; offers cheapest first. */
   async searchFlights(q: {
@@ -119,6 +120,7 @@ export class DuffelClient {
             inbound,
             total: o.total_amount,
             currency: o.total_currency,
+            ...(o.owner ? { airline: o.owner.iata_code } : {}),
           },
         ];
       })
@@ -155,11 +157,9 @@ export class DuffelClient {
   }
 }
 
-type Segment = z.infer<
-  typeof OfferRequestResponse
->["data"]["offers"][number]["slices"][number]["segments"][number];
+export type Segment = z.infer<typeof SegmentSchema>;
 
-function legOf(segs: Segment[]): FlightLeg | undefined {
+export function legOf(segs: Segment[]): FlightLeg | undefined {
   const first = segs[0];
   const last = segs[segs.length - 1];
   if (!first || !last) return undefined;

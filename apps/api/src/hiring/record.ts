@@ -20,6 +20,7 @@ export interface PaidHire {
   jobKey: string;
   result: unknown;
   releasedTx?: string; // paid on delivery: when we paid the held fee out
+  endpoint?: string;
 }
 
 /**
@@ -96,6 +97,7 @@ export async function finishHire(
     mandateId: h.mandateId,
     skill: hire.skill,
     agent: hire.agent,
+    endpoint: hire.endpoint,
     title: hire.agentTitle,
     feeUnits: hire.feeUnits,
     hederaTx: hire.hederaTx,

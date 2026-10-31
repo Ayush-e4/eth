@@ -58,6 +58,7 @@ function setup() {
   };
   const kit: SpecialistKit = {
     writer: {} as never,
+    quote: vi.fn(),
     ctx: {
       identity: stay,
       baseUrl: "http://stay",

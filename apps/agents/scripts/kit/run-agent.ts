@@ -19,7 +19,8 @@ if (!me) {
   );
   process.exit(1);
 }
-const log = (line: string) => console.log(`  · ${line}`);
+const log = (line: string) =>
+  console.log(`  · ${line.replace(/ark_(live|test)_[A-Za-z0-9]+/g, "ark_$1_…")}`); // no API keys
 const mod = (await import(sourceOf(slug))) as {
   default: () => SpecialistDef<unknown, unknown, unknown>;
 };

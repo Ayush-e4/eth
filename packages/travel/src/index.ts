@@ -1,5 +1,11 @@
 export { type DuffelBooking, DuffelClient, type DuffelOffer } from "./duffel";
 export {
+  DuffelOrders,
+  type FlightCancelQuote,
+  type FlightChangeOffer,
+  type FlightOrder,
+} from "./duffel-orders";
+export {
   type HotelBooking,
   type HotelGuest,
   type HotelMatch,

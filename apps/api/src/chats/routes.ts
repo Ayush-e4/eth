@@ -150,7 +150,7 @@ export function chatRoutes(
           history,
           hired,
           text: body.data.text,
-          user: { displayName: user.displayName, homeCity: user.homeCity },
+          user: { id: user.id, displayName: user.displayName, homeCity: user.homeCity },
           chat: {
             id: chat.id,
             mode: chat.mode,

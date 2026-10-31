@@ -2,6 +2,7 @@
  * What other apps (the API's concierge) reuse to hire agents: discover and rank quotes on the
  * open market, pay the chosen agent through a mandate, and record job, receipt and rating.
  */
+export { signedHeaders } from "./auth";
 export { loadIdentities } from "./identities";
 export {
   buy,

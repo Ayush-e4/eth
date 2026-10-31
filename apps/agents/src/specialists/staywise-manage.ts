@@ -23,9 +23,15 @@ export interface BookingRecord {
   delegations?: Signed<RepriceDelegation>[]; // watchers the owner allowed to reprice this booking
 }
 
+/** What any agent keeps to know who may manage a booking. */
+type Owned = { bookingId: string; task: string; quoteKey: string; owner?: `0x${string}` };
+
 /** Who owns a booking: the buyer on its Arkiv job (cached once found, inherited on changes). */
-export function bookingOwner(deps: Pick<ManageDeps, "store" | "arkiv">, me: string) {
-  return async (rec: BookingRecord): Promise<`0x${string}` | undefined> => {
+export function bookingOwner<R extends Owned>(
+  deps: { store: JsonStore<R>; arkiv: ArkivReader },
+  me: string,
+) {
+  return async (rec: R): Promise<`0x${string}` | undefined> => {
     if (rec.owner) return rec.owner;
     const jobs = await jobsForTask(deps.arkiv, rec.task);
     const job = jobs.find(

@@ -43,6 +43,20 @@ export interface SpecialistDef<Input, Detail, Result> {
   work(req: TaskRequest<Input>, detail: Detail): Promise<Result>;
   /** Extra routes (e.g. managing what was booked), mounted on the same service. */
   extend?(app: Hono, kit: SpecialistKit): void;
+  /**
+   * Paid follow-up jobs on what it delivered (e.g. "flights.change"). Its own routes quote them
+   * (`kit.quote`); the buyer then pays and gets them done through /work, like the main job.
+   */
+  followUps?: Record<string, FollowUp>;
+}
+
+/** A follow-up job: its input, its fee, who may buy it, and the work. */
+export interface FollowUp<Input = unknown, Detail = unknown> {
+  input: z.ZodType<Input>;
+  priceUnits: bigint;
+  /** Before the fee is taken: a problem (e.g. "not your booking"), or null. `buyer` signed /work. */
+  check?(req: TaskRequest<Input>, detail: Detail, buyer: string | null): Promise<string | null>;
+  work(req: TaskRequest<Input>, detail: Detail): Promise<unknown>;
 }
 
 /** Building blocks a specialist's extra routes can use. */
@@ -53,6 +67,15 @@ export interface SpecialistKit {
   feeWall(units: bigint, description: string): MiddlewareHandler;
   /** After a paid request failed: send the fee back to whoever paid it. */
   refundPaid(c: Context, units: bigint, memo: string): Promise<Refund | undefined>;
+  /** Quote a follow-up job: posted on Arkiv and kept, so /work can do exactly this. Its key. */
+  quote(q: {
+    task: string;
+    skill: string;
+    note: string;
+    detail: unknown;
+    itemTotal?: number;
+    itemCurrency?: string;
+  }): Promise<`0x${string}`>;
 }
 
 export type { Refund };
@@ -92,9 +115,9 @@ export function createSpecialist<I, D, R>(def: SpecialistDef<I, D, R>, ctx: Spec
   const parseTask = (raw: unknown) => {
     const env = TaskRequestSchema.safeParse(raw);
     if (!env.success) return { error: TASK_ERRORS.invalidBody, status: 400 as const };
-    if (env.data.skill !== def.skill)
-      return { error: TASK_ERRORS.wrongSkill, status: 400 as const };
-    const input = def.input.safeParse(env.data.input);
+    const kind = env.data.skill === def.skill ? def : def.followUps?.[env.data.skill];
+    if (!kind) return { error: TASK_ERRORS.wrongSkill, status: 400 as const };
+    const input = (kind.input as z.ZodType<I>).safeParse(env.data.input);
     if (!input.success)
       return { error: TASK_ERRORS.invalidInput, status: 422 as const, issues: input.error.issues };
     return { req: { ...env.data, input: input.data } as TaskRequest<I> };
@@ -178,17 +201,40 @@ export function createSpecialist<I, D, R>(def: SpecialistDef<I, D, R>, ctx: Spec
     });
   });
 
+  // /work's fee, per kind of job: the main one, and each follow-up.
+  const walls = new Map([[def.skill, feeWall(def.priceUnits, def.title, ctx.escrow?.terms)]]);
+  for (const [skill, f] of Object.entries(def.followUps ?? {}))
+    walls.set(skill, feeWall(f.priceUnits, `${def.name} — ${skill}`, ctx.escrow?.terms));
   const work = workRoutes(app, {
     def,
     ctx,
     jobs,
     writer,
     parseTask,
-    feeWall: feeWall(def.priceUnits, def.title, ctx.escrow?.terms),
+    feeWall: (skill) => walls.get(skill) as MiddlewareHandler,
     log: ctx.log,
   });
 
-  def.extend?.(app, { writer, ctx, feeWall, refundPaid });
+  const quoteFollowUp: SpecialistKit["quote"] = async (q) => {
+    const f = def.followUps?.[q.skill];
+    if (!f) throw new Error(`${def.name} has no follow-up job "${q.skill}"`);
+    const { entityKey } = await postQuote(
+      writer,
+      {
+        agent: ctx.identity.evm,
+        task: q.task,
+        skill: q.skill,
+        priceUnits: f.priceUnits,
+        note: q.note,
+        itemTotal: q.itemTotal,
+        itemCurrency: q.itemCurrency,
+      },
+      QUOTE_TTL_SECONDS,
+    );
+    jobs.saveQuote(entityKey, q.task, q.detail, Date.now() + QUOTE_TTL_SECONDS * 1000);
+    return entityKey;
+  };
+  def.extend?.(app, { writer, ctx, feeWall, refundPaid, quote: quoteFollowUp });
 
   /** Publish profile + listing on Arkiv unless this agent already has a live listing. */
   async function publish() {

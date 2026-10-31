@@ -17,7 +17,7 @@ import {
   mandateRegistryAbi,
   tokenIdToEvmAddress,
 } from "@eth/mandates";
-import { DuffelClient, LiteApiClient, LiteFlightsClient, LiteHotelBookings } from "@eth/travel";
+import { LiteApiClient, LiteFlightsClient, LiteHotelBookings } from "@eth/travel";
 import { createPayingFetch, HttpFacilitator, MirrorResolver } from "@eth/x402";
 import { serve } from "@hono/node-server";
 import type { Hex } from "viem";
@@ -31,13 +31,13 @@ import { airnest } from "../src/specialists/airnest";
 import { jobStore } from "../src/specialists/jobs";
 import { priceGuard, type Watch } from "../src/specialists/priceguard";
 import { createSpecialist } from "../src/specialists/server";
-import { skyhop } from "../src/specialists/skyhop";
 import { staywise } from "../src/specialists/staywise";
 import type { BookingRecord } from "../src/specialists/staywise-manage";
 import { tripmint } from "../src/specialists/tripmint";
 import { JsonStore } from "../src/store";
 import { escrowMoves, escrowReleaser, jobsFile, paymentChecker, refunder } from "./agent-money";
 import { keepListed } from "./keep-listed";
+import { skyhopAgent } from "./skyhop-agent";
 
 export function requireEnv(keys: string[]) {
   for (const k of keys) if (!process.env[k]) throw new Error(`${k} is empty in .env`);
@@ -50,7 +50,9 @@ export const operatorKey = (
   config.operatorKey.startsWith("0x") ? config.operatorKey : `0x${config.operatorKey}`
 ) as Hex;
 export const tx = (id: string) => `${net.hashscanUrl}/transaction/${id}`;
-export const log = (line: string) => console.log(`  · ${line}`);
+// Errors from Arkiv's RPC quote its URL, which carries our API key: never print it.
+const redact = (s: string) => s.replace(/ark_(live|test)_[A-Za-z0-9]+/g, "ark_$1_…");
+export const log = (line: string) => console.log(`  · ${redact(line)}`);
 // StayWise's own records of what it booked and for whom (gitignored, survives restarts).
 const STAYWISE_STORE = fileURLToPath(new URL("../.staywise.local.json", import.meta.url));
 
@@ -104,8 +106,7 @@ export async function startAgents(
       paymentState: checkPayment,
       log,
     };
-    if (name === "skyhop")
-      return createSpecialist(skyhop(new DuffelClient(process.env.DUFFEL_ACCESS_TOKEN ?? "")), ctx);
+    if (name === "skyhop") return createSpecialist(skyhopAgent(identity), ctx);
     if (name === "airnest") return createSpecialist(airnest(new LiteFlightsClient(liteKey)), ctx);
     if (name === "tripmint") return createSpecialist(tripmintFor(identity), ctx);
     if (name === "priceguard") {
