@@ -5,6 +5,7 @@ import { useState } from "react";
 import { ApiError, api, usdc } from "@/lib/api";
 import { createMandateInWallet } from "@/lib/wallet";
 import { CheckIcon, ShieldIcon } from "../icons";
+import { HumanApproval } from "./HumanApproval";
 
 type Of<T extends Card["type"]> = Extract<Card, { type: T }>;
 export interface CardCtx {
@@ -160,24 +161,28 @@ export function ApprovalCard({ card, ctx }: { card: Of<"approval">; ctx: CardCtx
         Agent fee <strong className="font-mono">{usdc(card.feeUnits)} USDC</strong>, from this
         chat's limit.
       </p>
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          disabled={ctx.busy}
-          onClick={() => ctx.onReply(`Approve ${card.code}`)}
-          className={`${btn} bg-teal text-white`}
-        >
-          Approve
-        </button>
-        <button
-          type="button"
-          disabled={ctx.busy}
-          onClick={() => ctx.onReply(`Decline ${card.code}`)}
-          className={`${btn} border border-line-2 bg-white`}
-        >
-          Decline
-        </button>
-      </div>
+      {card.human ? (
+        <HumanApproval card={card} ctx={ctx} />
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={ctx.busy}
+            onClick={() => ctx.onReply(`Approve ${card.code}`)}
+            className={`${btn} bg-teal text-white`}
+          >
+            Approve
+          </button>
+          <button
+            type="button"
+            disabled={ctx.busy}
+            onClick={() => ctx.onReply(`Decline ${card.code}`)}
+            className={`${btn} border border-line-2 bg-white`}
+          >
+            Decline
+          </button>
+        </div>
+      )}
     </section>
   );
 }

@@ -221,4 +221,26 @@ describe("hiring from a chat", () => {
       "refused",
     );
   });
+
+  it("with World ID on, an approval only counts after a human check, for 5 minutes", async () => {
+    await giveMandate([AIRNEST]);
+    const ask = { ...chat, mode: "ask" as const };
+    const s = hiringService(db, env, { requireHuman: true });
+    await s.quotes(ask, "flights", {});
+    const first = await s.hire(ask, "q1", "x", "flights");
+    expect(first.status === "needs_approval" && first.card.human).toBe(true);
+    const code = first.status === "needs_approval" ? first.card.code : "";
+
+    s.noteUserMessage(chat.id, `Approve ${code}`); // typed, but no human check yet
+    expect((await s.hire(ask, "q1", "x", "flights")).status).toBe("needs_approval");
+    expect(buy).not.toHaveBeenCalled();
+
+    const again = await s.hire(ask, "q1", "x", "flights");
+    const code2 = again.status === "needs_approval" ? again.card.code : "";
+    expect(s.pendingApproval(chat.id, code2)).toBe(true);
+    s.markHuman(chat.id, code2);
+    s.noteUserMessage(chat.id, `Approve ${code2}`);
+    expect((await s.hire(ask, "q1", "x", "flights")).status).toBe("hired");
+    expect(buy).toHaveBeenCalledOnce();
+  });
 });
