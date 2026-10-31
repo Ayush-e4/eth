@@ -1,6 +1,7 @@
 import { chmodSync, existsSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { decodeJson, encodeJson } from "@eth/shared";
+import type { JobEscrow } from "./escrow";
 
 /**
  * A specialist's own database: the quotes it gave and every paid job, saved as they change, so a
@@ -34,6 +35,8 @@ export interface Job<R = unknown> {
   result?: R;
   error?: string;
   refund?: Refund;
+  /** Paid on delivery: the fee waits in MandateRegistry (see escrow.ts). */
+  escrow?: JobEscrow;
   updatedAt: number;
 }
 
@@ -52,6 +55,9 @@ export function jobStore(path = ":memory:") {
       request TEXT NOT NULL, payment TEXT NOT NULL, status TEXT NOT NULL, payment_tx TEXT,
       result TEXT, error TEXT, refund TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
     );`);
+  // Added with pay on delivery; older files get the column on first open.
+  const cols = db.prepare("PRAGMA table_info(jobs)").all() as { name: string }[];
+  if (!cols.some((c) => c.name === "escrow")) db.exec("ALTER TABLE jobs ADD COLUMN escrow TEXT");
   // Bookings and buyers' details: readable by this user only (like the *.local.json stores).
   for (const f of [path, `${path}-wal`, `${path}-shm`])
     if (path !== ":memory:" && existsSync(f)) chmodSync(f, 0o600);
@@ -67,6 +73,7 @@ export function jobStore(path = ":memory:") {
     ...(r.result != null ? { result: parse(r.result) } : {}),
     ...(r.error ? { error: r.error as string } : {}),
     ...(r.refund ? { refund: parse<Refund>(r.refund) } : {}),
+    ...(r.escrow ? { escrow: parse<JobEscrow>(r.escrow) } : {}),
     updatedAt: Number(r.updated_at),
   });
 
@@ -90,14 +97,23 @@ export function jobStore(path = ":memory:") {
     },
 
     /** Takes the quote for one job. False if it already has one: one job per quote, ever. */
-    claim(j: Pick<Job, "quoteKey" | "task" | "buyer" | "request" | "payment">) {
+    claim(j: Pick<Job, "quoteKey" | "task" | "buyer" | "request" | "payment" | "escrow">) {
       const now = Date.now();
       const r = db
         .prepare(
-          `INSERT OR IGNORE INTO jobs (quote_key, task, buyer, request, payment, status, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, 'paying', ?, ?)`,
+          `INSERT OR IGNORE INTO jobs (quote_key, task, buyer, request, payment, status, escrow, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, 'paying', ?, ?, ?)`,
         )
-        .run(j.quoteKey, j.task, j.buyer, json(j.request), json(j.payment), now, now);
+        .run(
+          j.quoteKey,
+          j.task,
+          j.buyer,
+          json(j.request),
+          json(j.payment),
+          j.escrow ? json(j.escrow) : null,
+          now,
+          now,
+        );
       return r.changes === 1;
     },
 
@@ -108,7 +124,7 @@ export function jobStore(path = ":memory:") {
 
     update(
       quoteKey: string,
-      patch: Partial<Pick<Job, "status" | "paymentTx" | "result" | "error" | "refund">>,
+      patch: Partial<Pick<Job, "status" | "paymentTx" | "result" | "error" | "refund" | "escrow">>,
     ) {
       const cols: Record<string, string | null> = {};
       if (patch.status) cols.status = patch.status;
@@ -116,6 +132,7 @@ export function jobStore(path = ":memory:") {
       if ("result" in patch) cols.result = json(patch.result ?? null);
       if (patch.error) cols.error = patch.error;
       if (patch.refund) cols.refund = json(patch.refund);
+      if (patch.escrow) cols.escrow = json(patch.escrow);
       const keys = Object.keys(cols);
       db.prepare(
         `UPDATE jobs SET ${keys.map((k) => `${k} = ?`).join(", ")}, updated_at = ? WHERE quote_key = ?`,
@@ -131,6 +148,17 @@ export function jobStore(path = ":memory:") {
     unfinished(): Job[] {
       return db
         .prepare("SELECT * FROM jobs WHERE status IN ('paying', 'working')")
+        .all()
+        .map(toJob);
+    },
+
+    /** Escrowed fees still open on our side: done or failed jobs whose escrow hasn't closed. */
+    openEscrows(): Job[] {
+      return db
+        .prepare(
+          `SELECT * FROM jobs WHERE escrow IS NOT NULL AND status IN ('delivered', 'failed')
+           AND json_extract(escrow, '$.closed') IS NULL`,
+        )
         .all()
         .map(toJob);
     },

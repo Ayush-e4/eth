@@ -18,6 +18,7 @@ export interface PaidHire {
   hederaTx: string;
   jobKey: string;
   result: unknown;
+  releasedTx?: string; // paid on delivery: when we paid the held fee out
 }
 
 /**
@@ -29,9 +30,10 @@ export async function saveHire(
   env: HiringEnv,
   h: PaidHire,
 ): Promise<{ topic: string; seq: number } | undefined> {
+  const { releasedTx, ...row0 } = h;
   const [row] = await db
     .insert(hires)
-    .values({ ...h, registry: env.registry.toLowerCase() })
+    .values({ ...row0, registry: env.registry.toLowerCase() })
     .returning({ id: hires.id });
   const seq =
     (await env.log?.write({
@@ -42,6 +44,7 @@ export async function saveHire(
       fee: h.feeUnits.toString(),
       payment: h.hederaTx,
       job: h.jobKey,
+      ...(releasedTx ? { escrowReleased: releasedTx } : {}),
     })) ?? null;
   if (seq === null || !env.log) return undefined;
   if (row)
@@ -89,6 +92,7 @@ export async function finishHire(
     hederaTx: hire.hederaTx,
     jobKey: hire.jobKey,
     result: hire.result,
+    ...(hire.escrow?.releasedTx ? { releasedTx: hire.escrow.releasedTx } : {}),
   });
   const subHires = delegation
     ? await recordSubHires(db, env, h.chatId, delegation, hire.result)
@@ -102,6 +106,7 @@ export async function finishHire(
     hederaTx: hire.hederaTx,
     jobKey: hire.jobKey,
     log,
+    ...(hire.escrow ? { escrow: hire.escrow } : {}),
     subMandateId: delegation?.mandateId,
     subHires,
   };

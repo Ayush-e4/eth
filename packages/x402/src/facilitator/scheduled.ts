@@ -1,4 +1,4 @@
-import { decodeX402Authorization, mandateRegistryAbi } from "@eth/mandates";
+import { mandateIdOfAuthorization, mandateRegistryAbi } from "@eth/mandates";
 import {
   AccountId,
   type Client,
@@ -205,8 +205,8 @@ export type PaymentScheduler = ReturnType<typeof paymentScheduler>;
 function mandateOfCall(data: Hex): string | null {
   try {
     const { functionName, args } = decodeFunctionData({ abi: mandateRegistryAbi, data });
-    if (functionName !== "executeTransfer") return null;
-    return decodeX402Authorization(args[4] as Hex).mandateId.toString();
+    if (functionName !== "executeTransfer" && functionName !== "executeEscrowTransfer") return null;
+    return mandateIdOfAuthorization(args[4] as Hex).toString();
   } catch {
     return null;
   }

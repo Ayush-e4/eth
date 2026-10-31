@@ -96,6 +96,16 @@ pnpm --filter @eth/mandates escrow-demo
 | 0.01 into escrow for a job that fails; payee refunds | ✅ [HashScan](https://hashscan.io/testnet/transaction/0x7e169897179ca389d44f51d24dd3c737f21391442e5c8dfe57e410568331f7e6) |
 | The refund comes back to the limit: 0.08 of 0.10 left | ✅ |
 
+### In the app (31 Oct 2026)
+
+Hires from the chat now pay on delivery (see [agent-jobs.md](agent-jobs.md#pay-on-delivery-escrow)):
+
+| Run | Result |
+|---|---|
+| PackPal, packing list for Shimla: 0.01 USDC held, delivered, released by the concierge (log #109) | ✅ [held](https://hashscan.io/testnet/transaction/0.0.11045937@1793461739.799518124) · [delivered](https://hashscan.io/testnet/transaction/0.0.11254401@1793461804.809433205) · [paid out](https://hashscan.io/testnet/transaction/0xff61f291b0fb5aeff4cc24af972919893abe6d4be3f6ef3beaf8ea579a4d5f88) |
+| AirNest, sandbox flight booking FH-26A-H7STB88W: 0.03 USDC held, delivered, paid out (log #114) | ✅ |
+| A job that fails on purpose: the agent refunds from escrow, the limit is back to 0.26 | ✅ [refund](https://hashscan.io/testnet/transaction/0.0.11254401@1793461923.449036148) |
+
 ## Live demo result (testnet)
 
 ```

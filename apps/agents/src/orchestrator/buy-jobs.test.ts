@@ -168,3 +168,49 @@ describe("buy() when paying goes wrong", () => {
     );
   });
 });
+
+describe("buy() paying on delivery", () => {
+  const escrowed = () => {
+    const moves = {
+      terms: { deliverSeconds: 900, reviewSeconds: 900 },
+      deliver: vi.fn(async () => "0.0.5005@7.7"),
+      refund: vi.fn(),
+      claim: vi.fn(),
+      read: vi.fn(),
+    };
+    const ok = async () => ({
+      success: true,
+      transaction: "0.0.9@1.2",
+      network: "hedera:testnet" as const,
+    });
+    const m = market({ settle: ok, escrow: moves });
+    return { ...m, moves };
+  };
+  const quote = (s: ReturnType<typeof market>["s"]) =>
+    s.app.request("http://agent/quote", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ task: "trip-1", skill: "flights", input: trip }),
+    });
+
+  it("releases the held fee once the agent delivered", async () => {
+    const { s, d } = escrowed();
+    await quote(s);
+    const release = vi.fn(async () => "0xreleased");
+    const hire = await buy(round, pick as never, "flights", { ...d, release }, "cheapest");
+    expect(hire.result).toEqual({ booked: "off_1" });
+    expect(hire.escrow).toMatchObject({ deliveredTx: "0.0.5005@7.7", releasedTx: "0xreleased" });
+    expect(release).toHaveBeenCalledWith(hire.escrow?.id);
+  });
+
+  it("a release that fails doesn't undo the hire: the agent claims it later", async () => {
+    const { s, d } = escrowed();
+    await quote(s);
+    const release = vi.fn(async () => {
+      throw new Error("INSUFFICIENT_PAYER_BALANCE");
+    });
+    const hire = await buy(round, pick as never, "flights", { ...d, release }, "cheapest");
+    expect(hire.jobKey).toBe("0xjob");
+    expect(hire.escrow?.releaseFailed).toContain("INSUFFICIENT_PAYER_BALANCE");
+  });
+});

@@ -33,6 +33,7 @@ export type SpendLogEvent =
       fee: string;
       payment: string; // Hedera transaction id of the x402 payment
       job: string; // Arkiv entity key of the job record
+      escrowReleased?: string; // paid on delivery: the transaction that paid the held fee out
     };
 
 export interface SpendLog {

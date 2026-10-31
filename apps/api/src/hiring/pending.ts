@@ -69,9 +69,15 @@ export function pendingHires(
         mandateId: p.mandateId,
         payer: p.payer,
         log: () => {},
+        ...(env.release ? { release: env.release } : {}),
       },
       p.reason,
-      { result: job.result, hederaTx, payTo: job.payTo },
+      {
+        result: job.result,
+        hederaTx,
+        payTo: job.payTo,
+        ...(job.escrow ? { escrow: job.escrow } : {}),
+      },
     );
     const card = await finishHire(db, env, {
       chatId: p.chatId,

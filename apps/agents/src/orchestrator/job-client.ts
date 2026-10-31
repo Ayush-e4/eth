@@ -1,4 +1,4 @@
-import type { LocalAccount } from "viem";
+import type { Hex, LocalAccount } from "viem";
 import { signedHeaders } from "../auth";
 
 /** A job as the agent reports it (GET /jobs/:quoteKey; see specialists/work.ts). */
@@ -12,6 +12,8 @@ export interface JobView {
   error?: string;
   detail?: string;
   refund?: { transaction?: string; failed?: string };
+  /** Paid on delivery: the escrow holding the fee, and the agent's "delivered" on it. */
+  escrow?: { id: Hex; deliveredTx?: string };
 }
 
 /** The agent said no, or took the fee and couldn't deliver (the message says if it refunded). */

@@ -102,6 +102,18 @@ export const HiredCardSchema = z.object({
   jobKey: z.string(),
   /** Its entry on the public spend log (an HCS topic on Hedera). */
   log: logEntry.optional(),
+  /**
+   * Paid on delivery: the fee was held in MandateRegistry (`hederaTx`), the agent marked the job
+   * delivered, and the concierge paid it out. If the release failed, the agent claims it later.
+   */
+  escrow: z
+    .object({
+      id: z.string(),
+      deliveredTx: z.string().optional(),
+      releasedTx: z.string().optional(),
+      releaseFailed: z.string().optional(),
+    })
+    .optional(),
   /** For an agent that hires agents: the slice of the limit it got, and who it paid from it. */
   subMandateId: z.string().optional(),
   subHires: z

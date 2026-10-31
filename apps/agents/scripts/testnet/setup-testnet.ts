@@ -14,6 +14,7 @@ import {
   spendLog,
   usdc,
 } from "./checks";
+import { escrowGas } from "./gas";
 
 const fix = process.argv.includes("--fix");
 const config = loadConfig();
@@ -24,6 +25,7 @@ const steps = [
   () => registry(config),
   () => spendLog(config),
   () => agents(config),
+  () => escrowGas(config),
   () => arkiv(config),
   () => identities(),
 ];

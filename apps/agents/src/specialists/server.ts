@@ -9,10 +9,11 @@ import {
 } from "@eth/arkiv";
 import type { PaymentState } from "@eth/mandates";
 import { type Subcontract, TASK_ERRORS, type TaskRequest, TaskRequestSchema } from "@eth/shared";
-import { type Facilitator, paywall } from "@eth/x402";
+import { type EscrowTerms, type Facilitator, paywall } from "@eth/x402";
 import { type Context, Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 import type { SpecialistIdentity } from "../identities";
+import type { EscrowMoves } from "./escrow";
 import { type JobStore, jobStore, type Refund } from "./jobs";
 import { workRoutes } from "./work";
 
@@ -68,6 +69,8 @@ export interface SpecialistContext {
   refund?: (to: string, units: bigint, memo: string) => Promise<string>;
   /** Its quotes and paid jobs (a file in production; in memory when omitted, e.g. tests). */
   jobs?: JobStore;
+  /** Pay on delivery: the /work fee waits in MandateRegistry until the job is delivered. */
+  escrow?: EscrowMoves;
   /** Asks the chain whether a payment happened (recovering jobs after a crash). */
   paymentState?: (p: {
     mandateId: bigint;
@@ -102,8 +105,9 @@ export function createSpecialist<I, D, R>(def: SpecialistDef<I, D, R>, ctx: Spec
   // quote key → detail, so /work does exactly what was quoted; saved, so a restart keeps it
   const jobs = ctx.jobs ?? jobStore();
   const app = new Hono();
-  const feeWall = (units: bigint, description: string) =>
+  const feeWall = (units: bigint, description: string, escrow?: EscrowTerms) =>
     paywall({
+      ...(escrow ? { escrow } : {}),
       network: "hedera:testnet",
       asset: ctx.usdcTokenId,
       amount: units.toString(),
@@ -180,7 +184,7 @@ export function createSpecialist<I, D, R>(def: SpecialistDef<I, D, R>, ctx: Spec
     jobs,
     writer,
     parseTask,
-    feeWall: feeWall(def.priceUnits, def.title),
+    feeWall: feeWall(def.priceUnits, def.title, ctx.escrow?.terms),
     log: ctx.log,
   });
 

@@ -17,6 +17,25 @@ export function decodeX402Authorization(authorization: Hex) {
   return { mandateId, nonce, validBefore, signature };
 }
 
+/** The pay-on-delivery form (`executeEscrowTransfer`): also the delivery deadline and review window. */
+export function decodeX402EscrowAuthorization(authorization: Hex) {
+  const [mandateId, nonce, validBefore, deliverBy, reviewSeconds, signature] = decodeAbiParameters(
+    [
+      { type: "uint256" },
+      { type: "uint256" },
+      { type: "uint256" },
+      { type: "uint64" },
+      { type: "uint32" },
+      { type: "bytes" },
+    ],
+    authorization,
+  );
+  return { mandateId, nonce, validBefore, deliverBy, reviewSeconds, signature };
+}
+
+/** Either form starts with the mandate id. */
+export const mandateIdOfAuthorization = (authorization: Hex) => BigInt(authorization.slice(0, 66));
+
 export type PaymentState =
   | { state: "paid"; transaction?: string } // transaction: Hedera id, when the mirror has it
   | { state: "unpaid" } // can never pay now: its authorization has expired unused

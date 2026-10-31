@@ -139,6 +139,19 @@ describe("hiring from a chat", () => {
     expect((await s.hire(chat, "q1", "again", "flights")).status).toBe("refused"); // quote used up
   });
 
+  it("paid on delivery: the card shows the escrow, and the concierge releases it", async () => {
+    await giveMandate([AIRNEST]);
+    const escrow = { id: "0xe5", deliveredTx: "0.0.5005@7.7", releasedTx: "0xrel" };
+    const base = await (buy as unknown as () => Promise<object>)(); // the usual hire
+    vi.mocked(buy).mockResolvedValueOnce({ ...base, escrow } as never);
+    const release = vi.fn();
+    const s = hiringService(db, { ...env, release });
+    await s.quotes(chat, "flights", {});
+    const out = await s.hire(chat, "q1", "x", "flights");
+    expect(out.status === "hired" && out.card.escrow).toEqual(escrow);
+    expect(vi.mocked(buy).mock.calls.at(-1)?.[3]).toMatchObject({ release });
+  });
+
   it("writes each hire to the public spend log and links its entry from the card", async () => {
     await giveMandate([AIRNEST]);
     const write = vi.fn(async () => 12);
