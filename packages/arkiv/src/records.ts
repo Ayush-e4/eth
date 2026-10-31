@@ -8,7 +8,16 @@ import { PROJECT } from "./config";
  * which Arkiv sets and nobody can forge — readers verify it (see read.ts).
  */
 
-export type Kind = "agent" | "listing" | "quote" | "job" | "receipt" | "rating" | "invoice";
+export type Kind =
+  | "agent"
+  | "listing"
+  | "quote"
+  | "job"
+  | "receipt"
+  | "rating"
+  | "invoice"
+  | "task"
+  | "claim";
 
 const hederaId = z.string().regex(/^0\.0\.\d+$/);
 const address = z.string().regex(/^0x[0-9a-fA-F]{40}$/) as unknown as z.ZodType<`0x${string}`>;
@@ -101,6 +110,33 @@ export const InvoiceSchema = z.object({
   proof: z.string().max(4000),
 });
 
+export const TASK_STATUS = ["open", "awarded", "closed"] as const;
+
+/**
+ * An open job posted to the whole market: any agent with the skill may bid (a `quote` with the
+ * same `task`). Public, so `input` must hold no personal data. Owned by the poster, who alone can
+ * change its status; it disappears from Arkiv at its deadline.
+ */
+export const TaskSchema = z.object({
+  task: slug, // the id bids point at
+  poster: address, // must be $creator
+  skill: slug,
+  title: z.string().min(1).max(160), // e.g. "Flight BOM→BLR, 18 Nov, 1 adult"
+  input: z
+    .record(z.string(), z.unknown())
+    .refine((v) => JSON.stringify(v).length <= 4000, "input too large"),
+  maxFeeUnits: z.bigint().positive(), // the most the poster pays an agent (USDC base units)
+  status: z.enum(TASK_STATUS),
+});
+
+/** The poster accepted one bid. Read-only once written: the award can't be quietly changed. */
+export const ClaimSchema = z.object({
+  task: slug,
+  poster: address, // must be $creator
+  quote: entityKey, // the winning bid
+  agent: address, // who won
+});
+
 export type Agent = z.infer<typeof AgentSchema>;
 export type Listing = z.infer<typeof ListingSchema>;
 export type Quote = z.infer<typeof QuoteSchema>;
@@ -108,6 +144,8 @@ export type Job = z.infer<typeof JobSchema>;
 export type Receipt = z.infer<typeof ReceiptSchema>;
 export type Rating = z.infer<typeof RatingSchema>;
 export type Invoice = z.infer<typeof InvoiceSchema>;
+export type Task = z.infer<typeof TaskSchema>;
+export type Claim = z.infer<typeof ClaimSchema>;
 
 const base = (kind: Kind) => ({ project: str(PROJECT), kind: str(kind) });
 
@@ -169,6 +207,21 @@ export const attributesFor = {
     buyer: addr(i.buyer),
     task: str(i.task),
     amount_units: u64(i.amountUnits),
+  }),
+  task: (t: Task) => ({
+    ...base("task"),
+    task: str(t.task),
+    poster: addr(t.poster),
+    skill: str(t.skill),
+    max_fee_units: u64(t.maxFeeUnits),
+    status: str(t.status),
+  }),
+  claim: (c: Claim) => ({
+    ...base("claim"),
+    task: str(c.task),
+    poster: addr(c.poster),
+    quote: key(c.quote),
+    agent: addr(c.agent),
   }),
 } as const;
 

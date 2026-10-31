@@ -6,6 +6,7 @@ import { useState } from "react";
 import { shortAddress, usdc } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import {
+  BoardIcon,
   ChatIcon,
   ExitIcon,
   EyeIcon,
@@ -22,6 +23,7 @@ const LIVE = [
   { href: "/chat", label: "Chat", Icon: ChatIcon },
   { href: "/tasks", label: "Tasks", Icon: TasksIcon },
   { href: "/wallet", label: "Wallet", Icon: WalletIcon },
+  { href: "/board", label: "Open tasks", Icon: BoardIcon },
   { href: "/log", label: "Public log", Icon: LedgerIcon },
 ];
 

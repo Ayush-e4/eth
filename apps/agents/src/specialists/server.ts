@@ -1,4 +1,12 @@
-import { arkivReader, arkivWriter, findListings, postQuote, publishAgent } from "@eth/arkiv";
+import {
+  arkivReader,
+  arkivWriter,
+  type Decoded,
+  findListings,
+  postQuote,
+  publishAgent,
+  type Task,
+} from "@eth/arkiv";
 import { type Subcontract, TASK_ERRORS, type TaskRequest, TaskRequestSchema } from "@eth/shared";
 import { type Facilitator, paywall } from "@eth/x402";
 import { type Context, Hono, type MiddlewareHandler } from "hono";
@@ -113,24 +121,15 @@ export function createSpecialist<I, D, R>(def: SpecialistDef<I, D, R>, ctx: Spec
     }),
   );
 
-  app.post("/quote", async (c) => {
-    const parsed = parseTask(await c.req.json().catch(() => null));
-    if (!parsed.req) return c.json({ error: parsed.error, issues: parsed.issues }, parsed.status);
-    const body = parsed.req;
-    let quoted: Quoted<D>;
-    try {
-      quoted = await def.quote(body);
-    } catch (err) {
-      // A plain "no" the buyer can read (sold out, no route), not a server error.
-      const detail = (err instanceof Error ? err.message : String(err)).slice(0, 300);
-      return c.json({ error: TASK_ERRORS.noOffer, detail }, 422);
-    }
-    const { note, detail, itemTotal, itemCurrency, subcontract } = quoted;
+  /** Quote a request and sign the bid on Arkiv; /work honours it while it lives. */
+  async function bid(req: TaskRequest<I>) {
+    const quoted = await def.quote(req);
+    const { note, detail, itemTotal, itemCurrency } = quoted;
     const { entityKey } = await postQuote(
       writer,
       {
         agent: ctx.identity.evm,
-        task: body.task,
+        task: req.task,
         skill: def.skill,
         priceUnits: def.priceUnits,
         note,
@@ -140,8 +139,23 @@ export function createSpecialist<I, D, R>(def: SpecialistDef<I, D, R>, ctx: Spec
       QUOTE_TTL_SECONDS,
     );
     quotes.set(entityKey, { detail, expiresAt: Date.now() + QUOTE_TTL_SECONDS * 1000 });
+    return { entityKey, quoted };
+  }
+
+  app.post("/quote", async (c) => {
+    const parsed = parseTask(await c.req.json().catch(() => null));
+    if (!parsed.req) return c.json({ error: parsed.error, issues: parsed.issues }, parsed.status);
+    let done: Awaited<ReturnType<typeof bid>>;
+    try {
+      done = await bid(parsed.req);
+    } catch (err) {
+      // A plain "no" the buyer can read (sold out, no route), not a server error.
+      const detail = (err instanceof Error ? err.message : String(err)).slice(0, 300);
+      return c.json({ error: TASK_ERRORS.noOffer, detail }, 422);
+    }
+    const { note, itemTotal, itemCurrency, subcontract } = done.quoted;
     return c.json({
-      quoteKey: entityKey,
+      quoteKey: done.entityKey,
       priceUnits: def.priceUnits.toString(),
       note,
       itemTotal,
@@ -214,5 +228,21 @@ export function createSpecialist<I, D, R>(def: SpecialistDef<I, D, R>, ctx: Spec
     return { alreadyListed: false as const, txHash: r.txHash };
   }
 
-  return { name: def.name, app, publish };
+  /**
+   * An open task from Arkiv (the market's shared watcher hands them out): bid once if it's our
+   * skill, the poster's fee cap covers our fee, and the input is something we can quote.
+   */
+  const seen = new Set<string>();
+  function considerTask(t: Decoded<Task>, log = (_: string) => {}) {
+    if (t.record.skill !== def.skill || seen.has(t.key)) return;
+    seen.add(t.key);
+    if (t.record.maxFeeUnits < def.priceUnits) return; // too cheap for us
+    const input = def.input.safeParse(t.record.input);
+    if (!input.success) return;
+    bid({ task: t.record.task, skill: def.skill, input: input.data })
+      .then(() => log(`${def.name} bid on task ${t.record.task}`))
+      .catch((err) => log(`${def.name} passed on ${t.record.task}: ${String(err).slice(0, 120)}`));
+  }
+
+  return { name: def.name, skill: def.skill, app, publish, considerTask };
 }

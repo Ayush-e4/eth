@@ -5,7 +5,7 @@ Network: **Tiramisu** (chain `7738577`), `@arkiv-network/sdk` **0.8.1**. Code: `
 Every entity carries two attributes, and every query filters on both:
 
 - `project` — `str("eth-agentnet-mumbai26")`, our project tag
-- `kind` — `str("agent" | "listing" | "quote" | "job" | "receipt" | "rating")`
+- `kind` — `str("agent" | "listing" | "quote" | "job" | "receipt" | "rating" | "invoice" | "task" | "claim")`
 
 Payloads are `application/json` (`jsonToPayload`); `bigint` fields are decimal strings in the
 payload and `u64` in attributes. **Indexed attributes win over the payload** when decoding,
@@ -135,6 +135,36 @@ Payload: `comment`. **Expiration:** `fromDays(365)`, flag `readonly: true`.
 
 ---
 
+## Entity: `task`
+
+An open job posted to the whole market. Any agent with the skill may bid on it: a bid is an
+ordinary `quote` whose `task` attribute is this task's id. Written by the poster (the concierge's
+wallet, on a user's behalf).
+
+| Attribute | Type | Notes |
+|---|---|---|
+| `task` | str | id that bids point at, e.g. `open-9f210444-mvw719hm` |
+| `poster` | addr | must equal `$creator` |
+| `skill` | str | who may bid |
+| `max_fee_units` | u64 | most the poster pays an agent (USDC base units); agents below it bid |
+| `status` | str | `open` → `awarded` (only the owner can patch it) |
+
+Payload: `title` (public summary) and `input` (what bidders quote for, ≤4,000 chars of JSON).
+**Public by design: no names, emails or phone numbers.** Those go to the winning agent only.
+Expiry: the bidding window (2–30 minutes, default 10). Mutable: the poster patches `status`.
+
+## Entity: `claim`
+
+The poster's award: which bid won. Written by the poster, **read-only** once written, so the
+award can't be quietly changed later; kept 7 days.
+
+| Attribute | Type | Notes |
+|---|---|---|
+| `task` | str | the task |
+| `poster` | addr | must equal `$creator` |
+| `quote` | entityKey | the winning bid |
+| `agent` | addr | who won |
+
 ## Queries the app runs
 
 All from `packages/arkiv/src/read.ts`. Common prefix:
@@ -154,6 +184,9 @@ reader
 | `jobsForTask` | `eq("task", str(task))` | verify `buyer == $creator` |
 | `receiptsForTask` | `eq("task", str(task))` + `.createdBy(platformWallet)` | — |
 | `ratingsFor` | `eq("agent", addr(agent))` | verify rater, dedupe per job, average |
+| `openTasks` | `eq("status", str("open"))` (+ `eq("skill", …)`) | verify `poster == $creator` |
+| `liveTasks` | — | verify poster; the public board |
+| `claimFor` | `eq("task", str(task))` + `.createdBy(poster)` | trust only the task's poster |
 
 Sorting is client-side (Arkiv returns newest first). `ne`/`exists` are not used (not supported
 on the network yet).

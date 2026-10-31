@@ -163,3 +163,49 @@ describe("invoices", () => {
     expect(decodeEntity("invoice", entity(invoice, attrs, OTHER))).toBeNull();
   });
 });
+
+describe("open tasks and claims", () => {
+  const task = {
+    task: "chat-1-abc",
+    poster: AGENT,
+    skill: "flights",
+    title: "Flight BOM→BLR, 18 Nov, 1 adult",
+    input: { origin: "BOM", destination: "BLR" },
+    maxFeeUnits: 100_000n,
+    status: "open" as const,
+  };
+  const attrs = (status = "open") => ({
+    project: { type: "str", value: PROJECT },
+    kind: { type: "str", value: "task" },
+    task: { type: "str", value: "chat-1-abc" },
+    poster: { type: "addr", value: AGENT },
+    skill: { type: "str", value: "flights" },
+    max_fee_units: { type: "u64", value: 100_000n },
+    status: { type: "str", value: status },
+  });
+
+  it("reads a task, taking its status from the indexed attribute", () => {
+    const d = decodeEntity("task", entity(task, attrs("awarded")));
+    expect(d?.record).toMatchObject({ skill: "flights", maxFeeUnits: 100_000n, status: "awarded" });
+    expect(Object.keys(attributesFor.task(task))).toEqual(
+      expect.arrayContaining(["task", "poster", "skill", "max_fee_units", "status"]),
+    );
+  });
+
+  it("drops a task or claim that someone other than its poster wrote", () => {
+    expect(decodeEntity("task", entity(task, attrs(), OTHER))).toBeNull();
+    const claim = { task: "chat-1-abc", poster: AGENT, quote: KEY, agent: OTHER };
+    // attributesFor already carries project and kind
+    const claimAttrs = attributesFor.claim(claim) as unknown as Record<
+      string,
+      { type: string; value: unknown }
+    >;
+    expect(decodeEntity("claim", entity(claim, claimAttrs))?.record.agent).toBe(OTHER);
+    expect(decodeEntity("claim", entity(claim, claimAttrs, OTHER))).toBeNull();
+  });
+
+  it("refuses a task whose public input is too large", () => {
+    const big = { ...task, input: { notes: "x".repeat(5000) } };
+    expect(decodeEntity("task", entity(big, attrs()))).toBeNull();
+  });
+});

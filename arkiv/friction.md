@@ -17,11 +17,26 @@ Honest notes from building on Arkiv (Tiramisu, SDK 0.8.1). Dated entries; newest
 | 9 | **A quote's lifetime starts when the write lands**, and reads take time | Our 20 s flash deal showed "~8 s left" by the time it was listed | Fine for the demo; real quotes use 180 s, and the UI shows seconds left from the head block |
 | 10 | Node 25 prints a `--localstorage-file` warning when the SDK loads | Noise in logs, no functional effect | Ignored |
 
+## 2026-10-31 (open tasks with bids)
+
+| # | Friction | Impact | What we did |
+|---|---|---|---|
+| 11 | **The keyless query budget runs out quietly.** With three agents watching the board and a live bids card polling, `arkiv_query` started returning HTTP 429 `ANON_COST_LIMITED` ("unauthenticated query budget exhausted"), while `eth_blockNumber` still worked | viem's default transport retries 429 with back-off, so our reads **hung for minutes instead of failing**; the chat looked frozen. We found the cause only with a raw `curl` | Transport now uses `retryCount: 1` and a 15 s timeout, and sends `X-API-KEY` when `ARKIV_API_KEY` is set. One shared board watcher for all agents (every 15 s), bid reads cached 8 s, slower polling |
+| 12 | **The budget and its reset aren't visible.** Nothing tells you how much of the keyless budget is left or when it resets | Hard to size polling before you hit the wall | Budgeted our reads (above); asked for an access key |
+| 13 | No subscription for "new entities matching a query" | Bidders and the bids card must poll | Polling, cached and shared. A websocket "watch query" would remove most reads |
+
+**Suggestion:** return the remaining budget and reset time as response headers on
+`arkiv_query`, and document that 429 + viem's default retries looks like a hang.
+
 ## What worked well
 
 - `executeBatch` made "publish profile + all listings" a single atomic write.
 - Expiry as a first-class field: quotes clean themselves up with zero code.
 - Typed attributes with range predicates (`lte("price_units", u64(...))`) map directly onto
   marketplace search.
+- Existing `quote` records were already "bids on a task": open tasks needed only two new kinds
+  (`task`, `claim`) and no new trust rules beyond "the poster wrote it".
+- `patchEntity` on a mutable task + a read-only claim gave us "only the poster can award, and the
+  award can't be edited" without any server of ours enforcing it.
 - The official Claude plugin's `check_schema` caught a wrong explorer link and a missing
   lifetime-extension story before we shipped.

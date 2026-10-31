@@ -1,7 +1,14 @@
 // Shared wiring for the demo scripts: facilitator, specialist agents, a mandate, payment plumbing.
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { ARKIV_EXPLORER, arkivReader, arkivWriter } from "@eth/arkiv";
+import {
+  ARKIV_EXPLORER,
+  arkivReader,
+  arkivWriter,
+  type Decoded,
+  openTasks,
+  type Task,
+} from "@eth/arkiv";
 import { createClient, loadConfig, NETWORKS, transferToken } from "@eth/hedera";
 import {
   DEPLOYMENTS,
@@ -86,6 +93,7 @@ const PORTS: Record<AgentName, number> = {
   priceguard: 8414,
   tripmint: 8415,
 };
+const BIDDERS = new Set<AgentName>(["skyhop", "airnest", "staywise"]);
 const PRICEGUARD_STORE = fileURLToPath(new URL("../.priceguard.local.json", import.meta.url));
 
 /** Starts the chosen specialist agents and lists them on Arkiv. */
@@ -129,18 +137,43 @@ export async function startAgents(
     const s = make(name);
     return { s, server: serve({ fetch: s.app.fetch, port: PORTS[name] }) };
   });
-  for (const { s } of started) {
+  const unwatch: (() => void)[] = [];
+  const bidders: { considerTask: (t: Decoded<Task>, log: (l: string) => void) => void }[] = [];
+  for (const [i, { s }] of started.entries()) {
     const r = await s.publish();
     console.log(
       `   ${s.name} ${r.alreadyListed ? "already listed on Arkiv" : `listed on Arkiv ${ARKIV_EXPLORER.tx(r.txHash)}`}`,
     );
+    if (BIDDERS.has(which[i] as AgentName) && "considerTask" in s) bidders.push(s);
   }
+  // Flight and hotel agents also bid on open tasks posted to Arkiv. One shared read of the
+  // board for all of them keeps us well inside Arkiv's query budget.
+  if (bidders.length) unwatch.push(watchBoard(bidders));
   return {
     priceGuard: guard,
     stop: () => {
+      for (const u of unwatch) u();
       for (const { server } of started) server.close();
     },
   };
+}
+
+const BOARD_EVERY_MS = 15_000;
+
+/** Reads Arkiv's open tasks every 15 s and offers each to every bidding agent. */
+function watchBoard(
+  bidders: { considerTask: (t: Decoded<Task>, log: (l: string) => void) => void }[],
+) {
+  const reader = arkivReader();
+  const tick = () =>
+    openTasks(reader)
+      .then((tasks) => {
+        for (const t of tasks) for (const b of bidders) b.considerTask(t, log);
+      })
+      .catch((err) => log(`board read failed: ${String(err).slice(0, 120)}`));
+  const timer = setInterval(() => void tick(), BOARD_EVERY_MS);
+  void tick();
+  return () => clearInterval(timer);
 }
 
 /** TripMint hires agents itself: it reads mandates and pays under the sub-mandates it's given. */

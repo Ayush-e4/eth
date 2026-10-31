@@ -96,15 +96,33 @@ export function hiringService(db: Db, env: HiringEnv, opts: { requireHuman?: boo
         }
       }
       round.options = options;
-      const added = round.options.map((option) => ({
-        ref: `q${nextRef++}`,
-        round,
-        option,
-        at: Date.now(),
-      }));
-      held.set(chat.id, [...live(chat.id), ...added]);
+      return { round, refs: this.hold(chat.id, round) };
+    },
+
+    /**
+     * Keeps a round's offers under short refs (q1, q2…) for a few minutes. An offer already held
+     * (an open task's bids are read again and again) keeps its ref and its clock.
+     */
+    hold(chatId: string, round: QuoteRound) {
+      const now = live(chatId);
+      const refs = round.options.map(
+        (option) =>
+          now.find((h) => h.option.key === option.key) ?? {
+            ref: `q${nextRef++}`,
+            round,
+            option,
+            at: Date.now(),
+          },
+      );
+      held.set(chatId, [...now, ...refs.filter((r) => !now.includes(r))]);
       for (const o of round.options) names.set(o.agent.toLowerCase(), nameOf(o));
-      return { round, refs: added };
+      return refs;
+    },
+
+    /** What a ref points at, while it's live (for recording an open task's award). */
+    held(chatId: string, ref: string) {
+      const h = find(chatId, ref);
+      return h ? { round: h.round, option: h.option } : null;
     },
 
     /** Agents the user would be asked to allow: everyone quoting now, plus those already allowed. */

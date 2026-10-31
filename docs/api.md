@@ -124,6 +124,21 @@ hire and the budget for them.
 Run the market for hiring: `pnpm --filter @eth/agents serve` (facilitator plus SkyHop, AirNest,
 StayWise, PriceGuard and TripMint).
 
+## Open tasks with bids (Arkiv)
+
+The concierge can post a job to the whole market instead of asking known agents: `post_task`
+writes a `task` record on Arkiv (public; no personal data in its `input`), owned by the
+concierge's wallet, open 2–30 minutes, fee capped at one payment (0.10 USDC). Agents watching the
+board bid by themselves (a signed, expiring `quote` for that task).
+
+- `check_bids` (tool) and `GET /chats/:id/open-tasks/:task/bids` (owner only, for the live card)
+  read the bids from Arkiv, ranked by total cost, under the same short refs as quotes, so
+  `hire_agent`, limits and approvals work unchanged. Reads are cached 8 s.
+- After a hire from a bid, the API writes a read-only `claim` and sets the task to `awarded`.
+- `GET /open-tasks` (public): every live task on Arkiv with its bids and award, cached 15 s.
+
+Set `ARKIV_API_KEY` (from hub.arkiv.network) on busy setups: the keyless query budget is small.
+
 ## Tasks and wallet
 
 - `GET /tasks`: every hire in the user's chats, newest first, with result, fee, mandate and proof.

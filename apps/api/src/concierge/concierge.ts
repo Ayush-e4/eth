@@ -1,6 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { Card, ChatMode, ConciergeEvent } from "@eth/shared";
 import type { HiringService } from "../hiring/service";
+import type { OpenTaskService } from "../tasks/service";
+import { taskTools } from "../tasks/tools";
 import { hireTools } from "./hire-tools";
 import type { Market } from "./market";
 import { conciergeTools } from "./tools";
@@ -60,6 +62,8 @@ const HIRING = `- To get something done: agent_input (what the agents need), the
 - For a whole trip (flight and hotel together) use the "trips" skill: one agent plans it and
   hires the flight and hotel agents itself, from a slice of this chat's limit. Hire just that
   one; its quote already covers both.
+- If the user wants agents to bid, or to post the job to the open market, use post_task instead
+  of get_quotes, then stop: bids show up live on the card. Its input is public: no personal data.
 - Fill the agent's input from what the user said. Ask only for what you can't reasonably assume
   (one adult, Mumbai as origin if that's their city). If get_quotes reports input problems,
   fix the input and try once more.
@@ -109,6 +113,7 @@ export function claudeConcierge(
   market: Market,
   hiring: HiringService | null = null,
   client?: Anthropic,
+  tasks: OpenTaskService | null = null,
 ): Concierge {
   let anthropic = client;
   return async (input) => {
@@ -120,7 +125,9 @@ export function claudeConcierge(
       input.emit({ type: "card", card });
     };
     const tools = conciergeTools(market, show, input.emit);
-    const spend = hiring ? hireTools(hiring, market, input.chat, show, input.emit) : null;
+    const award = async (ref: string) => tasks?.award(input.chat.id, ref);
+    const spend = hiring ? hireTools(hiring, market, input.chat, show, input.emit, award) : null;
+    const open = tasks && spend ? taskTools(tasks, input.chat, show, input.emit) : null;
     const runner = anthropic.beta.messages.toolRunner(
       {
         model: MODEL,
@@ -133,6 +140,7 @@ export function claudeConcierge(
           tools.findAgents,
           tools.showOptions,
           ...(spend ? [spend.agentInput, spend.getQuotes, spend.hireAgent] : []),
+          ...(open ? [open.postTask, open.checkBids] : []),
         ],
         messages: [
           ...input.history.map((m) => ({ role: m.role, content: m.text })),

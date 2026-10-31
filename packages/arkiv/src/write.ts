@@ -5,6 +5,8 @@ import {
   type Agent,
   AgentSchema,
   attributesFor,
+  type Claim,
+  ClaimSchema,
   type Invoice,
   InvoiceSchema,
   type JOB_STATUS,
@@ -18,6 +20,9 @@ import {
   RatingSchema,
   type Receipt,
   ReceiptSchema,
+  type TASK_STATUS,
+  type Task,
+  TaskSchema,
   toPayloadJson,
 } from "./records";
 
@@ -127,5 +132,41 @@ export async function issueInvoice(w: ArkivWriter, invoice: Invoice) {
     contentType: json,
     attributes: attributesFor.invoice(i),
     expires: LIFETIME.invoice(),
+  });
+}
+
+/** Poster opens a job to the whole market. It vanishes from every query at its deadline. */
+export async function postTask(w: ArkivWriter, task: Task, ttlSeconds = 600) {
+  const t = TaskSchema.parse(task);
+  if (t.poster.toLowerCase() !== w.account.address.toLowerCase())
+    throw new Error("Tasks must be written by their poster");
+  return w.createEntity({
+    payload: jsonToPayload(toPayloadJson(t)),
+    contentType: json,
+    attributes: attributesFor.task(t),
+    expires: LIFETIME.task(ttlSeconds),
+  });
+}
+
+/** Only the poster (owner) can award or close a task; Arkiv rejects anyone else. */
+export function setTaskStatus(
+  w: ArkivWriter,
+  taskKey: `0x${string}`,
+  status: (typeof TASK_STATUS)[number],
+) {
+  return w.patchEntity({ entityKey: taskKey, set: { status: str(status) } });
+}
+
+/** Poster records which bid won. Read-only, and kept a week as the public record. */
+export async function claimTask(w: ArkivWriter, claim: Claim) {
+  const c = ClaimSchema.parse(claim);
+  if (c.poster.toLowerCase() !== w.account.address.toLowerCase())
+    throw new Error("Claims must be written by the task's poster");
+  return w.createEntity({
+    payload: jsonToPayload(toPayloadJson(c)),
+    contentType: json,
+    attributes: attributesFor.claim(c),
+    expires: LIFETIME.claim(),
+    flags: { readonly: true },
   });
 }
