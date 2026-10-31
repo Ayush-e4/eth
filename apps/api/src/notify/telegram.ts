@@ -9,10 +9,16 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 /**
  * Our Telegram bot, reading its own messages (long polling: no public address needed, so it
- * works on a laptop too). It only understands linking: "/start <code>" from the app's Connect
- * Telegram link ties this chat to that account; "/stop" unties it. Returns a stop function.
+ * works on a laptop too). "/start <code>" from the app's Connect
+ * Telegram link ties this chat to that account; "/stop" unties it; anything else goes to `onText`
+ * (chatting with the concierge). Returns a stop function.
  */
-export function telegramBot(n: Notifier, log: (line: string) => void = () => {}) {
+export function telegramBot(
+  n: Notifier,
+  log: (line: string) => void = () => {},
+  /** Anything else a person writes: a chat with the concierge (see telegram-chat.ts). */
+  onText?: (chatId: string, text: string) => Promise<unknown>,
+) {
   if (!n.telegram) return () => {};
   let running = true;
   let offset = 0;
@@ -37,9 +43,18 @@ export function telegramBot(n: Notifier, log: (line: string) => void = () => {})
       await n.unlinkChat(String(chatId));
       return reply(chatId, "Stopped: no more AgentNet alerts here.");
     }
+    if (onText && text && !text.startsWith("/")) {
+      // Not awaited: a turn can take a minute, and other people's messages shouldn't wait.
+      void onText(String(chatId), text.slice(0, 4000)).catch((err) =>
+        log(`telegram: ${String(err).slice(0, 120)}`),
+      );
+      return;
+    }
     return reply(
       chatId,
-      "This bot sends AgentNet alerts. Connect it from AgentNet: Watchers → Get alerts.",
+      onText
+        ? "Send me a message to chat with the AgentNet concierge, or /stop to stop alerts."
+        : "This bot sends AgentNet alerts. Connect it from AgentNet: Watchers → Get alerts.",
     );
   }
 

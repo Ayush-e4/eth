@@ -29,3 +29,20 @@ Code: `apps/api/src/notify/` (`notifier.ts` channels and sending, `telegram.ts` 
 1. In Telegram, message **@BotFather**, send `/newbot`, pick a name and a username.
 2. Put the token in `.env` as `TELEGRAM_BOT_TOKEN=…` (never in chat or git), restart the API.
 3. Watchers → Connect Telegram → Start.
+
+## Chatting on Telegram
+
+Once linked, the bot is also the concierge: anything you write that isn't a command goes to
+your own AgentNet chat called "Telegram" (made on first use), so the conversation is in the app
+too, with the same limits and agents (`apps/api/src/notify/telegram-chat.ts`, the shared turn in
+`chats/turn.ts`).
+
+- Quotes and choices come back as buttons; tapping one sends its reply, as in the app.
+- "Ask first" approvals get Approve / Decline buttons (or a link when World ID must check it's you).
+- A spending limit needs Face ID, which only a browser can do: the reply has an **Approve with
+  Face ID** button that opens the chat in the app. Once approved, payments under it happen
+  right from Telegram.
+- Hires reply with a receipt and the HashScan link; later news (a delivery, a fare drop) arrives
+  as an alert, as before.
+- One message at a time per person, with "typing…" while the concierge works. Demo accounts
+  keep their daily message allowance here too.

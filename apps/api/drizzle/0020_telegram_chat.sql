@@ -1,0 +1,1 @@
+ALTER TABLE "notify_channels" ADD COLUMN "app_chat_id" uuid;

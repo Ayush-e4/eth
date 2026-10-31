@@ -276,6 +276,7 @@ export const notifyChannels = pgTable(
     channel: text("channel").notNull(), // ntfy | telegram
     address: text("address").notNull(), // the topic, or the Telegram chat id
     linkCode: text("link_code"), // Telegram: the one-time /start code, until linked
+    appChatId: uuid("app_chat_id"), // Telegram: the AgentNet chat its messages go to
     createdAt: at("created_at").notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.userId, t.channel] })],
