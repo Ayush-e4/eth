@@ -12,6 +12,7 @@ import { createPayingFetch, MirrorResolver } from "@eth/x402";
 import { privateKeyToAccount } from "viem/accounts";
 import type { Db } from "../db/client";
 import type { Chat, MandateRow } from "../db/schema";
+import type { DemoQuotaCheck } from "../demo/quotas";
 import { approvalBook } from "./approvals";
 import { grantSubMandate, vetSubcontract } from "./delegate";
 import type { HiringEnv } from "./env";
@@ -55,6 +56,7 @@ export function hiringService(
     reputation?: Reputation;
     undo?: UndoWindows;
     pending?: PendingHires;
+    demo?: DemoQuotaCheck; // daily allowances when the shared demo wallet pays
   } = {},
 ) {
   const refs = quoteRefs(db);
@@ -158,6 +160,10 @@ export function hiringService(
           };
         const payees = await this.payees(chat.id, mandate);
         return { status: "needs_limit", card: limitCard(env, left, payees) };
+      }
+      if (mandate?.demo && opts.demo) {
+        const over = await opts.demo.canHire(chat.id, cost);
+        if (over) return { status: "refused", reason: `Not hired, nothing paid: ${over}` };
       }
       // "Ask first": one approval, one payment (taken here, or asked for with a card).
       if (

@@ -14,6 +14,7 @@ import {
   when,
 } from "@/lib/api";
 import { revokeInWallet } from "@/lib/wallet";
+import { DemoAllowance } from "./DemoAllowance";
 
 const STATUS: Record<Limit["status"], string> = {
   active: "bg-ok-soft text-ok",
@@ -123,6 +124,7 @@ export function WalletView() {
           ))}
         </dl>
       </section>
+      {w.shared && <DemoAllowance />}
       {w.shared && (
         <p className="-mt-3 text-[13px] text-ink-3">
           You're in demo mode: everyone trying the demo shares this test wallet, so its balance

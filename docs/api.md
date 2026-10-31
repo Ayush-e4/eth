@@ -190,3 +190,23 @@ picks up where it left off:
 
 Only caches stay in memory (bid reads, INR rates). Startup work is in `src/index.ts`.
 
+## Demo accounts and their allowances
+
+"Try the demo" signs in without a wallet; every demo account shares one test wallet (the
+operator), which pays agent fees, the network fees of each new spending limit, and nobody's
+Claude tokens but ours. Since anyone can open a demo account in one click, per-account limits
+alone are easy to dodge, so the shared wallet also has a daily total (`src/demo/quotas.ts`):
+
+| Allowance (rolling 24 h) | Default | Setting |
+|---|---|---|
+| Messages per demo account | 40 | `DEMO_MESSAGES_PER_DAY` |
+| Paid hires per demo account | 5 | `DEMO_HIRES_PER_DAY` |
+| Spending limits per demo account | 3 | `DEMO_LIMITS_PER_DAY` |
+| Spending limits, all demo accounts | 40 | `DEMO_LIMITS_TOTAL_PER_DAY` |
+| Agent fees, all demo accounts | 3 USDC | `DEMO_FEES_TOTAL_PER_DAY_USDC` |
+
+Over an allowance, the message is refused (429) before it reaches Claude, the limit isn't
+created, and the hire is refused before anything is paid, each with a line saying why and that
+signing in with MetaMask (your own test wallet) has no such limits. The Wallet page shows a demo
+account what it has left today (`GET /demo/quota`).
+
