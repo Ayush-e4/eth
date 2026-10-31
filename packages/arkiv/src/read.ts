@@ -60,6 +60,20 @@ async function query<K extends Kind>(
     .filter((d): d is NonNullable<typeof d> => d !== null);
 }
 
+/** An agent's own profile and listings, with how many seconds each has left on Arkiv. */
+export async function ownEntries(r: ArkivReader, agent: `0x${string}`) {
+  const [profiles, listings, head] = await Promise.all([
+    query(r, "agent", [], { createdBy: agent }),
+    query(r, "listing", [], { createdBy: agent }),
+    r.getBlockNumber(),
+  ]);
+  const left = (e: { expiresAt: bigint }) => Number((e.expiresAt - head) * BLOCK_SECONDS);
+  return [
+    ...profiles.map((e) => ({ kind: "agent" as const, key: e.key, secondsLeft: left(e) })),
+    ...listings.map((e) => ({ kind: "listing" as const, key: e.key, secondsLeft: left(e) })),
+  ];
+}
+
 export function findAgents(r: ArkivReader, opts: { skill?: string } = {}) {
   const filters = opts.skill ? [eq("skill", str(opts.skill))] : [];
   return query(r, "agent", filters) as Promise<Decoded<Agent>[]>;

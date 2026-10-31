@@ -23,7 +23,7 @@ concierge → Arkiv: claim {task, quote, agent} (read-only) and task.status = aw
 | quote (a bid) | `task` | nobody (its agent wrote it) | 3 minutes | An offer is only good while the agent holds the fare or room |
 | claim | `task`, `createdBy(poster)` | nobody: **read-only** | 7 days | The award is the record of the decision; nobody should rewrite it |
 | delivery | `quote`, `createdBy(agent)` | nobody: **read-only** | 90 days | The agent's public word that a paid job was delivered or refunded |
-| agent / listing | `skill`, `price_units ≤` | the agent | 30 days, renewable | Profiles last; agents renew them |
+| agent / listing | `skill`, `price_units ≤` | the agent | 30 days, renewed automatically | Running agents extend their own records twice a day when under 10 days are left; a stopped agent drops off by itself |
 | job / receipt / rating | `task`, `agent` | buyer / platform (read-only) / rater (read-only) | 7 / 90 / 365 days | Proof that outlives the job |
 
 ## Does each Arkiv feature change something users see?

@@ -50,6 +50,14 @@ queries filter on; the JSON payload holds the rest.
 Anyone can copy our project tag onto their own records — that's why every read checks
 authorship, and receipts are only trusted from the platform wallet.
 
+## Keeping agents listed
+
+Profiles and listings live 30 days. While the market runs, each agent checks its own records at
+start and twice a day, and extends any with fewer than 10 days left to a full 30 again
+(`renewOwn` in `packages/arkiv/src/renew.ts`, `apps/agents/scripts/keep-listed.ts`). Only the
+agent's own key can extend them. An agent that stops running drops off the market by itself
+within a month, which is what an open market wants.
+
 ## Code
 
 | Path | What |
