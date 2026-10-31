@@ -2,6 +2,7 @@
 
 import type { Card } from "@eth/shared";
 import { shortAddress, usdc } from "@/lib/api";
+import { HotelGuardCard } from "./HotelGuardCard";
 import { ApprovalCard, type CardCtx, HiredCard, LimitCard, QuotesCard } from "./MoneyCards";
 import { PaymentCard } from "./PaymentCard";
 import { TaskCard } from "./TaskCard";
@@ -44,7 +45,11 @@ export function CardView({ card, ctx }: { card: Card; ctx: CardCtx }) {
     case "payment":
       return <PaymentCard card={card} ctx={ctx} />;
     case "watch":
-      return <WatchCard card={card} ctx={ctx} />;
+      return card.kind === "hotel" ? (
+        <HotelGuardCard card={card} ctx={ctx} />
+      ) : (
+        <WatchCard card={card} ctx={ctx} />
+      );
   }
 }
 

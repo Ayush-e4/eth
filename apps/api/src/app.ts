@@ -1,4 +1,4 @@
-import { health } from "@eth/shared";
+import { type Card, health } from "@eth/shared";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { accountRoutes } from "./account/routes";
@@ -39,6 +39,8 @@ export interface AppDeps {
   tasks?: OpenTaskService | null;
   undo?: UndoWindows | null;
   review?: EscrowReviews | null;
+  /** One-off limits the server offered for a single payment (PriceGuard's fee). */
+  limitOffers?: (chatId: string, card: Extract<Card, { type: "limit" }>) => boolean;
   watches?: FareWatchFollower | null;
   demo?: DemoQuotaCheck | null;
   status?: StatusCheck | null;
@@ -90,7 +92,10 @@ export function createApp(db: Db, config: Config, deps: AppDeps = {}) {
       finder(deps.catalog),
     ),
   );
-  app.route("/", mandateRoutes(db, hiring?.env ?? null, deps.demo ?? null));
+  app.route(
+    "/",
+    mandateRoutes(db, hiring?.env ?? null, deps.demo ?? null, deps.limitOffers ?? undefined),
+  );
   app.route("/", demoRoutes(db, deps.demo ?? null));
   app.route("/", statusRoutes(deps.status ?? null));
   app.route("/", marketRoutes(deps.catalog ?? null));

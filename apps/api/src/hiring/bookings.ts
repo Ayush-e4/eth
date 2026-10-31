@@ -5,6 +5,13 @@ import { privateKeyToAccount } from "viem/accounts";
 import type { Db } from "../db/client";
 import { chats, hires } from "../db/schema";
 import { approvalBook } from "./approvals";
+import type {
+  CancelQuote,
+  ChangeOptions,
+  ChangeOptionWire,
+  HotelNow,
+  HotelView,
+} from "./bookings-wire";
 import type { HiringEnv } from "./env";
 import { quoteRefs } from "./quote-refs";
 
@@ -20,6 +27,7 @@ export interface Booking {
   chatTitle: string;
   bookedAt: string;
   changes: number;
+  now?: HotelNow; // a hotel as StayWise reports it now (set by find)
 }
 
 type Result = {
@@ -108,7 +116,27 @@ export function bookingDesk(
     if (!b) throw new BookingError("no such booking of yours");
     const endpoint = b.endpoint ?? (await opts.endpointOf?.(b.agent)) ?? null;
     if (!endpoint) throw new BookingError(`${b.agentTitle} isn't reachable on the market now`);
-    return { ...b, endpoint };
+    // A hotel can be rebooked outside a hire (PriceGuard): follow the hotel agent to the booking now.
+    let id = b.bookingId;
+    const seen: { now?: HotelNow } = {}; // what the hotel agent says about it (hotels only)
+    for (let hop = 0; b.kind === "hotel" && hop < 8; hop++) {
+      const next = await call<{ booking: HotelNow }>(endpoint, `/bookings/${id}/view`).then(
+        (v) => {
+          seen.now = v.booking;
+          return null;
+        },
+        (err: unknown) => (err instanceof BookingError ? (err.replacedBy ?? null) : null),
+      );
+      if (!next) break;
+      id = next;
+    }
+    return {
+      ...b,
+      endpoint,
+      bookingId: id,
+      bookingReference: b.kind === "hotel" ? id : b.bookingReference,
+      ...(seen.now ? { now: seen.now } : {}),
+    };
   }
 
   /** A signed request to the agent that made the booking. */
@@ -123,9 +151,16 @@ export function bookingDesk(
       body: text,
       signal: AbortSignal.timeout(60_000),
     });
-    const json = (await res.json().catch(() => ({}))) as T & { error?: string; detail?: string };
+    const json = (await res.json().catch(() => ({}))) as T & {
+      error?: string;
+      detail?: string;
+      replacedBy?: string;
+    };
     if (!res.ok)
-      throw new BookingError(`${json.error ?? `HTTP ${res.status}`} ${json.detail ?? ""}`.trim());
+      throw new BookingError(
+        `${json.error ?? `HTTP ${res.status}`} ${json.detail ?? ""}`.trim(),
+        json.replacedBy,
+      );
     return json;
   }
 
@@ -153,6 +188,7 @@ export function bookingDesk(
 
   return {
     list,
+    find,
 
     async view(userId: string, which: string) {
       const b = await find(userId, which);
@@ -227,32 +263,12 @@ export function bookingDesk(
   };
 }
 
-export class BookingError extends Error {}
+export class BookingError extends Error {
+  constructor(
+    message: string,
+    readonly replacedBy?: string, // the agent says this booking was replaced (e.g. by PriceGuard)
+  ) {
+    super(message);
+  }
+}
 export type BookingDesk = ReturnType<typeof bookingDesk>;
-
-interface ChangeOptionWire {
-  quoteKey: string;
-  note: string;
-  currency: string;
-  changeTotal?: string; // flights
-  penalty?: string;
-  total?: number; // hotels
-  priceDifferencePercent?: number;
-}
-interface ChangeOptions {
-  current: unknown;
-  options: ChangeOptionWire[];
-  changeFeeUsdc: number;
-  pay: { task: string; skill: string; input: unknown };
-}
-interface CancelQuote {
-  quoteId: string;
-  refund: string;
-  currency: string;
-  paid: string;
-  paidCurrency: string;
-}
-interface HotelView {
-  booking: { total?: number; currency?: string };
-  cancelFeeNow: number;
-}

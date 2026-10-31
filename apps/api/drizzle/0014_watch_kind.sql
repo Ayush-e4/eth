@@ -1,0 +1,1 @@
+ALTER TABLE "fare_watches" ADD COLUMN "kind" text DEFAULT 'fare' NOT NULL;

@@ -82,26 +82,28 @@ beforeEach(async () => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
-/** As StayWise's management routes answer. */
+/** As StayWise's management routes answer ("hOLD" was rebooked by PriceGuard into "h2"). */
 const hotelAgent = (path: string) =>
-  path.endsWith("/view")
-    ? Response.json({ booking: { total: 17815.68, currency: "INR" }, cancelFeeNow: 815.68 })
-    : path.endsWith("/change-options")
-      ? Response.json({
-          current: { hotelName: "Park Inn" },
-          options: [
-            {
-              quoteKey: "0xhchange",
-              note: "Park Inn 13→16 Nov: 28,767 INR (+61% vs paid)",
-              total: 28767.44,
-              currency: "INR",
-              priceDifferencePercent: 61,
-            },
-          ],
-          changeFeeUsdc: 0.02,
-          pay: { task: "trip-2", skill: "hotels.change", input: { bookingId: "h2" } },
-        })
-      : Response.json({ agent: "StayWise", result: { status: "CANCELLED" } });
+  path.startsWith("/bookings/hOLD/")
+    ? Response.json({ error: "booking_replaced", replacedBy: "h2" }, { status: 409 })
+    : path.endsWith("/view")
+      ? Response.json({ booking: { total: 17815.68, currency: "INR" }, cancelFeeNow: 815.68 })
+      : path.endsWith("/change-options")
+        ? Response.json({
+            current: { hotelName: "Park Inn" },
+            options: [
+              {
+                quoteKey: "0xhchange",
+                note: "Park Inn 13→16 Nov: 28,767 INR (+61% vs paid)",
+                total: 28767.44,
+                currency: "INR",
+                priceDifferencePercent: 61,
+              },
+            ],
+            changeFeeUsdc: 0.02,
+            pay: { task: "trip-2", skill: "hotels.change", input: { bookingId: "h2" } },
+          })
+        : Response.json({ agent: "StayWise", result: { status: "CANCELLED" } });
 
 describe("my bookings", () => {
   it("lists each booking once, as it stands after its changes; never someone else's", async () => {
@@ -205,5 +207,20 @@ describe("my bookings", () => {
     expect(await desk.cancel(userId, chat.id, "VRUDTM")).toMatchObject({
       status: "needs_approval",
     });
+  });
+
+  it("follows a hotel rebooked outside a hire (PriceGuard) to the booking now", async () => {
+    await hire("hotels", { bookingId: "hOLD" }, 1000);
+    const desk = bookingDesk(db, env);
+    expect(await desk.find(userId, "hOLD")).toMatchObject({
+      bookingId: "h2",
+      bookingReference: "h2",
+      now: { total: 17815.68 }, // what StayWise says about the booking now
+    });
+    await desk.changeOptions(userId, chat.id, "hOLD", {
+      checkin: "2026-12-08",
+      checkout: "2026-12-11",
+    });
+    expect(agentCalls.at(-1)?.path).toBe("/bookings/h2/change-options");
   });
 });

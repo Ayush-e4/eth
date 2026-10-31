@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { HotelGuardCard } from "../chat/HotelGuardCard";
 import { WatchCard } from "../chat/WatchCard";
 
 interface Row {
@@ -11,6 +12,7 @@ interface Row {
   chatTitle: string;
   input: { origin?: string; destination?: string; date?: string };
   status: "watching" | "ended" | "stopped" | "booked";
+  kind: "fare" | "hotel";
   createdAt: string;
 }
 
@@ -42,10 +44,17 @@ export function WatchersView() {
             >
               Set in “{r.chatTitle}”
             </Link>
-            <WatchCard
-              card={{ type: "watch", watchId: r.watchId, title: "FareWatch" }}
-              ctx={{ chatId: r.chatId, isDemo: false, onReply: () => {} }}
-            />
+            {r.kind === "hotel" ? (
+              <HotelGuardCard
+                card={{ type: "watch", watchId: r.watchId, title: "PriceGuard", kind: "hotel" }}
+                ctx={{ chatId: r.chatId, isDemo: false, onReply: () => {} }}
+              />
+            ) : (
+              <WatchCard
+                card={{ type: "watch", watchId: r.watchId, title: "FareWatch" }}
+                ctx={{ chatId: r.chatId, isDemo: false, onReply: () => {} }}
+              />
+            )}
           </div>
         ))}
       </section>

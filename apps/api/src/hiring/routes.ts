@@ -35,7 +35,13 @@ const mandateJson = (m: MandateRow, remaining?: bigint) => ({
  * A chat's spending limit. Demo users approve with the shared test wallet; wallet users create
  * the mandate in MetaMask and hand us its id, which we check on-chain before using it.
  */
-export function mandateRoutes(db: Db, env: HiringEnv | null, demo: DemoQuotaCheck | null = null) {
+export function mandateRoutes(
+  db: Db,
+  env: HiringEnv | null,
+  demo: DemoQuotaCheck | null = null,
+  /** A limit the server itself offered for one payment (e.g. PriceGuard's fee) also counts. */
+  offered: (chatId: string, card: z.infer<typeof LimitCardSchema>) => boolean = () => false,
+) {
   const store = chatStore(db);
   const app = new Hono<AuthEnv>();
   app.use("/chats/:id/mandate", requireUser(db));
@@ -58,9 +64,11 @@ export function mandateRoutes(db: Db, env: HiringEnv | null, demo: DemoQuotaChec
     if (!body.success)
       return c.json({ error: "send the limit card, and demo or a mandateId" }, 400);
     const { card } = body.data;
-    // The card must be for what's left of this chat's limit, and for this server's concierge.
+    // The card must be for what's left of this chat's limit (or one the server offered for a
+    // single payment), and for this server's concierge.
     if (
-      card.budgetUnits !== (await chatRemaining(db, chat)).toString() ||
+      (card.budgetUnits !== (await chatRemaining(db, chat)).toString() &&
+        !offered(chat.id, card)) ||
       card.agent.toLowerCase() !== env.concierge.evm.toLowerCase()
     ) {
       return c.json({ error: "this limit no longer matches the chat; ask again" }, 409);

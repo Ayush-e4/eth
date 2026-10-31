@@ -157,6 +157,7 @@ export const WatchCardSchema = z.object({
   type: z.literal("watch"),
   watchId: z.string(),
   title: z.string(), // the agent's name
+  kind: z.enum(["fare", "hotel"]).optional(), // FareWatch (default) or PriceGuard
 });
 
 export const CardSchema = z.discriminatedUnion("type", [

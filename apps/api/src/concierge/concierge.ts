@@ -1,10 +1,12 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { Card, ChatMode, ConciergeEvent } from "@eth/shared";
 import type { BookingDesk } from "../hiring/bookings";
+import type { HotelGuard } from "../hiring/hotel-guard";
 import type { HiringService } from "../hiring/service";
 import type { OpenTaskService } from "../tasks/service";
 import { taskTools } from "../tasks/tools";
 import { bookingTools } from "./booking-tools";
+import { guardTools } from "./guard-tools";
 import { hireTools } from "./hire-tools";
 import type { Market } from "./market";
 import { conciergeTools } from "./tools";
@@ -79,8 +81,10 @@ const HIRING = `- To get something done: agent_input (what the agents need), the
 - If hire_agent says a limit or an approval is needed, a card is already on screen: say so in
   one line and stop. When the user says it's approved, call hire_agent again with the same ref.
 - For a booking the user already has ("move my flight", "add a night to my hotel", "cancel
-  it"), use my_bookings and manage_booking: never book anew instead of changing theirs. Options and approval
-  cards from earlier turns expire: whenever the user asks again, call manage_booking again.
+  it"), use my_bookings and manage_booking: never book anew instead of changing theirs. Options
+  and approval cards from earlier turns expire: whenever the user asks again, call it again.
+- To watch a hotel's price and rebook it cheaper, use guard_hotel_price; pay PriceGuard's
+  invoice (pay_invoice) only when the user says so.
 - Lines in earlier turns starting "[app:" are the app's records of what your tools really did
   and what the user saw on screen. Trust them: never say you didn't search or that those quotes
   weren't real. If a ref has expired, get fresh quotes and say only that prices were refreshed.
@@ -137,6 +141,7 @@ export function claudeConcierge(
   client?: Anthropic,
   tasks: OpenTaskService | null = null,
   desk: BookingDesk | null = null,
+  guard: HotelGuard | null = null,
 ): Concierge {
   let anthropic = client;
   return async (input) => {
@@ -152,13 +157,17 @@ export function claudeConcierge(
       tasks?.award(input.chat.id, held);
     const spend = hiring ? hireTools(hiring, market, input.chat, show, input.emit, award) : null;
     const open = tasks && spend ? taskTools(tasks, market, input.chat, show, input.emit) : null;
-    // Bookings the user already has: in general chats, and chats with a flights agent.
+    // Bookings the user already has: in general chats, and chats with a flights/hotels agent.
     const mine =
       desk &&
       spend &&
       input.user.id &&
-      (!input.chat.agentAddress || input.chat.agentSkill === "flights")
+      (!input.chat.agentAddress || ["flights", "hotels"].includes(input.chat.agentSkill ?? ""))
         ? bookingTools(desk, { id: input.user.id }, input.chat, show, input.emit)
+        : null;
+    const guarding =
+      guard && mine && input.user.id && !input.chat.agentAddress
+        ? guardTools(guard, { id: input.user.id }, input.chat, show, input.emit)
         : null;
     const runner = anthropic.beta.messages.toolRunner(
       {
@@ -175,6 +184,7 @@ export function claudeConcierge(
           ...(spend ? [spend.agentInput, spend.getQuotes, spend.hireAgent] : []),
           ...(open && !input.chat.agentAddress ? [open.postTask, open.checkBids] : []),
           ...(mine ? [mine.myBookings, mine.manageBooking] : []),
+          ...(guarding ? [guarding.guardHotel, guarding.payInvoice] : []),
         ],
         messages: [
           ...input.history.map((m) => ({ role: m.role, content: m.text })),
