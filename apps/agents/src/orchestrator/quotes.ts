@@ -7,9 +7,12 @@ import type { HireDeps } from "./hire";
 export type QuoteDeps = Pick<HireDeps, "arkiv" | "evm" | "registry" | "inrRates" | "log"> & {
   mandateId?: bigint;
   only?: string; // ask just this agent (a chat with one agent from the Market)
+  /** How each agent's past paid jobs ended (default: its delivery records on Arkiv). */
+  trackRecord?: (agent: string) => Promise<TrackRecord | null>;
 };
 
 import { type Candidate, describePriced, type Priced, rankByTotalCost } from "./procure";
+import { describeTrack, reliability, type TrackRecord, trackRecordOn } from "./reliability";
 
 const QUOTE_TIMEOUT_MS = 25_000;
 
@@ -18,6 +21,7 @@ export interface QuoteOption extends Candidate {
   endpoint: string; // the agent's service, from its Arkiv listing
   priced?: Priced; // set when the item price could be converted to INR
   subcontract?: Subcontract; // agents it will hire itself, and the budget it needs for them
+  track?: TrackRecord; // how its past paid jobs ended (what the ranking weighed)
   /** Why the user must approve this one even in an "Auto" chat (e.g. it costs more elsewhere). */
   confirm?: string;
 }
@@ -132,19 +136,40 @@ async function rankLive(
     itemCurrency: q.record.itemCurrency,
   }));
   const { priced, unpriced } = rankByTotalCost(candidates, d.inrRates);
+  // Weigh each quote by how reliably its agent delivers: expected cost = price / P(delivered).
+  const track = d.trackRecord ?? trackRecordOn(d.arkiv);
+  const tracks = new Map(
+    await Promise.all(
+      candidates.map(
+        async (c) => [c.agent.toLowerCase(), await track(c.agent).catch(() => null)] as const,
+      ),
+    ),
+  );
+  const trackOf = (c: Candidate) => tracks.get(c.agent.toLowerCase()) ?? null;
+  const expected = (cost: number, c: Candidate) => cost / reliability(trackOf(c));
+  priced.sort((a, b) => expected(a.totalInr, a) - expected(b.totalInr, b));
+  unpriced.sort((a, b) => expected(Number(a.feeUnits), a) - expected(Number(b.feeUnits), b));
   const endpointOf = (c: Candidate) => byAgent.get(c.agent.toLowerCase())?.record.endpoint ?? "";
   const extras = (c: Candidate) => {
     const sub = subcontracts.get(c.agent.toLowerCase());
-    return { endpoint: endpointOf(c), ...(sub ? { subcontract: sub } : {}) };
+    const t = trackOf(c);
+    return {
+      endpoint: endpointOf(c),
+      ...(sub ? { subcontract: sub } : {}),
+      ...(t ? { track: t } : {}),
+    };
   };
   const options: QuoteOption[] = [
     ...priced.map((p) => ({ ...p, ...extras(p), priced: p })),
     ...unpriced.map((u) => ({ ...u, ...extras(u) })),
   ];
   const winner = priced[0];
-  const bestReason = winner
-    ? `lowest total of ${priced.length} comparable quote(s): ${describePriced(winner)}`
-    : `cheapest agent fee (no comparable item prices among ${unpriced.length} quote(s))`;
+  const cheapest = [...priced].sort((a, b) => a.totalInr - b.totalInr)[0];
+  const bestReason = !winner
+    ? `cheapest agent fee, weighed by track record (no comparable item prices among ${unpriced.length} quote(s))`
+    : cheapest && cheapest !== winner
+      ? `best value of ${priced.length} quote(s): ${describePriced(winner)}, ${describeTrack(trackOf(winner))}; the cheaper ${cheapest.title.split(" — ")[0]} has ${describeTrack(trackOf(cheapest)).replace("delivered", "delivered only")}`
+      : `lowest total of ${priced.length} comparable quote(s): ${describePriced(winner)}, ${describeTrack(trackOf(winner))}`;
   d.log(`[${skill}] ${options.length} live quote(s); best: ${options[0]?.title ?? "none"}`);
   return { skill, task, input, options, bestReason, skipped };
 }

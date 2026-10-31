@@ -57,6 +57,7 @@ export const QuotesCardSchema = z.object({
       itemTotal: z.number().optional(),
       itemCurrency: z.string().optional(),
       totalInr: z.number().optional(), // item + fee in rupees, when comparable
+      track: z.string().optional(), // how its past paid jobs ended, e.g. "delivered 18 of 19"
       reply: z.string(),
     }),
   ),

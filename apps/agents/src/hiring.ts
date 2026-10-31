@@ -27,4 +27,10 @@ export {
   type QuoteRound,
   readBids,
 } from "./orchestrator/quotes";
+export {
+  describeTrack,
+  reliability,
+  type TrackRecord,
+  trackRecordOn,
+} from "./orchestrator/reliability";
 export { TripSchema } from "./trip";
