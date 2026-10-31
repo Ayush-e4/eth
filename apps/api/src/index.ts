@@ -48,12 +48,12 @@ const notify = notifier(db, {
   telegramToken: process.env.TELEGRAM_BOT_TOKEN || undefined,
 });
 // Passkey users' own wallets (Face ID approves their limits). WALLET_GIFT_UNITS of free test
-// USDC each (0.50 by default), for at most WALLET_GIFTS_PER_DAY new wallets a day.
+// USDC each (0.20 by default), for at most WALLET_GIFTS_PER_DAY new wallets a day.
 const wallets = env
   ? passkeyWallets(db, hederaWalletChain(env), {
       rpID: new URL(config.appOrigin).hostname,
       origin: config.appOrigin,
-      giftUnits: BigInt(process.env.WALLET_GIFT_UNITS ?? 500_000),
+      giftUnits: BigInt(process.env.WALLET_GIFT_UNITS ?? 200_000),
       giftsPerDay: Number(process.env.WALLET_GIFTS_PER_DAY ?? 20),
       log: console.log,
     })

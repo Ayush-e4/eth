@@ -16,6 +16,7 @@ import {
 import { cancelled, withFaceId } from "@/lib/passkey";
 import { revokeInWallet } from "@/lib/wallet";
 import { DemoAllowance } from "./DemoAllowance";
+import { TopUp } from "./TopUp";
 
 const STATUS: Record<Limit["status"], string> = {
   active: "bg-ok-soft text-ok",
@@ -144,6 +145,7 @@ export function WalletView() {
             ` We sent it ${usdc(w.faceId.giftUnits)} test USDC to start you off.`}
         </p>
       )}
+      {w.faceId?.status === "ready" && w.address && <TopUp address={w.address} />}
       {w.shared && <DemoAllowance />}
       {w.shared && (
         <p className="-mt-3 text-[13px] text-ink-3">

@@ -42,9 +42,10 @@ doesn't. `GET /me` says `passkey: true` for them.
 Each passkey account also gets its own wallet on Hedera: a `PasskeyWallet` contract whose only
 key is that passkey (see [mandates.md](mandates.md#passkey-wallets-face-id-controls-the-wallet)).
 Sign-up makes it in the background (`passkey_wallets` table, status creating → ready) and the demo
-wallet sends it `WALLET_GIFT_UNITS` of test USDC (0.50 by default, at most
+wallet sends it `WALLET_GIFT_UNITS` of test USDC (0.20 by default, at most
 `WALLET_GIFTS_PER_DAY` new wallets a day). We send its transactions and pay the gas; we can't
-change them.
+change them. The Wallet page shows the wallet's address with steps to fill it from Circle's
+faucet (or from the person's own testnet wallet), so the demo wallet isn't the only source.
 
 A wallet move is two calls, the same way for a limit and for a cancel:
 
