@@ -134,6 +134,13 @@
       "when": 1793481822906,
       "tag": "0018_hidden_agents",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1793488036333,
+      "tag": "0019_app_connections",
+      "breakpoints": true
     }
   ]
 }

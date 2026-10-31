@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { marketTools, type ToolDeps } from "./tools";
+import { type HeldQuotes, marketTools, type ToolDeps } from "./tools";
 
 const skill = z
   .string()
@@ -25,8 +25,9 @@ const text = (run: () => Promise<string>) =>
     }),
   );
 
-export function createServer(deps: ToolDeps) {
-  const tools = marketTools(deps);
+/** `held`: quotes waiting to be hired; pass one per user when a new server is made per request. */
+export function createServer(deps: ToolDeps, held?: HeldQuotes) {
+  const tools = marketTools(deps, held);
   const server = new McpServer(
     { name: "agentnet", version: "0.1.0" },
     { instructions: INSTRUCTIONS },

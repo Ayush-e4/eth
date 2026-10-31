@@ -36,8 +36,9 @@ export const NO_MANDATE =
  * The market as tools. Browsing and quotes are free; `hire` pays the agent's fee over x402
  * from the mandate, which the chain caps (total, per payment, payees, expiry). Each returns text.
  */
-export function marketTools(d: ToolDeps) {
-  const held = new Map<string, { round: QuoteRound; option: QuoteOption; at: number }>();
+export type HeldQuotes = Map<string, { round: QuoteRound; option: QuoteOption; at: number }>;
+
+export function marketTools(d: ToolDeps, held: HeldQuotes = new Map()) {
   let next = 1;
 
   return {
