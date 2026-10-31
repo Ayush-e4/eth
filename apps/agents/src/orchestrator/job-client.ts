@@ -15,10 +15,13 @@ export interface JobView {
 }
 
 /** The agent said no, or took the fee and couldn't deliver (the message says if it refunded). */
-export class HireFailed extends Error {}
+export class HireFailed extends Error {
+  override name = "HireFailed";
+}
 
 /** Paid, or maybe paid, and the agent hasn't finished yet: read the job back later. */
 export class HirePending extends Error {
+  override name = "HirePending";
   constructor(
     readonly endpoint: string,
     readonly quoteKey: string,

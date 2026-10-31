@@ -1,3 +1,4 @@
+import { decodeX402Authorization, mandateRegistryAbi } from "@eth/mandates";
 import {
   AccountId,
   type Client,
@@ -5,9 +6,10 @@ import {
   type PrivateKey,
   ScheduleCreateTransaction,
   ScheduleDeleteTransaction,
+  ScheduleInfoQuery,
   Timestamp,
 } from "@hiero-ledger/sdk";
-import type { Hex } from "viem";
+import { decodeFunctionData, type Hex } from "viem";
 
 /**
  * The undo window, natively on Hedera: instead of running a payment now, the facilitator
@@ -35,6 +37,15 @@ export interface SchedulerDeps {
   fetchImpl?: typeof fetch;
   wait?: (ms: number) => Promise<void>;
   deleteSchedule?: (scheduleId: string) => Promise<void>; // tests replace the Hedera call
+  /** What a schedule will run (tests replace the Hedera query). */
+  readSchedule?: (scheduleId: string) => Promise<ScheduledCall | null>;
+}
+
+/** The contract call inside a schedule, as Hedera holds it. */
+export interface ScheduledCall {
+  contractId: string;
+  data: Hex;
+  scheduledTxId: string;
 }
 
 export const MIN_UNDO_S = 10;
@@ -65,6 +76,19 @@ export function paymentScheduler(d: SchedulerDeps) {
     await (await tx.execute(d.hedera)).getReceipt(d.hedera);
   }
   const remove = d.deleteSchedule ?? deleteOnHedera;
+
+  async function readOnHedera(scheduleId: string): Promise<ScheduledCall | null> {
+    const info = await new ScheduleInfoQuery().setScheduleId(scheduleId).execute(d.hedera);
+    const tx = info.scheduledTransaction;
+    if (!(tx instanceof ContractExecuteTransaction) || !tx.contractId || !tx.functionParameters)
+      return null;
+    return {
+      contractId: tx.contractId.toString(),
+      data: `0x${Buffer.from(tx.functionParameters).toString("hex")}`,
+      scheduledTxId: info.scheduledTransactionId?.toString() ?? "",
+    };
+  }
+  const readSchedule = d.readSchedule ?? readOnHedera;
 
   return {
     async create(args: {
@@ -127,11 +151,11 @@ export function paymentScheduler(d: SchedulerDeps) {
     },
 
     /**
-     * At startup: our undo-window payments still pending on Hedera belong to a settle that died
-     * with the last run, so the agent was told it failed and won't do the job. Delete them so
-     * they can't pay for nothing. Returns the schedules deleted.
+     * At startup: take back our undo-window payments still pending on Hedera, so they can still
+     * be followed and cancelled. They run when their window ends whether or not we restarted:
+     * the agent sees the payment on-chain and does the job (see agent-jobs.md). Returns their ids.
      */
-    async sweep(): Promise<string[]> {
+    async adopt(): Promise<string[]> {
       const url = `${d.mirrorUrl}/api/v1/schedules?account.id=${d.feePayerId}&order=desc&limit=100`;
       const res = await fetchImpl(url).catch(() => null);
       if (!res?.ok) return [];
@@ -145,23 +169,29 @@ export function paymentScheduler(d: SchedulerDeps) {
           expiration_time: string | null;
         }[];
       };
-      const pending = schedules.filter(
-        (s) =>
-          s.memo === MEMO &&
-          s.creator_account_id === d.feePayerId &&
-          !s.deleted &&
-          !s.executed_timestamp &&
-          Number(s.expiration_time ?? 0) * 1000 > Date.now(),
-      );
-      const swept: string[] = [];
-      for (const s of pending) {
-        if (byId.has(s.schedule_id)) continue; // one of this run's own: someone is waiting on it
-        await remove(s.schedule_id).then(
-          () => swept.push(s.schedule_id),
-          (err) => console.error(`couldn't delete schedule ${s.schedule_id}:`, err),
-        );
+      const adopted: string[] = [];
+      for (const s of schedules) {
+        const executesAt = Number(s.expiration_time ?? 0) * 1000;
+        const ours = s.memo === MEMO && s.creator_account_id === d.feePayerId;
+        if (!ours || s.deleted || s.executed_timestamp || executesAt <= Date.now()) continue;
+        if (byId.has(s.schedule_id)) continue;
+        const call = await readSchedule(s.schedule_id).catch(() => null);
+        const mandateId = call && mandateOfCall(call.data);
+        if (!call || mandateId === null) continue;
+        const p: PendingPayment = {
+          key: `adopted:${s.schedule_id}`, // the payment key needs the payer's Hedera id; not kept
+          scheduleId: s.schedule_id,
+          scheduledTxId: call.scheduledTxId,
+          executesAt,
+          mandateId,
+          executor: call.contractId,
+          status: "scheduled",
+        };
+        byId.set(p.scheduleId, p);
+        byKey.set(p.key, p);
+        adopted.push(p.scheduleId);
       }
-      return swept;
+      return adopted;
     },
 
     byKey: (key: string) => byKey.get(key) ?? null,
@@ -170,3 +200,14 @@ export function paymentScheduler(d: SchedulerDeps) {
 }
 
 export type PaymentScheduler = ReturnType<typeof paymentScheduler>;
+
+/** The mandate an executeTransfer call pays from (null if it isn't one). */
+function mandateOfCall(data: Hex): string | null {
+  try {
+    const { functionName, args } = decodeFunctionData({ abi: mandateRegistryAbi, data });
+    if (functionName !== "executeTransfer") return null;
+    return decodeX402Authorization(args[4] as Hex).mandateId.toString();
+  } catch {
+    return null;
+  }
+}

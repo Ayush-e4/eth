@@ -13,7 +13,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import type { Db } from "../db/client";
 import type { Chat, MandateRow } from "../db/schema";
 import { approvalBook } from "./approvals";
-import { grantSubMandate, recordSubHires, vetSubcontract } from "./delegate";
+import { grantSubMandate, vetSubcontract } from "./delegate";
 import type { HiringEnv } from "./env";
 import {
   chatRemaining,
@@ -23,8 +23,9 @@ import {
   type Payee,
   PER_PAYMENT_CAP,
 } from "./mandates";
+import type { PendingHires } from "./pending";
 import { quoteRefs } from "./quote-refs";
-import { saveHire } from "./record";
+import { finishHire } from "./record";
 import type { Reputation } from "./reputation";
 import type { UndoWindows } from "./undo";
 
@@ -37,6 +38,7 @@ export type HireOutcome =
   | { status: "hired"; card: Extract<Card, { type: "hired" }>; result: unknown }
   | { status: "needs_limit"; card: Extract<Card, { type: "limit" }> }
   | { status: "needs_approval"; card: Extract<Card, { type: "approval" }> }
+  | { status: "pending"; reason: string } // paid (or paying); the result is posted when it's in
   | { status: "refused"; reason: string };
 
 /**
@@ -48,7 +50,12 @@ export type HireOutcome =
 export function hiringService(
   db: Db,
   env: HiringEnv,
-  opts: { requireHuman?: boolean; reputation?: Reputation; undo?: UndoWindows } = {},
+  opts: {
+    requireHuman?: boolean;
+    reputation?: Reputation;
+    undo?: UndoWindows;
+    pending?: PendingHires;
+  } = {},
 ) {
   const refs = quoteRefs(db);
   const approvals = approvalBook(db, opts.requireHuman);
@@ -218,47 +225,48 @@ export function hiringService(
             budget: delegation.budget.toString(),
             payees: delegation.payees,
           });
-        const hire = await buy(
-          h.round,
-          h.option,
-          label,
-          deps,
-          reason,
-          delegation && { mandateId: delegation.mandateId, payer: delegation.payer }, // sent as JSON
-        );
-        await refs.drop(chat.id, h.round.task); // that job is done
-        // The payer reviews the agent on its ERC-8004 identity, in the background.
-        void opts.reputation?.rate(hire.agent, hire.skill, hire.endpoint);
-        const log = await saveHire(db, env, {
+        // Written down before paying: if this turn can't see the job through, it isn't lost.
+        const tracked = await opts.pending?.begin({
           chatId: chat.id,
           mandateId: m.mandateId,
-          skill: hire.skill,
-          agent: hire.agent,
-          title: hire.agentTitle,
-          feeUnits: hire.feeUnits,
-          hederaTx: hire.hederaTx,
-          jobKey: hire.jobKey,
-          result: hire.result,
+          payer: m.payer,
+          round: h.round,
+          option: h.option,
+          delegation,
+          label,
+          reason,
         });
-        const subHires = delegation
-          ? await recordSubHires(db, env, chat.id, delegation, hire.result)
-          : undefined;
-        return {
-          status: "hired",
-          result: hire.result,
-          card: {
-            type: "hired",
-            skill: hire.skill,
-            title: hire.agentTitle.split(" — ")[0] ?? hire.agentTitle,
-            summary: hire.quoteNote,
-            feeUnits: hire.feeUnits.toString(),
-            hederaTx: hire.hederaTx,
-            jobKey: hire.jobKey,
-            log,
-            subMandateId: delegation?.mandateId,
-            subHires,
-          },
-        };
+        let hire: Awaited<ReturnType<typeof buy>>;
+        try {
+          hire = await buy(
+            h.round,
+            h.option,
+            label,
+            deps,
+            reason,
+            delegation && { mandateId: delegation.mandateId, payer: delegation.payer }, // as JSON
+          );
+        } catch (err) {
+          if (tracked && (err as Error)?.name === "HirePending") {
+            opts.pending?.follow(tracked);
+            return {
+              status: "pending",
+              reason: `${nameOf(h.option)} is still on it; its result will be posted in this chat when it's done`,
+            };
+          }
+          if (tracked) await opts.pending?.end(tracked);
+          throw err;
+        }
+        await refs.drop(chat.id, h.round.task); // that job is done
+        const card = await finishHire(db, env, {
+          chatId: chat.id,
+          mandateId: m.mandateId,
+          hire,
+          delegation,
+          reputation: opts.reputation,
+        });
+        if (tracked) await opts.pending?.end(tracked);
+        return { status: "hired", result: hire.result, card };
       } catch (err) {
         return {
           status: "refused",

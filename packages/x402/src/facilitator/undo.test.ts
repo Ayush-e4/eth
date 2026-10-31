@@ -1,4 +1,5 @@
-import { encodeAbiParameters } from "viem";
+import { mandateRegistryAbi } from "@eth/mandates";
+import { encodeAbiParameters, encodeFunctionData } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { describe, expect, it } from "vitest";
 import { cancelMessage, ERR, type PaymentPayload, type PaymentRequirements } from "../types";
@@ -126,7 +127,7 @@ describe("paymentScheduler.outcome", () => {
   });
 });
 
-describe("paymentScheduler.sweep (facilitator start)", () => {
+describe("paymentScheduler.adopt (facilitator start)", () => {
   const OP = "0.0.2";
   const later = String(Math.floor(Date.now() / 1000) + 60);
   const s = (over: object) => ({
@@ -138,8 +139,26 @@ describe("paymentScheduler.sweep (facilitator start)", () => {
     expiration_time: later,
     ...over,
   });
+  const call = (mandateId: bigint) => ({
+    contractId: "0.0.11102395",
+    scheduledTxId: "0.0.2@1.2?scheduled",
+    data: encodeFunctionData({
+      abi: mandateRegistryAbi,
+      functionName: "executeTransfer",
+      args: [
+        "0x0000000000000000000000000000000000000001",
+        "0x0000000000000000000000000000000000068cda",
+        "0x0000000000000000000000000000000000000002",
+        30_000n,
+        encodeAbiParameters(
+          [{ type: "uint256" }, { type: "uint256" }, { type: "uint256" }, { type: "bytes" }],
+          [mandateId, 5n, 9n, "0x"],
+        ),
+      ],
+    }),
+  });
 
-  it("deletes only our own undo-window payments that are still pending", async () => {
+  it("takes back only our own pending undo-window payments, which can then still be cancelled", async () => {
     const deleted: string[] = [];
     const schedules = [
       s({}),
@@ -155,25 +174,40 @@ describe("paymentScheduler.sweep (facilitator start)", () => {
       feePayerId: OP,
       mirrorUrl: "https://mirror",
       fetchImpl: (async () => Response.json({ schedules })) as unknown as typeof fetch,
+      readSchedule: async () => call(44n),
       deleteSchedule: async (id) => {
         deleted.push(id);
       },
     });
-    expect(await sched.sweep()).toEqual(["0.0.800"]);
+    expect(await sched.adopt()).toEqual(["0.0.800"]);
+    expect(sched.byId("0.0.800")).toMatchObject({
+      mandateId: "44",
+      executor: "0.0.11102395",
+      status: "scheduled",
+      scheduledTxId: "0.0.2@1.2?scheduled",
+    });
+    expect(deleted).toEqual([]); // adopted, not deleted: it still runs when its window ends
+    expect(await sched.cancel("0.0.800")).toBe(true);
     expect(deleted).toEqual(["0.0.800"]);
   });
 
-  it("does nothing when the mirror can't be read", async () => {
-    const sched = paymentScheduler({
+  it("skips a schedule that isn't a payment through the registry, and an unreadable mirror", async () => {
+    const odd = paymentScheduler({
+      hedera: {} as never,
+      adminKey: {} as never,
+      feePayerId: OP,
+      mirrorUrl: "https://mirror",
+      fetchImpl: (async () => Response.json({ schedules: [s({})] })) as unknown as typeof fetch,
+      readSchedule: async () => ({ contractId: "0.0.1", data: "0x1234", scheduledTxId: "" }),
+    });
+    expect(await odd.adopt()).toEqual([]);
+    const down = paymentScheduler({
       hedera: {} as never,
       adminKey: {} as never,
       feePayerId: OP,
       mirrorUrl: "https://mirror",
       fetchImpl: (async () => new Response("", { status: 503 })) as unknown as typeof fetch,
-      deleteSchedule: async () => {
-        throw new Error("should not delete");
-      },
     });
-    expect(await sched.sweep()).toEqual([]);
+    expect(await down.adopt()).toEqual([]);
   });
 });

@@ -15,8 +15,8 @@ export interface FacilitatorEnv {
   /** Optional HCS topic for the public spend log. */
   spendLogTopicId?: string;
   gas?: bigint;
-  /** On start, delete undo-window payments a previous run left pending (see scheduler.sweep). */
-  sweepOnStart?: boolean;
+  /** On start, take back undo-window payments a previous run left pending (scheduler.adopt). */
+  adoptOnStart?: boolean;
 }
 
 /** Wires the x402 facilitator to Hedera testnet: our operator pays fees, MandateRegistry is admitted. */
@@ -45,17 +45,11 @@ export function buildFacilitator(env: FacilitatorEnv) {
     feePayerId: env.hedera.operatorId,
     mirrorUrl: net.mirrorUrl,
   });
-  if (env.sweepOnStart)
-    void scheduler.sweep().then(async (ids) => {
-      for (const scheduleId of ids) {
-        console.log(`deleted schedule ${scheduleId}: left pending by the last run`);
-        await log({
-          kind: "x402.schedule.cancelled",
-          scheduleId,
-          reason: "the facilitator restarted, so nobody was waiting for this payment",
-        });
-      }
-    });
+  if (env.adoptOnStart)
+    void scheduler
+      .adopt()
+      .then((ids) => ids.length && console.log(`following ${ids.length} pending payment(s)`))
+      .catch((err) => console.error("adopting pending payments failed:", err));
   const cancel = scheduler.cancel;
   scheduler.cancel = async (scheduleId) => {
     const ok = await cancel(scheduleId);
