@@ -6,8 +6,9 @@ import { createMiddleware } from "hono/factory";
 import { z } from "zod";
 import type { Config } from "../config";
 import type { Db } from "../db/client";
-import { type User, users } from "../db/schema";
+import { passkeys, type User, users } from "../db/schema";
 import { limitUnitsSchema } from "../limits";
+import { passkeyAuth } from "./passkey";
 import { rolesFor } from "./roles";
 import { createSession, endSession, SESSION_COOKIE, SESSION_TTL_MS, userForToken } from "./session";
 import { demoUser, issueNonce, SignInError, signIn } from "./siwe";
@@ -26,6 +27,12 @@ const VerifyBody = z.object({
   message: z.string().min(1).max(4000),
   signature: z.string().regex(/^0x[0-9a-fA-F]+$/),
 });
+
+// The browser's passkey response; the passkey library checks every field of it.
+const PasskeyBody = z.object({
+  response: z.looseObject({ id: z.string().min(1).max(1024), type: z.literal("public-key") }),
+});
+const PasskeyName = z.object({ name: z.string().max(60).optional() });
 
 /** The user as the app sees it: no internal ids beyond its own, roles computed here. */
 export function publicUser(user: User, config: Config) {
@@ -91,13 +98,52 @@ export function authRoutes(db: Db, config: Config) {
     return startSession(c, await demoUser(db));
   });
 
+  // Passkeys. A new one makes an account that pays from the demo wallet, so it needs demo mode.
+  const passkey = passkeyAuth(db, {
+    rpID: new URL(config.appOrigin).hostname,
+    origin: config.appOrigin,
+  });
+  const passkeyIn = async (c: Context, go: (response: never) => Promise<User>) => {
+    const body = PasskeyBody.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return c.json({ error: "send the passkey response" }, 400);
+    try {
+      return await startSession(c, await go(body.data.response as never));
+    } catch (e) {
+      if (e instanceof SignInError) return c.json({ error: e.message }, 401);
+      throw e;
+    }
+  };
+
+  app.post("/auth/passkey/register/options", async (c) => {
+    if (!config.demoMode) return c.json({ error: "new accounts need demo mode" }, 403);
+    const body = PasskeyName.safeParse(await c.req.json().catch(() => ({})));
+    return c.json(await passkey.registrationOptions(body.data?.name));
+  });
+  app.post("/auth/passkey/register", (c) =>
+    config.demoMode
+      ? passkeyIn(c, (r) => passkey.register(r))
+      : c.json({ error: "new accounts need demo mode" }, 403),
+  );
+  app.post("/auth/passkey/login/options", async (c) =>
+    c.json(await passkey.authenticationOptions()),
+  );
+  app.post("/auth/passkey/login", (c) => passkeyIn(c, (r) => passkey.authenticate(r)));
+
   app.post("/auth/logout", async (c) => {
     await endSession(db, getCookie(c, SESSION_COOKIE));
     deleteCookie(c, SESSION_COOKIE, { path: "/" });
     return c.json({ ok: true });
   });
 
-  app.get("/me", requireUser(db), (c) => c.json({ user: publicUser(c.get("user"), config) }));
+  app.get("/me", requireUser(db), async (c) => {
+    const user = c.get("user");
+    const keys = await db
+      .select({ id: passkeys.id })
+      .from(passkeys)
+      .where(eq(passkeys.userId, user.id))
+      .limit(1);
+    return c.json({ user: { ...publicUser(user, config), passkey: keys.length > 0 } });
+  });
 
   app.patch("/me", requireUser(db), async (c) => {
     const body = ProfilePatch.safeParse(await c.req.json().catch(() => null));

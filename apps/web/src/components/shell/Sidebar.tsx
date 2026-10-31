@@ -150,7 +150,13 @@ export function Sidebar() {
                 {me?.displayName ?? (me?.isDemo ? "Demo" : "You")}
               </span>
               <span className="truncate font-mono text-xs text-muted">
-                {me?.address ? shortAddress(me.address) : me?.isDemo ? "demo account" : "…"}
+                {me?.address
+                  ? shortAddress(me.address)
+                  : me?.passkey
+                    ? "passkey · demo wallet"
+                    : me?.isDemo
+                      ? "demo account"
+                      : "…"}
               </span>
             </span>
           </span>
