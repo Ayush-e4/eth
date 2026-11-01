@@ -101,6 +101,25 @@ export function createApp(db: Db, config: Config, deps: AppDeps = {}) {
     await next();
   });
 
+  // Refused and failed requests, for reading the server logs: what was asked and what we said
+  // back (our own error text; never bodies or tokens). Signed-out /me checks are routine.
+  app.use("*", async (c, next) => {
+    await next();
+    const status = c.res.status;
+    if (status < 400 || (status === 401 && c.req.path === "/me")) return;
+    const said = await c.res
+      .clone()
+      .json()
+      .then((b) => {
+        const e = (b as { error?: unknown } | null)?.error;
+        return typeof e === "string" ? e : "";
+      })
+      .catch(() => "");
+    console.log(
+      `${c.req.method} ${c.req.path} -> ${status}${said ? `: ${said.slice(0, 160)}` : ""}`,
+    );
+  });
+
   app.get("/health", (c) => c.json(health("api")));
   app.route("/", authRoutes(db, config, deps.wallets ?? null, deps.links ?? null));
   const { concierge = null, hiring = null } = deps;
