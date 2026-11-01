@@ -76,7 +76,8 @@ export const LimitCardSchema = z.object({
   registry: address,
   token: address,
   agent: address, // the concierge, who signs each payment
-  payees: z.array(z.object({ name: z.string(), agent: address })).min(1),
+  // Who it may pay. Empty: any agent (a Telegram budget, a connected app's limit), capped by budget.
+  payees: z.array(z.object({ name: z.string(), agent: address })),
 });
 
 /** "Ask first" chats: the user approves one payment. The buttons send "Approve <code>" or "Decline <code>". */

@@ -80,9 +80,20 @@ export function LimitCard({ card, ctx }: { card: Extract<Card, { type: "limit" }
       </div>
       <p className="text-sm leading-relaxed text-[#5C3A00]">
         Up to <strong className="font-mono">{usdc(card.budgetUnits)} USDC</strong> in agent fees, at
-        most <span className="font-mono">{usdc(card.perPaymentCapUnits)}</span> per payment, only to{" "}
-        <strong>{card.payees.map((p) => p.name).join(", ")}</strong>, for the next 24 hours. Hedera
-        enforces it: nobody can spend past it.
+        most <span className="font-mono">{usdc(card.perPaymentCapUnits)}</span> per payment,{" "}
+        {card.payees.length ? (
+          <>
+            only to <strong>{card.payees.map((p) => p.name).join(", ")}</strong>
+          </>
+        ) : (
+          <>to any agent on the market</>
+        )}
+        , until{" "}
+        {new Date(card.expiresAt * 1000).toLocaleDateString("en-IN", {
+          day: "numeric",
+          month: "short",
+        })}
+        . Hedera enforces it: nobody can spend past it.
         {ctx.faceId && " It comes from your own wallet, and only your Face ID can approve it."}
       </p>
       {state === "done" ? (
