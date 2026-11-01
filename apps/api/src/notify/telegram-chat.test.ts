@@ -114,6 +114,31 @@ describe("chatting on Telegram", () => {
     expect(sent).toEqual([]); // not a Telegram chat: nothing sent
   });
 
+  it("says straight away when a payment is waiting out its undo window", async () => {
+    const paying: Concierge = async (input) => {
+      input.emit({
+        type: "card",
+        card: {
+          type: "payment",
+          scheduleId: "0.0.1",
+          executesAt: "2026-11-01T18:25:49Z",
+          title: "StayWise",
+          feeUnits: "40000",
+        } as Card,
+      });
+      return { text: "Booked!", cards: [] };
+    };
+    await telegramChat(db, {
+      notify,
+      concierge: paying,
+      appOrigin: "https://x.example",
+      links,
+    }).onText("42", "Go with StayWise (q5)");
+    const texts = sent.filter((s) => s.method === "sendMessage").map((s) => String(s.body.text));
+    expect(texts[0]).toMatch(/^0\.04 USDC to StayWise pays at 11:55 pm .*Booking now…$/i);
+    expect(texts[1]).toBe("Booked!");
+  });
+
   it("tells an unlinked chat how to link", async () => {
     await chat().onText("99", "hello");
     expect(asked).toEqual([]);
