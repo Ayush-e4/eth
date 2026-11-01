@@ -1,5 +1,6 @@
 // Deploys the PasskeyWalletFactory (from `forge build` output) and prints the .env line that
-// turns on Face ID wallets. Run: pnpm --filter @eth/mandates deploy-wallet-factory
+// turns on Face ID wallets. Run: pnpm --filter @eth/mandates deploy-wallet-factory [v2]
+// (v2: wallets any of several devices' passkeys can use.)
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { loadConfig, NETWORKS } from "@eth/hedera";
@@ -12,14 +13,11 @@ const net = NETWORKS[config.network];
 const key = (
   config.operatorKey.startsWith("0x") ? config.operatorKey : `0x${config.operatorKey}`
 ) as Hex;
+const v2 = process.argv.includes("v2");
+const name = v2 ? "PasskeyWalletFactoryV2" : "PasskeyWalletFactory";
 const artifact = JSON.parse(
   readFileSync(
-    fileURLToPath(
-      new URL(
-        "../../contracts/out/PasskeyWalletFactory.sol/PasskeyWalletFactory.json",
-        import.meta.url,
-      ),
-    ),
+    fileURLToPath(new URL(`../../contracts/out/${name}.sol/${name}.json`, import.meta.url)),
     "utf8",
   ),
 ) as { bytecode: { object: Hex } };
@@ -38,4 +36,4 @@ const hash = await wallet.deployContract({
 const receipt = await reader.waitForTransactionReceipt({ hash });
 if (receipt.status !== "success" || !receipt.contractAddress) throw new Error(`failed: ${hash}`);
 console.log(`deployed ${receipt.contractAddress}  ${net.hashscanUrl}/transaction/${hash}`);
-console.log(`\nAdd to .env:\nPASSKEY_WALLET_FACTORY=${receipt.contractAddress}`);
+console.log(`\nAdd to .env:\nPASSKEY_WALLET_FACTORY${v2 ? "_V2" : ""}=${receipt.contractAddress}`);

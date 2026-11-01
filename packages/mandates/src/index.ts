@@ -22,12 +22,16 @@ export {
 } from "./paid";
 export {
   type Assertion,
+  addKeyCalls,
   assertionFromWebAuthn,
+  type KeySig,
   limitCalls,
   type PasskeyKey,
   PasskeyWalletClient,
   passkeyWalletAbi,
   passkeyWalletFactoryAbi,
+  passkeyWalletV2Abi,
+  removeKeyCalls,
   revokeCalls,
   type WalletCall,
 } from "./passkey-wallet";

@@ -24,6 +24,9 @@ export const DEPLOYMENTS = {
     /** Makes passkey wallets (Face ID controls them). */
     passkeyWalletFactory: (env.PASSKEY_WALLET_FACTORY ||
       "0x8ab68603de289c90b577d58b28f52365529347d1") as `0x${string}`,
+    /** Makes v2 passkey wallets: one account, a passkey per device. New wallets come from here. */
+    passkeyWalletFactoryV2: (env.PASSKEY_WALLET_FACTORY_V2 ||
+      "0x560619a385a3e84281eae251b1276df8a5b835d4") as `0x${string}`,
     /** Registries we used before, oldest first: nothing new goes there. */
     previous: [
       {
