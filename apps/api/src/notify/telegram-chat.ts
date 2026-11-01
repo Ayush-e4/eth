@@ -72,6 +72,12 @@ export function telegramChat(
       const turn = await runTurn(db, d.concierge, chat, user, text, {
         onUserMessage: d.onUserMessage,
         channel: "telegram",
+        // A payment waits out its undo window (a minute) before the agent works: say so now,
+        // as the app's live card does, instead of a long silent "typing…".
+        emit: (e) => {
+          if (e.type === "card" && e.card.type === "payment")
+            void send(tgChatId, `${telegramReply("", [e.card], "").text} Booking now…`);
+        },
       });
       const reply = telegramReply(turn.text, turn.cards, buttonLink(user.id, chat.id, turn.cards));
       await send(tgChatId, reply.text || "Done.", reply.markup);
