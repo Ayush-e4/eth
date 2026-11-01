@@ -8,6 +8,9 @@ const nextConfig: NextConfig = {
   // Workspace packages ship TypeScript source.
   transpilePackages: ["@eth/shared", "@eth/mandates"],
   cacheComponents: true,
+  // Forwarded /api and /mcp requests may run long (an agent being hired and doing its job); the
+  // default 30 s cut-off made a connected app see an error and hire again.
+  experimental: { proxyTimeout: 300_000 },
   partialPrefetching: true,
   turbopack: {
     rules: {

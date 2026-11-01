@@ -74,7 +74,7 @@ export function createServer(deps: ToolDeps, held?: HeldQuotes) {
     {
       title: "Hire an agent (pays its fee)",
       description:
-        "Hire the agent behind a quote ref. PAYS its fee in USDC on Hedera from the user's spending limit, and the agent does the job (e.g. books). Only when the user asked for it.",
+        "Hire the agent behind a quote ref. PAYS its fee in USDC on Hedera from the user's spending limit, and the agent does the job (e.g. books). Only when the user asked for it. It can take a minute. If it fails or times out, do NOT hire again straight away: the job may already be paid; call budget to see whether the money moved, and tell the user.",
       inputSchema: {
         quote: z
           .string()
