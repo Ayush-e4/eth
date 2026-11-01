@@ -53,9 +53,21 @@ export async function collectQuotes(
   );
   d.log(`[${skill}] ${listings.length} listing(s) on Arkiv`);
 
+  // A limit that names its payees allows only those. One that doesn't (any agent, as an app
+  // connection's limit) allows everyone, and the registry's payee list is then simply empty.
+  const open =
+    d.mandateId !== undefined &&
+    !(
+      await d.evm.readContract({
+        address: d.registry,
+        abi: mandateRegistryAbi,
+        functionName: "getMandate",
+        args: [d.mandateId],
+      })
+    ).restrictPayees;
   const allowed = [];
   for (const l of listings) {
-    if (d.mandateId === undefined) {
+    if (d.mandateId === undefined || open) {
       allowed.push(l);
       continue;
     }

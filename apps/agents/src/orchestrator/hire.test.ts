@@ -68,7 +68,10 @@ function deps(over: Partial<HireDeps> = {}): HireDeps {
       },
     })) as never,
     evm: {
-      readContract: vi.fn(async ({ args }: { args: [bigint, string] }) => args[1] !== C),
+      readContract: vi.fn(
+        async ({ functionName, args }: { functionName: string; args: [bigint, string] }) =>
+          functionName === "getMandate" ? { restrictPayees: true } : args[1] !== C,
+      ),
     } as never,
     registry: "0x2f30e8F1804Fe163C76918db493a441D44394D5d",
     mandateId: 3n,
@@ -105,6 +108,22 @@ describe("hire", () => {
     expect(h.agent).toBe(B);
     expect(h.choice).toContain("delivered 10 of 10 paid jobs");
     expect(h.choice).toContain("has delivered only 1 of 10 paid jobs");
+  });
+
+  it("a limit for any agent (an app connection's) asks every listed agent", async () => {
+    const d = deps({
+      evm: {
+        readContract: vi.fn(async ({ functionName }: { functionName: string }) =>
+          functionName === "getMandate" ? { restrictPayees: false } : false,
+        ),
+      } as never,
+    });
+    await hire("flights", "t1", trip, d);
+    expect(quoteFetch.mock.calls.map((c) => c[0])).toEqual([
+      `http://${A}/quote`,
+      `http://${B}/quote`,
+      `http://${C}/quote`,
+    ]);
   });
 
   it("asks only mandate-allowed agents, buys the lowest TOTAL cost, records it on Arkiv", async () => {
