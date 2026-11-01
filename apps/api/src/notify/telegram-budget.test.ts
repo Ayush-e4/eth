@@ -25,6 +25,7 @@ beforeEach(async () => {
   ready = true;
   const wallets = {
     get: async () => (ready ? { status: "ready" } : null),
+    prepare: async () => ({ opId: "op-1", options: { challenge: "abc" } }),
   } as unknown as PasskeyWallets;
   app = createApp(db, loadConfig({ NODE_ENV: "test", APP_ORIGIN: ORIGIN }), {
     hiring: { env, service: { noteUserMessage: () => {} } as unknown as HiringService },
@@ -65,6 +66,11 @@ describe("the Telegram budget", () => {
     expect(chat).toMatchObject({ title: "Telegram", mode: "auto", limitUnits: 300_000n });
     const [link] = await db.select().from(notifyChannels);
     expect(link?.appChatId).toBe(chatId); // the bot talks into this same chat
+
+    // …and the chat's Face ID step takes that card as it is (it names no agents).
+    const prep = await call("POST", `/chats/${chatId}/mandate/face-id`, { card });
+    expect(prep.status).toBe(200);
+    expect(await prep.json()).toMatchObject({ opId: "op-1" });
   });
 
   it("needs a passkey account's wallet", async () => {
