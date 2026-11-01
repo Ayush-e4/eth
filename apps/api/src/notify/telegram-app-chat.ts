@@ -1,10 +1,11 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { chatStore } from "../chats/store";
 import type { Db } from "../db/client";
 import { type Chat, chats, notifyChannels, type User } from "../db/schema";
 
 /** A person's linked Telegram: the chat id there, and the AgentNet chat it talks into. */
 export async function telegramLink(db: Db, by: { userId: string } | { tgChatId: string }) {
+  // Newest first: a chat linked again belongs to the account that linked it last.
   const [row] = await db
     .select()
     .from(notifyChannels)
@@ -16,7 +17,9 @@ export async function telegramLink(db: Db, by: { userId: string } | { tgChatId: 
           ? eq(notifyChannels.userId, by.userId)
           : eq(notifyChannels.address, by.tgChatId),
       ),
-    );
+    )
+    .orderBy(desc(notifyChannels.createdAt))
+    .limit(1);
   return row ?? null;
 }
 
