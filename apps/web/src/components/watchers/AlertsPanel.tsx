@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { ApiError, api } from "@/lib/api";
+import { TelegramBudget } from "./TelegramBudget";
 
 interface Channels {
   ntfy: { topic: string; url: string } | null;
@@ -125,6 +126,11 @@ export function AlertsPanel() {
           >
             Connect Telegram
           </button>
+        )}
+        {c.telegramAvailable && c.telegram?.linked && (
+          <Suspense fallback={null}>
+            <TelegramBudget />
+          </Suspense>
         )}
       </div>
       <span className="flex flex-wrap items-center gap-3">

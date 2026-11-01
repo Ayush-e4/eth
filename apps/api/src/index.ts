@@ -2,6 +2,7 @@ import { NETWORKS } from "@eth/hedera";
 import { DEPLOYMENTS } from "@eth/mandates";
 import { serve } from "@hono/node-server";
 import { createApp } from "./app";
+import { signInLinks } from "./auth/links";
 import { agentChecker } from "./builders/check";
 import { closeInterruptedTurns } from "./chats/interrupted";
 import { claudeConcierge } from "./concierge/concierge";
@@ -180,21 +181,21 @@ const concierge = process.env.ANTHROPIC_API_KEY
   ? claudeConcierge(market, hiring?.service ?? null, undefined, tasks, desk, guard)
   : null;
 if (!concierge) console.warn("ANTHROPIC_API_KEY not set: the concierge is off");
-// The Telegram bot: linking and alerts, and (with the concierge on) chatting.
-telegramBot(
-  notify,
-  console.log,
-  concierge
-    ? telegramChat(db, {
-        notify,
-        concierge,
-        appOrigin: config.appOrigin,
-        onUserMessage: (id, text) => hiring?.service.noteUserMessage(id, text),
-        demo,
-        log: console.log,
-      })
-    : undefined,
-);
+// The Telegram bot: linking and alerts, and (with the concierge on) chatting. Its buttons open
+// the app signed in, through one-time links.
+const links = signInLinks();
+const telegram = concierge
+  ? telegramChat(db, {
+      notify,
+      concierge,
+      appOrigin: config.appOrigin,
+      links,
+      onUserMessage: (id, text) => hiring?.service.noteUserMessage(id, text),
+      demo,
+      log: console.log,
+    })
+  : null;
+telegramBot(notify, console.log, telegram?.onText);
 
 serve(
   {
@@ -214,6 +215,8 @@ serve(
       catalog,
       checkAgent,
       wallets,
+      links,
+      afterTurn: telegram ? (id, reply) => telegram.mirror(id, reply) : undefined,
       connect: env ? { oauth: oauthStore(db, env.concierge.key), market, post } : null,
       ops: {
         env,

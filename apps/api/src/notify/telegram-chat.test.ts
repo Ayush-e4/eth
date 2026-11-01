@@ -1,6 +1,7 @@
 import type { Card } from "@eth/shared";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
+import { signInLinks } from "../auth/links";
 import type { Concierge } from "../concierge/concierge";
 import type { Db } from "../db/client";
 import { chats, messages, notifyChannels, users } from "../db/schema";
@@ -39,8 +40,9 @@ const concierge: Concierge = async (input) => {
   asked.push(input.text);
   return { text: "Here's an agent for that. **PackPal** can do it.", cards: [quotes] };
 };
+const links = signInLinks();
 const chat = () =>
-  telegramChat(db, { notify, concierge, appOrigin: "https://agentnetai.duckdns.org" });
+  telegramChat(db, { notify, concierge, appOrigin: "https://agentnetai.duckdns.org", links });
 
 beforeEach(async () => {
   db = await testDb();
@@ -54,7 +56,7 @@ beforeEach(async () => {
 
 describe("chatting on Telegram", () => {
   it("a linked chat talks to the concierge in its own AgentNet chat, with buttons", async () => {
-    await chat()("42", "Get me a packing list for Goa");
+    await chat().onText("42", "Get me a packing list for Goa");
     expect(asked).toEqual(["Get me a packing list for Goa"]);
     expect(sent[0]?.method).toBe("sendChatAction");
     const reply = sent.find((s) => s.method === "sendMessage")?.body;
@@ -70,12 +72,50 @@ describe("chatting on Telegram", () => {
         .from(messages)
         .where(eq(messages.chatId, c?.id ?? "")),
     ).toHaveLength(2);
-    await chat()("42", "Hire PackPal (q1)"); // the button's text comes back as a message
+    await chat().onText("42", "Hire PackPal (q1)"); // the button's text comes back as a message
     expect(await db.select().from(chats)).toHaveLength(1); // the same chat
   });
 
+  it("tells the concierge it's on Telegram, and a limit's button signs you in to the budget", async () => {
+    let channel: string | undefined;
+    const limitConcierge: Concierge = async (input) => {
+      channel = input.channel;
+      return {
+        text: "Your Telegram budget needs approving.",
+        cards: [{ type: "limit", budgetUnits: "300000" } as Card],
+      };
+    };
+    await telegramChat(db, {
+      notify,
+      concierge: limitConcierge,
+      appOrigin: "https://x.example",
+      links,
+    }).onText("42", "book it");
+    expect(channel).toBe("telegram");
+    const markup = sent.find((s) => s.method === "sendMessage")?.body.reply_markup as {
+      inline_keyboard: { text: string; url: string }[][];
+    };
+    const url = new URL(markup.inline_keyboard[0]?.[0]?.url ?? "");
+    expect(url.pathname).toBe("/api/auth/link");
+    expect(links.take(url.searchParams.get("t") ?? "")?.path).toBe("/watchers?telegram=budget");
+  });
+
+  it("sends a turn made in the app (after approving) on to Telegram", async () => {
+    await chat().onText("42", "Get me a packing list");
+    const [c] = await db.select().from(chats);
+    sent = [];
+    await chat().mirror(c?.id ?? "", { text: "Booked: PackPal is on it.", cards: [] });
+    expect(sent[0]).toMatchObject({
+      method: "sendMessage",
+      body: { chat_id: "42", text: "Booked: PackPal is on it." },
+    });
+    sent = [];
+    await chat().mirror("00000000-0000-0000-0000-000000000000", { text: "x", cards: [] });
+    expect(sent).toEqual([]); // not a Telegram chat: nothing sent
+  });
+
   it("tells an unlinked chat how to link", async () => {
-    await chat()("99", "hello");
+    await chat().onText("99", "hello");
     expect(asked).toEqual([]);
     expect(String(sent[0]?.body.text)).toContain("Connect Telegram");
   });

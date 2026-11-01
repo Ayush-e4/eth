@@ -2,6 +2,7 @@ import { type Card, health } from "@eth/shared";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { accountRoutes } from "./account/routes";
+import type { SignInLinks } from "./auth/links";
 import { authRoutes } from "./auth/routes";
 import type { AgentChecker } from "./builders/check";
 import { builderRoutes } from "./builders/routes";
@@ -28,6 +29,7 @@ import { marketRoutes } from "./market/routes";
 import type { Notifier } from "./notify/notifier";
 import type { ChatPoster } from "./notify/post";
 import { notifyRoutes } from "./notify/routes";
+import { telegramBudgetRoutes } from "./notify/telegram-budget";
 import { type OpsDeps, opsRoutes } from "./ops/routes";
 import { type LogNames, spendLogRoutes } from "./spend-log/routes";
 import type { StatusCheck } from "./status/check";
@@ -60,6 +62,10 @@ export interface AppDeps {
   ops?: OpsDeps | null;
   /** Connected apps (MCP over OAuth): who they are, and what they may browse. */
   connect?: { oauth: OAuthStore; market: Market; post: ChatPoster | null } | null;
+  /** One-time sign-in links (the Telegram bot's buttons). */
+  links?: SignInLinks | null;
+  /** After a web chat turn (the Telegram chat's replies go on to Telegram). */
+  afterTurn?: (chatId: string, reply: { text: string; cards: Card[] }) => unknown;
 }
 
 /** A listed agent's name and skill, for starting a chat with it alone. */
@@ -96,7 +102,7 @@ export function createApp(db: Db, config: Config, deps: AppDeps = {}) {
   });
 
   app.get("/health", (c) => c.json(health("api")));
-  app.route("/", authRoutes(db, config, deps.wallets ?? null));
+  app.route("/", authRoutes(db, config, deps.wallets ?? null, deps.links ?? null));
   const { concierge = null, hiring = null } = deps;
   app.route(
     "/",
@@ -106,6 +112,7 @@ export function createApp(db: Db, config: Config, deps: AppDeps = {}) {
       (id, text) => hiring?.service.noteUserMessage(id, text),
       deps.demo ?? null,
       finder(deps.catalog),
+      deps.afterTurn,
     ),
   );
   app.route(
@@ -129,6 +136,10 @@ export function createApp(db: Db, config: Config, deps: AppDeps = {}) {
   app.route("/", paymentRoutes(db, deps.undo ?? null, deps.review ?? null));
   app.route("/", watchRoutes(db, deps.watches ?? null));
   app.route("/", notifyRoutes(db, deps.notify ?? null));
+  app.route(
+    "/",
+    telegramBudgetRoutes(db, { env: hiring?.env ?? null, wallets: deps.wallets ?? null }),
+  );
   if (deps.ops) app.route("/", opsRoutes(db, config, deps.ops));
   if (deps.connect) {
     const env = hiring?.env ?? null;
