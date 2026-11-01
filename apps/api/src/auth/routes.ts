@@ -9,6 +9,7 @@ import type { Db } from "../db/client";
 import { passkeys, type User, users } from "../db/schema";
 import { limitUnitsSchema } from "../limits";
 import type { PasskeyWallets } from "../wallet/service";
+import { type DeviceLinks, deviceLabel } from "./device-links";
 import type { SignInLinks } from "./links";
 import { passkeyAuth } from "./passkey";
 import { rolesFor } from "./roles";
@@ -35,6 +36,8 @@ const PasskeyBody = z.object({
   response: z.looseObject({ id: z.string().min(1).max(1024), type: z.literal("public-key") }),
 });
 const PasskeyName = z.object({ name: z.string().max(60).optional() });
+const LinkCode = z.object({ code: z.string().min(8).max(20) });
+const LINK_GONE = "that code expired or was already used; make a new one on your other device";
 
 /** The user as the app sees it: no internal ids beyond its own, roles computed here. */
 export function publicUser(user: User, config: Config) {
@@ -66,6 +69,7 @@ export function authRoutes(
   config: Config,
   wallets: PasskeyWallets | null = null,
   links: SignInLinks | null = null,
+  devices: DeviceLinks | null = null,
 ) {
   const app = new Hono<AuthEnv>();
 
@@ -140,7 +144,7 @@ export function authRoutes(
   app.post("/auth/passkey/register", (c) =>
     config.demoMode
       ? passkeyIn(c, async (r) => {
-          const user = await passkey.register(r);
+          const user = await passkey.register(r, deviceLabel(c.req.header("user-agent")));
           void wallets?.ensure(user.id); // their own Face ID wallet, made in the background
           return user;
         })
@@ -150,6 +154,33 @@ export function authRoutes(
     c.json(await passkey.authenticationOptions()),
   );
   app.post("/auth/passkey/login", (c) => passkeyIn(c, (r) => passkey.authenticate(r)));
+
+  // Another device for an existing account: it makes its own passkey with the code a
+  // signed-in device showed, and is signed in. (Paying from the wallet needs that device's OK.)
+  const linkedUser = async (userId: string | null | undefined) =>
+    userId ? (await db.select().from(users).where(eq(users.id, userId)))[0] : undefined;
+  app.post("/auth/passkey/link/options", async (c) => {
+    const body = LinkCode.safeParse(await c.req.json().catch(() => null));
+    const user = await linkedUser(body.success ? devices?.peek(body.data.code) : null);
+    if (!user) return c.json({ error: LINK_GONE }, 410);
+    const keys = await db.select().from(passkeys).where(eq(passkeys.userId, user.id));
+    const name = user.displayName ?? undefined;
+    return c.json({ name: name ?? null, options: await passkey.registrationOptions(name, keys) });
+  });
+  app.post("/auth/passkey/link", async (c) => {
+    const body = LinkCode.extend(PasskeyBody.shape).safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return c.json({ error: "send the code and the passkey response" }, 400);
+    try {
+      const credential = await passkey.verifyNew(body.data.response as never);
+      const user = await linkedUser(devices?.take(body.data.code));
+      if (!user) return c.json({ error: LINK_GONE }, 410);
+      const label = deviceLabel(c.req.header("user-agent"));
+      return await startSession(c, await passkey.addDevice(user, credential, label));
+    } catch (e) {
+      if (e instanceof SignInError) return c.json({ error: e.message }, 401);
+      throw e;
+    }
+  });
 
   app.post("/auth/logout", async (c) => {
     await endSession(db, getCookie(c, SESSION_COOKIE));

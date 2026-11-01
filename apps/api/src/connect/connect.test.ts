@@ -24,6 +24,7 @@ const env = {
 const market: Market = { agents: async () => [] };
 let executed: WalletCall[][];
 const chain: WalletChain = {
+  version: 2,
   addressOf: async (k) => `0x${k.qx.slice(2, 42)}` as Address,
   create: async (k) => `0x${k.qx.slice(2, 42)}` as Address,
   hederaIdOf: async () => "0.0.7777",

@@ -17,6 +17,7 @@ import { cancelled, withFaceId } from "@/lib/passkey";
 import { revokeInWallet } from "@/lib/wallet";
 import { ConnectedApps } from "./ConnectedApps";
 import { DemoAllowance } from "./DemoAllowance";
+import { Devices } from "./Devices";
 import { TopUp } from "./TopUp";
 
 const STATUS: Record<Limit["status"], string> = {
@@ -138,7 +139,7 @@ export function WalletView() {
       {w.faceId && (
         <p className="rounded-xl bg-side px-4 py-3 text-sm leading-relaxed text-ink-3">
           {w.faceId.status === "ready"
-            ? "This wallet is a contract on Hedera whose only key is your passkey: limits and cancels need your Face ID or fingerprint, and nobody else (AgentNet included) can move its money. We pay its network fees."
+            ? "This wallet is a contract on Hedera whose only keys are your passkeys: limits and cancels need your Face ID or fingerprint, and nobody else (AgentNet included) can move its money. We pay its network fees."
             : w.faceId.status === "creating"
               ? "Setting up your wallet on Hedera. This takes a few seconds."
               : "Setting up your wallet didn't work. Reload this page to try again."}
@@ -147,6 +148,7 @@ export function WalletView() {
         </p>
       )}
       {w.faceId?.status === "ready" && w.address && <TopUp address={w.address} />}
+      {w.faceId && <Devices />}
       {w.faceId && <ConnectedApps />}
       {w.shared && <DemoAllowance />}
       {w.shared && (

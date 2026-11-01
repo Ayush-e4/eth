@@ -1,5 +1,5 @@
 import { createPublicKey, verify } from "node:crypto";
-import type { Assertion, WalletCall } from "@eth/mandates";
+import type { Assertion, KeySig, WalletCall } from "@eth/mandates";
 import { type Address, keccak256, toHex } from "viem";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../app";
@@ -27,10 +27,11 @@ const env = {
 let db: Db;
 let app: ReturnType<typeof createApp>;
 let wallets: ReturnType<typeof passkeyWallets>;
-let executed: { wallet: Address; calls: WalletCall[]; sig: Assertion; gas?: bigint }[];
+let executed: { wallet: Address; calls: WalletCall[]; sig: Assertion | KeySig; gas?: bigint }[];
 let gifts: bigint[];
 
 const chain: WalletChain = {
+  version: 2,
   addressOf: async (k) => `0x${k.qx.slice(2, 42)}` as Address,
   create: async (k) => `0x${k.qx.slice(2, 42)}` as Address,
   hederaIdOf: async () => "0.0.7777",
@@ -127,10 +128,13 @@ describe("Face ID wallets", () => {
     expect(mandate).toMatchObject({ mandateId: "42", payer: "0.0.7777", demo: false });
     expect(logWrite).toHaveBeenCalledWith(expect.objectContaining({ via: "face-id" }));
 
-    // What reached the chain is the device's own signature, in the contract's shape.
-    const { sig } = executed[0] ?? ({} as never);
+    // What reached the chain is the device's own signature, in the contract's shape (v2: with
+    // which passkey made it).
+    const ks = executed[0]?.sig as KeySig;
+    const sig = ks.sig;
     const [stored] = await db.select().from(passkeys);
     const k = passkeyKey(stored?.publicKey ?? "");
+    expect({ qx: ks.qx, qy: ks.qy }).toEqual(k);
     const pub = createPublicKey({
       key: {
         kty: "EC",

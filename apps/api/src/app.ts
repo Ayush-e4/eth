@@ -1,7 +1,9 @@
 import { type Card, health } from "@eth/shared";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { deviceRoutes } from "./account/devices";
 import { accountRoutes } from "./account/routes";
+import { type DeviceLinks, deviceLinks } from "./auth/device-links";
 import type { SignInLinks } from "./auth/links";
 import { authRoutes } from "./auth/routes";
 import type { AgentChecker } from "./builders/check";
@@ -64,6 +66,8 @@ export interface AppDeps {
   connect?: { oauth: OAuthStore; market: Market; post: ChatPoster | null } | null;
   /** One-time sign-in links (the Telegram bot's buttons). */
   links?: SignInLinks | null;
+  /** Codes for adding another device to an account. */
+  devices?: DeviceLinks;
   /** After a web chat turn (the Telegram chat's replies go on to Telegram). */
   afterTurn?: (chatId: string, reply: { text: string; cards: Card[] }) => unknown;
 }
@@ -121,7 +125,9 @@ export function createApp(db: Db, config: Config, deps: AppDeps = {}) {
   });
 
   app.get("/health", (c) => c.json(health("api")));
-  app.route("/", authRoutes(db, config, deps.wallets ?? null, deps.links ?? null));
+  const devices = deps.devices ?? deviceLinks();
+  app.route("/", authRoutes(db, config, deps.wallets ?? null, deps.links ?? null, devices));
+  app.route("/", deviceRoutes(db, { wallets: deps.wallets ?? null, links: devices }));
   const { concierge = null, hiring = null } = deps;
   app.route(
     "/",

@@ -39,8 +39,10 @@ doesn't. `GET /me` says `passkey: true` for them.
 
 ### Their own wallet (Face ID approves limits)
 
-Each passkey account also gets its own wallet on Hedera: a `PasskeyWallet` contract whose only
-key is that passkey (see [mandates.md](mandates.md#passkey-wallets-face-id-controls-the-wallet)).
+Each passkey account also gets its own wallet on Hedera: a `PasskeyWalletV2` contract whose keys
+are the account's passkeys (see [mandates.md](mandates.md#passkey-wallets-face-id-controls-the-wallet)).
+Accounts made before multi-device support have a v1 wallet (`passkey_wallets.version = 1`), whose
+only key is the passkey that made it.
 Sign-up makes it in the background (`passkey_wallets` table, status creating → ready) and the demo
 wallet sends it `WALLET_GIFT_UNITS` of test USDC (0.20 by default, at most
 `WALLET_GIFTS_PER_DAY` new wallets a day). We send its transactions and pay the gas; we can't
@@ -52,15 +54,42 @@ A wallet move is two calls, the same way for a limit and for a cancel:
 1. `POST /chats/:id/mandate/face-id {card}` (or `POST /wallet/limits/:id/revoke/face-id`): the
    server builds the batch (approve USDC + create the limit, or revoke it), reads its digest from
    the wallet, and returns `{opId, options}`: WebAuthn request options whose challenge is that
-   digest, for this user's passkey only, user verification required.
+   digest, for the passkeys that can approve this wallet's moves, user verification required.
 2. The browser asks the device (Face ID), then `POST /chats/:id/mandate {opId, response, card}`
    (or `POST /wallet/limits/:id/revoke {opId, response}`). The server checks it's the same op,
-   passkey, origin and challenge, and submits the batch; the contract checks the signature.
+   one of those passkeys, origin and challenge, and submits the batch with which passkey signed
+   it; the contract checks that passkey is one of its keys, and the signature.
 
 An op is good for 5 minutes and runs once. `GET /me` carries `wallet: {address, status}`;
 `GET /wallet` shows the wallet as the account (`faceId: {status, giftUnits}`) and each limit's
 `via` (`face-id`, `wallet` or `demo`). The concierge pays agents from these limits exactly as from
 MetaMask ones: the registry pulls fees from the wallet, and refunds go back to it.
+
+### One account on several devices
+
+Passkeys don't always sync between devices (another browser, a work laptop), so a second device
+joins the account with a code from one that's signed in, like WhatsApp Web's QR code:
+
+1. On the signed-in device, Wallet → Your devices → Add another device (`POST
+   /account/devices/link`) shows a QR code of `/link#CODE` and the code itself (8 letters, works
+   once, for 10 minutes, kept in memory). The code goes in the URL's `#fragment`, which browsers
+   never send to the server, so it stays out of logs.
+2. The new device opens `/link` (scans the QR, or types the code): `POST
+   /auth/passkey/link/options {code}` says whose account it is and returns registration options
+   that exclude the account's passkeys (a device that already has one says so). `POST
+   /auth/passkey/link {code, response}` checks the new passkey, uses the code up, adds the passkey
+   to the account (`passkeys.label` from the browser, e.g. "iPhone · Safari") and signs in.
+3. It can sign in and chat, but not approve the wallet's moves yet (`passkeys.on_wallet =
+   false`). The device list on the first device shows "Let it pay (Face ID)":
+   `POST /account/devices/:id/wallet/face-id {action: "add"}` then `POST
+   /account/devices/:id/wallet {opId, response}` run the wallet's `addKey` with a passkey it
+   already trusts, so the code alone never moves money.
+
+`GET /account/devices` lists them. Remove a lost device the same way (`action: "remove"`, Face ID
+runs `removeKey`); a device the wallet doesn't trust is just deleted (`DELETE
+/account/devices/:id`). Either way its passkey stops signing in and the account's other sessions
+end. The last device that can approve can't be removed. v1 wallets can add devices that sign in,
+but payments are still approved on the device that made the account.
 
 `POST /auth/demo` ("Just looking? Try it without an account") creates a throwaway demo user with
 no wallet and no passkey: it's gone once the cookie is. Turn it off with `DEMO_MODE=off`.

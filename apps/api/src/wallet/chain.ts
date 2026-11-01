@@ -3,6 +3,7 @@ import {
   DEPLOYMENTS,
   erc20Abi,
   hederaTestnet,
+  type KeySig,
   type PasskeyKey,
   PasskeyWalletClient,
   type WalletCall,
@@ -14,6 +15,7 @@ import { hederaAccountOf } from "../hiring/env";
 
 /** What the wallet service needs from Hedera (a fake in tests). */
 export interface WalletChain {
+  version: 1 | 2; // which PasskeyWallet it makes
   addressOf(k: PasskeyKey): Promise<Address>;
   create(k: PasskeyKey): Promise<Address>;
   hederaIdOf(wallet: Address): Promise<string | null>;
@@ -24,23 +26,25 @@ export interface WalletChain {
     wallet: Address,
     calls: WalletCall[],
     deadline: bigint,
-    sig: Assertion,
+    sig: Assertion | KeySig, // v2 wallets: with which of their passkeys signed
     gas?: bigint,
   ): Promise<{ hash: Hex; mandateId?: bigint }>;
 }
 
 /**
  * The real thing. The demo wallet (the operator) sends every transaction and pays its gas,
- * and gives new wallets their free test USDC; it can't move anything a wallet holds.
+ * and gives new wallets their free test USDC; it can't move anything a wallet holds. New
+ * wallets are v2 (a passkey per device); v1 wallets keep working through `execute`.
  */
 export function hederaWalletChain(
   env: HiringEnv,
-  factory: Address = DEPLOYMENTS.testnet.passkeyWalletFactory,
+  factory: Address = DEPLOYMENTS.testnet.passkeyWalletFactoryV2,
 ): WalletChain {
   const relayer = privateKeyToAccount(env.demo.key);
   const client = new PasskeyWalletClient(factory);
   const writer = createWalletClient({ account: relayer, chain: hederaTestnet, transport: http() });
   return {
+    version: 2,
     addressOf: (k) => client.addressOf(k),
     create: (k) => client.create(relayer, k, env.usdc),
     hederaIdOf: (wallet) => hederaAccountOf(env.mirrorUrl, wallet),

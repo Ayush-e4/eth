@@ -13,13 +13,29 @@ import { api, type Me } from "./api";
  */
 export const passkeysSupported = () => typeof window !== "undefined" && browserSupportsWebAuthn();
 
+const DEVICE_KEY = "agentnet.passkey";
+/** Which of the account's passkeys this browser signed in with ("This device" in the list). */
+export function thisDevice(): string | null {
+  try {
+    return localStorage.getItem(DEVICE_KEY);
+  } catch {
+    return null;
+  }
+}
+const remember = <T extends { id: string }>(response: T) => {
+  try {
+    localStorage.setItem(DEVICE_KEY, response.id);
+  } catch {}
+  return response;
+};
+
 /** Makes a new passkey, which makes a new account, and signs in. */
 export async function signUpWithPasskey(): Promise<Me> {
   const optionsJSON = await api<PublicKeyCredentialCreationOptionsJSON>(
     "/auth/passkey/register/options",
     { method: "POST", body: {} },
   );
-  const response = await startRegistration({ optionsJSON });
+  const response = remember(await startRegistration({ optionsJSON }));
   return (await api<{ user: Me }>("/auth/passkey/register", { method: "POST", body: { response } }))
     .user;
 }
@@ -30,9 +46,27 @@ export async function signInWithPasskey(): Promise<Me> {
     "/auth/passkey/login/options",
     { method: "POST", body: {} },
   );
-  const response = await startAuthentication({ optionsJSON });
+  const response = remember(await startAuthentication({ optionsJSON }));
   return (await api<{ user: Me }>("/auth/passkey/login", { method: "POST", body: { response } }))
     .user;
+}
+
+/** Another device: whose account a code (from a signed-in device) is for, and what to sign. */
+export const linkOptions = (code: string) =>
+  api<{ name: string | null; options: PublicKeyCredentialCreationOptionsJSON }>(
+    "/auth/passkey/link/options",
+    { method: "POST", body: { code } },
+  );
+
+/** Makes this device's own passkey on that account, and signs in. */
+export async function linkThisDevice(
+  code: string,
+  optionsJSON: PublicKeyCredentialCreationOptionsJSON,
+): Promise<Me> {
+  const response = remember(await startRegistration({ optionsJSON }));
+  return (
+    await api<{ user: Me }>("/auth/passkey/link", { method: "POST", body: { code, response } })
+  ).user;
 }
 
 /**

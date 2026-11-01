@@ -25,11 +25,13 @@ export class WalletOpError extends Error {}
 export type WalletOpMeta =
   | { kind: "limit"; chatId: string; card: Extract<Card, { type: "limit" }> }
   | { kind: "revoke"; limitId: string }
-  | { kind: "connect"; connectionId: string };
+  | { kind: "connect"; connectionId: string }
+  | { kind: "device"; passkeyId: string; add: boolean };
 
 type Op = {
   userId: string;
-  passkeyId: string;
+  keys: string[]; // the passkeys that may sign it
+  version: number;
   wallet: Address;
   calls: WalletCall[];
   deadline: bigint;
@@ -59,6 +61,17 @@ export function passkeyWallets(db: Db, chain: WalletChain, opts: WalletOptions) 
   const row = async (userId: string) =>
     (await db.select().from(wallets).where(eq(wallets.userId, userId)))[0] ?? null;
 
+  /** The passkeys a wallet answers to: v1 the one that made it, v2 each one added to it. */
+  const keysOf = (w: typeof wallets.$inferSelect) =>
+    db
+      .select()
+      .from(passkeys)
+      .where(
+        w.version >= 2
+          ? and(eq(passkeys.userId, w.userId), eq(passkeys.onWallet, true))
+          : eq(passkeys.id, w.passkeyId),
+      );
+
   async function giftAllowed() {
     const since = new Date(Date.now() - 24 * 3600 * 1000);
     const [r] = await db
@@ -73,10 +86,12 @@ export function passkeyWallets(db: Db, chain: WalletChain, opts: WalletOptions) 
     if (!key) return;
     const k = passkeyKey(key.publicKey);
     const address = await chain.addressOf(k);
+    const made = { passkeyId: key.id, address, version: chain.version };
     await db
       .insert(wallets)
-      .values({ userId, passkeyId: key.id, address })
-      .onConflictDoUpdate({ target: wallets.userId, set: { status: "creating" } });
+      .values({ userId, ...made })
+      .onConflictDoUpdate({ target: wallets.userId, set: { ...made, status: "creating" } });
+    await db.update(passkeys).set({ onWallet: true }).where(eq(passkeys.id, key.id));
     try {
       await chain.create(k);
       let hederaId: string | null = null;
@@ -110,6 +125,7 @@ export function passkeyWallets(db: Db, chain: WalletChain, opts: WalletOptions) 
         address: w.address,
         hederaId: w.hederaId,
         status: w.status,
+        version: w.version,
         usdcUnits: balance?.toString() ?? null,
         giftUnits: w.giftUnits?.toString() ?? null,
       };
@@ -133,17 +149,27 @@ export function passkeyWallets(db: Db, chain: WalletChain, opts: WalletOptions) 
       const deadline = BigInt(Math.floor(Date.now() / 1000) + OP_TTL_MS / 1000);
       const digest = await chain.digest(w.address as Address, calls, deadline);
       const opId = randomUUID();
-      const op = { userId, passkeyId: w.passkeyId, wallet: w.address as Address };
-      ops.set(opId, { ...op, calls, deadline, digest, meta, expires: Date.now() + OP_TTL_MS });
-      const [key] = await db.select().from(passkeys).where(eq(passkeys.id, w.passkeyId));
+      const keys = await keysOf(w);
+      const op = { userId, keys: keys.map((k) => k.id), version: w.version };
+      ops.set(opId, {
+        ...op,
+        wallet: w.address as Address,
+        calls,
+        deadline,
+        digest,
+        meta,
+        expires: Date.now() + OP_TTL_MS,
+      });
       return {
         opId,
         options: {
           challenge: isoBase64URL.fromBuffer(Buffer.from(digest.slice(2), "hex")),
           rpId: opts.rpID,
-          allowCredentials: [
-            { id: w.passkeyId, type: "public-key" as const, transports: key?.transports ?? [] },
-          ],
+          allowCredentials: keys.map((k) => ({
+            id: k.id,
+            type: "public-key" as const,
+            transports: k.transports ?? [],
+          })),
           userVerification: "required" as const,
           timeout: 120_000,
         },
@@ -162,7 +188,8 @@ export function passkeyWallets(db: Db, chain: WalletChain, opts: WalletOptions) 
       if (!op || op.userId !== userId || op.expires < Date.now())
         throw new WalletOpError("that approval expired; try again");
       ops.delete(opId); // one go, even if it fails
-      if (response.id !== op.passkeyId) throw new WalletOpError("that's a different passkey");
+      if (!op.keys.includes(response.id))
+        throw new WalletOpError("that passkey can't approve this wallet's payments");
       const client = JSON.parse(isoBase64URL.toUTF8String(response.response.clientDataJSON)) as {
         origin?: string;
         challenge?: string;
@@ -170,7 +197,10 @@ export function passkeyWallets(db: Db, chain: WalletChain, opts: WalletOptions) 
       const challenge = isoBase64URL.fromBuffer(Buffer.from(op.digest.slice(2), "hex"));
       if (client.origin !== opts.origin || client.challenge !== challenge)
         throw new WalletOpError("that signature is for something else");
-      const sig = assertionFromWebAuthn(response.response);
+      const assertion = assertionFromWebAuthn(response.response);
+      const [key] = await db.select().from(passkeys).where(eq(passkeys.id, response.id));
+      const sig =
+        op.version >= 2 && key ? { ...passkeyKey(key.publicKey), sig: assertion } : assertion;
       const result = await chain.execute(op.wallet, op.calls, op.deadline, sig, gas);
       return { ...result, wallet: op.wallet, meta: op.meta };
     },

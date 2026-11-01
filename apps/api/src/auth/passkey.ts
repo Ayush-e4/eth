@@ -5,6 +5,7 @@ import {
   type RegistrationResponseJSON,
   verifyAuthenticationResponse,
   verifyRegistrationResponse,
+  type WebAuthnCredential,
 } from "@simplewebauthn/server";
 import { isoBase64URL } from "@simplewebauthn/server/helpers";
 import { and, eq, gt, isNull } from "drizzle-orm";
@@ -48,10 +49,22 @@ export function passkeyAuth(db: Db, site: PasskeySite) {
         .returning({ nonce: authNonces.nonce })
     ).length > 0;
   const expected = { expectedOrigin: site.origin, expectedRPID: site.rpID };
+  const row = (userId: string, credential: WebAuthnCredential, label: string | null) => ({
+    id: credential.id,
+    userId,
+    publicKey: isoBase64URL.fromBuffer(credential.publicKey),
+    counter: credential.counter,
+    transports: credential.transports ?? null,
+    label,
+  });
 
   return {
-    /** Options for making a new passkey (a new account). */
-    async registrationOptions(name?: string) {
+    /**
+     * Options for making a new passkey: a new account, or (`exclude` = the account's passkeys)
+     * another device for an existing one. Excluding them means a device that already has one
+     * of them says so instead of making a second.
+     */
+    async registrationOptions(name?: string, exclude: { id: string; transports?: unknown }[] = []) {
       const label = name?.trim() || `AgentNet ${new Date().toISOString().slice(0, 10)}`;
       const options = await generateRegistrationOptions({
         rpName: "AgentNet",
@@ -61,13 +74,14 @@ export function passkeyAuth(db: Db, site: PasskeySite) {
         attestationType: "none",
         authenticatorSelection: { residentKey: "required", userVerification: "preferred" },
         supportedAlgorithmIDs: [ES256],
+        excludeCredentials: exclude.map((k) => ({ id: k.id, transports: k.transports as never })),
       });
       await remember(options.challenge);
       return options;
     },
 
-    /** Checks the new passkey and creates its account. */
-    async register(response: RegistrationResponseJSON): Promise<User> {
+    /** Checks a new passkey's answer to its one-time challenge. Stores nothing. */
+    async verifyNew(response: RegistrationResponseJSON): Promise<WebAuthnCredential> {
       const result = await verifyRegistrationResponse({
         response,
         expectedChallenge: useUp,
@@ -77,19 +91,24 @@ export function passkeyAuth(db: Db, site: PasskeySite) {
         throw new SignInError(`passkey not accepted: ${err.message}`);
       });
       if (!result.verified) throw new SignInError("passkey not accepted");
-      const { credential } = result.registrationInfo;
+      return result.registrationInfo.credential;
+    },
+
+    /** Checks the new passkey and creates its account. */
+    async register(response: RegistrationResponseJSON, label: string | null = null): Promise<User> {
+      const credential = await this.verifyNew(response);
       return db.transaction(async (tx) => {
         const [user] = await tx.insert(users).values({ isDemo: true }).returning();
         if (!user) throw new Error("could not create the user");
-        await tx.insert(passkeys).values({
-          id: credential.id,
-          userId: user.id,
-          publicKey: isoBase64URL.fromBuffer(credential.publicKey),
-          counter: credential.counter,
-          transports: credential.transports ?? null,
-        });
+        await tx.insert(passkeys).values(row(user.id, credential, label));
         return user;
       });
+    },
+
+    /** Another device's passkey (already checked) for an existing account. */
+    async addDevice(user: User, credential: WebAuthnCredential, label: string | null) {
+      await db.insert(passkeys).values(row(user.id, credential, label));
+      return user;
     },
 
     /** Options for signing in: any passkey this site made, picked on the device. */
