@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq, gt, ne } from "drizzle-orm";
 import type { Db } from "../db/client";
 import { sessions, type User, users } from "../db/schema";
 
@@ -37,4 +37,11 @@ export async function userForToken(
 
 export async function endSession(db: Db, token: string | undefined): Promise<void> {
   if (token) await db.delete(sessions).where(eq(sessions.tokenHash, hash(token)));
+}
+
+/** Signs the user out everywhere but here (after shutting a lost device out). */
+export async function endOtherSessions(db: Db, userId: string, keep: string | undefined) {
+  await db
+    .delete(sessions)
+    .where(and(eq(sessions.userId, userId), ne(sessions.tokenHash, hash(keep ?? ""))));
 }

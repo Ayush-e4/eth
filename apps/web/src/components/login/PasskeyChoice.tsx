@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ApiError, type Me } from "@/lib/api";
 import { cancelled, passkeysSupported, signInWithPasskey, signUpWithPasskey } from "@/lib/passkey";
@@ -65,6 +66,9 @@ export function PasskeyChoice({ onDone }: { onDone: (me: Me) => void }) {
       >
         I have a passkey: sign in
       </button>
+      <Link href="/link" className="self-center text-sm font-medium text-teal">
+        Signed in on another device? Use your account here
+      </Link>
       {error && (
         <p role="alert" className="rounded-xl bg-bad-soft px-4 py-3 text-sm text-bad">
           {error}
