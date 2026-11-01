@@ -3,7 +3,12 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { type Abi, toFunctionSelector } from "viem";
 import { describe, expect, it } from "vitest";
-import { assertionFromWebAuthn, passkeyWalletAbi, passkeyWalletFactoryAbi } from "./passkey-wallet";
+import {
+  assertionFromWebAuthn,
+  passkeyWalletAbi,
+  passkeyWalletFactoryAbi,
+  passkeyWalletV2Abi,
+} from "./passkey-wallet";
 
 const compiledAbi = (name: string) =>
   JSON.parse(
@@ -19,6 +24,8 @@ describe("passkey wallet ABIs match the compiled contracts", () => {
   it.each([
     ["PasskeyWallet", passkeyWalletAbi],
     ["PasskeyWalletFactory", passkeyWalletFactoryAbi],
+    ["PasskeyWalletV2", passkeyWalletV2Abi],
+    ["PasskeyWalletFactoryV2", passkeyWalletFactoryAbi],
   ] as const)("%s", (name, ours) => {
     const compiled = new Set(fns(compiledAbi(name)));
     for (const sel of fns(ours as Abi)) expect(compiled.has(sel), sel).toBe(true);

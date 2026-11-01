@@ -2,9 +2,11 @@ import {
   type Address,
   createPublicClient,
   createWalletClient,
+  encodeAbiParameters,
   encodeFunctionData,
   type Hex,
   http,
+  keccak256,
   type LocalAccount,
   type PublicClient,
   parseAbi,
@@ -29,6 +31,31 @@ export const passkeyWalletAbi = parseAbi([
   "error BadSignature()",
   "error CallFailed(uint256 index, bytes reason)",
 ]);
+/** v2: any of its passkeys (one per device) signs; a batch it signed adds or removes another. */
+export const passkeyWalletV2Abi = parseAbi([
+  "struct Call { address to; uint256 value; bytes data; }",
+  "struct Assertion { bytes32 r; bytes32 s; uint256 challengeIndex; uint256 typeIndex; bytes authenticatorData; string clientDataJSON; }",
+  "struct KeySig { bytes32 qx; bytes32 qy; Assertion sig; }",
+  "function digest(Call[] calls, uint256 deadline) view returns (bytes32)",
+  "function execute(Call[] calls, uint256 deadline, KeySig k)",
+  "function addKey(bytes32 qx, bytes32 qy)",
+  "function removeKey(bytes32 qx, bytes32 qy)",
+  "function keyId(bytes32 qx, bytes32 qy) pure returns (bytes32)",
+  "function isKey(bytes32 id) view returns (bool)",
+  "function keyCount() view returns (uint256)",
+  "function nonce() view returns (uint256)",
+  "function isValidSignature(bytes32 hash, bytes signature) view returns (bytes4)",
+  "event Executed(uint256 indexed nonce, bytes32 digest)",
+  "event KeyAdded(bytes32 qx, bytes32 qy)",
+  "event KeyRemoved(bytes32 qx, bytes32 qy)",
+  "error Expired()",
+  "error NotAKey()",
+  "error BadSignature()",
+  "error CallFailed(uint256 index, bytes reason)",
+  "error OnlySelf()",
+  "error LastKey()",
+]);
+/** Both factories (v1 and v2) have this interface. */
 export const passkeyWalletFactoryAbi = parseAbi([
   "function create(bytes32 qx, bytes32 qy, address token) returns (address wallet)",
   "function addressOf(bytes32 qx, bytes32 qy) view returns (address)",
@@ -45,6 +72,8 @@ export type Assertion = {
   authenticatorData: Hex;
   clientDataJSON: string;
 };
+/** v2 wallets: which of its passkeys signed, with its answer. */
+export type KeySig = PasskeyKey & { sig: Assertion };
 
 const N = BigInt("0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551");
 const fromB64url = (s: string) => Buffer.from(s, "base64url");
@@ -111,6 +140,32 @@ export const revokeCalls = (registry: Address, id: bigint): WalletCall[] => [
   },
 ];
 
+/** v2: the batch that lets another device's passkey use the wallet. */
+export const addKeyCalls = (wallet: Address, k: PasskeyKey): WalletCall[] => [
+  {
+    to: wallet,
+    value: BigInt(0),
+    data: encodeFunctionData({
+      abi: passkeyWalletV2Abi,
+      functionName: "addKey",
+      args: [k.qx, k.qy],
+    }),
+  },
+];
+
+/** v2: the batch that shuts a device's passkey out (a lost phone). Never the last one. */
+export const removeKeyCalls = (wallet: Address, k: PasskeyKey): WalletCall[] => [
+  {
+    to: wallet,
+    value: BigInt(0),
+    data: encodeFunctionData({
+      abi: passkeyWalletV2Abi,
+      functionName: "removeKey",
+      args: [k.qx, k.qy],
+    }),
+  },
+];
+
 /**
  * Passkey wallets from the outside: where a passkey's wallet is, making it, and running a batch
  * the passkey signed. Whoever sends (our server) pays the gas; only the passkey decides.
@@ -154,6 +209,17 @@ export class PasskeyWalletClient {
     return wallet;
   }
 
+  /** v2: whether this passkey may sign for the wallet. */
+  hasKey = async (wallet: Address, k: PasskeyKey) =>
+    this.publicClient.readContract({
+      address: wallet,
+      abi: passkeyWalletV2Abi,
+      functionName: "isKey",
+      args: [
+        keccak256(encodeAbiParameters([{ type: "bytes32" }, { type: "bytes32" }], [k.qx, k.qy])),
+      ],
+    });
+
   /** What the passkey signs (the WebAuthn challenge) to run `calls` before `deadline`. */
   digest = (wallet: Address, calls: WalletCall[], deadline: bigint) =>
     this.publicClient.readContract({
@@ -163,21 +229,24 @@ export class PasskeyWalletClient {
       args: [calls, deadline],
     });
 
-  /** Runs a signed batch. Simulated first, so a bad signature fails with its error name. */
+  /**
+   * Runs a signed batch: a v1 wallet takes the passkey's answer, a v2 wallet also which passkey
+   * gave it (a KeySig). Simulated first, so a bad signature fails with its error name.
+   */
   async execute(
     sender: LocalAccount,
     wallet: Address,
     calls: WalletCall[],
     deadline: bigint,
-    sig: Assertion,
+    sig: Assertion | KeySig,
     gas = BigInt(2_000_000), // a limit used 1.2M on Hedera (approve through HTS is dear); revoke 0.3M
   ) {
     const { request } = await this.publicClient.simulateContract({
       account: sender,
       address: wallet,
-      abi: [...passkeyWalletAbi, ...mandateRegistryAbi],
+      abi: [...("sig" in sig ? passkeyWalletV2Abi : passkeyWalletAbi), ...mandateRegistryAbi],
       functionName: "execute",
-      args: [calls, deadline, sig],
+      args: [calls, deadline, sig as never],
       gas,
     });
     const hash = await createWalletClient({

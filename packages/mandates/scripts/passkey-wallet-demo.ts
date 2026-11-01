@@ -1,12 +1,10 @@
 // End to end on Hedera testnet, with a software passkey standing in for Face ID: make a wallet,
 // give it test USDC, set a spending limit signed by the passkey, pay an agent from it, cancel it.
 // Run: pnpm --filter @eth/mandates passkey-wallet-demo
-import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { loadConfig, NETWORKS } from "@eth/hedera";
 import { createWalletClient, type Hex, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import {
-  assertionFromWebAuthn,
   DEPLOYMENTS,
   erc20Abi,
   hederaTestnet,
@@ -19,6 +17,7 @@ import {
   tokenIdToEvmAddress,
   type WalletCall,
 } from "../src";
+import { softwarePasskey } from "./software-passkey";
 
 const config = loadConfig();
 const net = NETWORKS[config.network];
@@ -31,44 +30,13 @@ const registry = DEPLOYMENTS.testnet.mandateRegistry;
 const wallets = new PasskeyWalletClient(DEPLOYMENTS.testnet.passkeyWalletFactory);
 const mc = new MandateClient(registry, hederaTestnet);
 const tx = (h: string) => `${net.hashscanUrl}/transaction/${h}`;
-const sha = (b: Buffer) => createHash("sha256").update(b).digest();
 
 // The "phone": a P-256 key, as a passkey is.
-const { privateKey, publicKey } = generateKeyPairSync("ec", { namedCurve: "P-256" });
-const jwk = publicKey.export({ format: "jwk" });
-const k = {
-  qx: `0x${Buffer.from(jwk.x ?? "", "base64url").toString("hex")}` as Hex,
-  qy: `0x${Buffer.from(jwk.y ?? "", "base64url").toString("hex")}` as Hex,
-};
-let counter = 0;
-function faceId(challenge: Hex) {
-  const authenticatorData = Buffer.concat([
-    sha(Buffer.from("localhost")),
-    Buffer.from([0x05, 0, 0, 0, ++counter]),
-  ]);
-  const clientDataJSON = Buffer.from(
-    JSON.stringify({
-      type: "webauthn.get",
-      challenge: Buffer.from(challenge.slice(2), "hex").toString("base64url"),
-      origin: "http://localhost:3000",
-      crossOrigin: false,
-    }),
-  );
-  const signature = sign(
-    "sha256",
-    Buffer.concat([authenticatorData, sha(clientDataJSON)]),
-    privateKey,
-  );
-  return assertionFromWebAuthn({
-    authenticatorData: authenticatorData.toString("base64url"),
-    clientDataJSON: clientDataJSON.toString("base64url"),
-    signature: signature.toString("base64url"),
-  });
-}
+const k = softwarePasskey();
 async function run(wallet: Hex, calls: WalletCall[]) {
   const deadline = BigInt(Math.floor(Date.now() / 1000) + 600);
   const d = await wallets.digest(wallet, calls, deadline);
-  return wallets.execute(operator, wallet, calls, deadline, faceId(d));
+  return wallets.execute(operator, wallet, calls, deadline, k.faceId(d));
 }
 
 console.log("1. make the wallet");

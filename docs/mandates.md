@@ -146,7 +146,7 @@ pulls fees from it like from any owner. The registry didn't change.
   public key, and opts it in to USDC through the HTS precompile (Hedera accounts must associate
   a token before holding it). Permissionless: the wallet answers only to its passkey.
 - **ERC-1271** `isValidSignature`, so contracts can accept the passkey's signature as the wallet's.
-- No admin, not upgradeable, no recovery yet (a second passkey would be the fix).
+- No admin, not upgradeable. v1 has one passkey; v2 (below) takes one per device.
 - Client: `PasskeyWalletClient`, `assertionFromWebAuthn`, `limitCalls`, `revokeCalls` in
   `packages/mandates/src/passkey-wallet.ts`.
 
@@ -162,6 +162,35 @@ Face ID), 2026-11-01:
 | Passkey sets a 0.05 USDC limit (approve + create, one batch) | [mandate #9, owner = wallet](https://hashscan.io/testnet/transaction/0x846d2f45fe95223c15daf90b8493bc023769163b2a723e27ae8d41910c0263fa) (≈1.2M gas) |
 | Agent paid 0.01 USDC out of the wallet | [tx](https://hashscan.io/testnet/transaction/0xd2565ebe82e686235b57c27caa66288d5e8ab1958b8de89e1eac01c8a946248f) |
 | Passkey cancels the limit | [tx](https://hashscan.io/testnet/transaction/0x6fe2b86770cd0e5c1d761a2dcfd97318a0771b2a2a6a940eeb2bc1d4d27cb6ee) (≈0.3M gas) |
+
+### v2: one account, a passkey per device
+
+Passkeys don't always sync between devices (a work laptop, a second phone, another browser), so
+one passkey per wallet meant one account per device. `PasskeyWalletV2` keeps a set of trusted
+passkeys instead. A batch names which passkey signed it (`KeySig {qx, qy, sig}`) and runs if that
+passkey is in the set and the signature checks out. Adding or removing a passkey is itself a batch
+(a call from the wallet to `addKey` / `removeKey`), so only a device it already trusts can let
+another one in, and a lost one is shut out the same way. The last passkey can't be removed
+(`LastKey`). Same digest, factory interface and ERC-1271 as v1 (the signature is an abi-encoded
+`KeySig`). Wallets made with v1 stay single-passkey.
+
+- Client: `addKeyCalls`, `removeKeyCalls`, `hasKey`, and `execute` taking a `KeySig` for v2.
+- Deployed: factory v2 `0x560619a385a3e84281eae251b1276df8a5b835d4`
+  (`pnpm --filter @eth/mandates deploy-wallet-factory v2`; override with
+  `PASSKEY_WALLET_FACTORY_V2`).
+
+Live run (`pnpm --filter @eth/mandates multi-device-demo`, two software passkeys as "phone" and
+"laptop"), 2026-11-02:
+
+| Step | Result |
+|---|---|
+| Phone's passkey makes the wallet | [0xC6C6e2c7…BD1B](https://hashscan.io/testnet/contract/0xC6C6e2c7B9A8971e00C4D5dDE0f9f01029BABD1B) |
+| Laptop sets a limit on its own | ❌ `NotAKey` |
+| Phone lets the laptop in | [tx](https://hashscan.io/testnet/transaction/0x00fd4ab2d69cbbca7a4612562b45730599fb1f8cfd75586b83e0eae524895df0) |
+| Laptop sets a 0.02 USDC limit | [mandate #14, owner = wallet](https://hashscan.io/testnet/transaction/0x7bd54b6c9980e739edeff1b0fc2e6fc9d2279c9abef7acaf8669e375986eedfd) |
+| Phone shuts the laptop out | [tx](https://hashscan.io/testnet/transaction/0x29891d40c7bd612cf9befd89a31d69f773a68eae77322285d8284dd70b498895) |
+| Laptop cancels the limit | ❌ `NotAKey` |
+| Phone cancels it | [tx](https://hashscan.io/testnet/transaction/0x2c9812a75701dc8d8e708d84abec75a8b9125cc21b13b131b35caea0ef0c970a) |
 
 ## Known limits (by design, for now)
 

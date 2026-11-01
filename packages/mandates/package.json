@@ -14,7 +14,8 @@
     "deploy-registry": "tsx --env-file=../../.env scripts/deploy-registry.ts",
     "escrow-demo": "tsx --env-file=../../.env scripts/escrow-demo.ts",
     "deploy-wallet-factory": "tsx --env-file=../../.env scripts/deploy-wallet-factory.ts",
-    "passkey-wallet-demo": "tsx --env-file=../../.env scripts/passkey-wallet-demo.ts"
+    "passkey-wallet-demo": "tsx --env-file=../../.env scripts/passkey-wallet-demo.ts",
+    "multi-device-demo": "tsx --env-file=../../.env scripts/multi-device-demo.ts"
   },
   "dependencies": {
     "@eth/hedera": "workspace:*",
