@@ -62,9 +62,12 @@ export async function currentMandate(
   return m && m.expiresAt.getTime() > Date.now() ? m : null;
 }
 
-/** True if the chat's mandate can pay this agent (the chain checks again at payment time). */
+/**
+ * True if the chat's mandate can pay this agent (the chain checks again at payment time). A
+ * mandate that names no payees (a Telegram budget, an app's limit) pays any agent.
+ */
 export const covers = (m: MandateRow | null, agent: string) =>
-  !!m && m.payees.some((p) => same(p, agent));
+  !!m && (m.payees.length === 0 || m.payees.some((p) => same(p, agent))); // none named: any agent
 
 /** Demo users: the shared test wallet creates the mandate on Hedera for them. */
 export async function createDemoMandate(db: Db, env: HiringEnv, chat: Chat, card: LimitCard) {

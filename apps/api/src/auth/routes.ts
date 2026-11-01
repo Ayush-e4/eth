@@ -9,6 +9,7 @@ import type { Db } from "../db/client";
 import { passkeys, type User, users } from "../db/schema";
 import { limitUnitsSchema } from "../limits";
 import type { PasskeyWallets } from "../wallet/service";
+import type { SignInLinks } from "./links";
 import { passkeyAuth } from "./passkey";
 import { rolesFor } from "./roles";
 import { createSession, endSession, SESSION_COOKIE, SESSION_TTL_MS, userForToken } from "./session";
@@ -60,11 +61,16 @@ export function requireUser(db: Db) {
   });
 }
 
-export function authRoutes(db: Db, config: Config, wallets: PasskeyWallets | null = null) {
+export function authRoutes(
+  db: Db,
+  config: Config,
+  wallets: PasskeyWallets | null = null,
+  links: SignInLinks | null = null,
+) {
   const app = new Hono<AuthEnv>();
 
-  const startSession = async (c: Context, user: User) => {
-    const token = await createSession(db, user.id);
+  const signInAs = async (c: Context, userId: string) => {
+    const token = await createSession(db, userId);
     setCookie(c, SESSION_COOKIE, token, {
       httpOnly: true,
       secure: config.production,
@@ -72,8 +78,19 @@ export function authRoutes(db: Db, config: Config, wallets: PasskeyWallets | nul
       path: "/",
       maxAge: SESSION_TTL_MS / 1000,
     });
+  };
+  const startSession = async (c: Context, user: User) => {
+    await signInAs(c, user.id);
     return c.json({ user: publicUser(user, config) });
   };
+
+  /** A one-time link the bot sent to the person's own Telegram: sign in, go where it points. */
+  app.get("/auth/link", async (c) => {
+    const l = links?.take(c.req.query("t") ?? "");
+    if (!l) return c.redirect("/login?expired=1");
+    await signInAs(c, l.userId);
+    return c.redirect(l.path.startsWith("/") ? l.path : "/chat");
+  });
 
   app.get("/auth/nonce", async (c) => c.json({ nonce: await issueNonce(db) }));
 

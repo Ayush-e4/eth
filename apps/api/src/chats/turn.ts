@@ -19,6 +19,7 @@ export async function runTurn(
   opts: {
     onUserMessage?: (chatId: string, text: string) => unknown;
     emit?: (e: ConciergeEvent) => void;
+    channel?: "web" | "telegram";
   } = {},
 ): Promise<{ text: string; cards: Card[]; messageId: string }> {
   const store = chatStore(db);
@@ -49,6 +50,7 @@ export async function runTurn(
       agentSkill: chat.agentSkill,
     },
     emit: opts.emit ?? (() => {}),
+    channel: opts.channel ?? "web",
   });
   const saved = await store.add(chat, "assistant", reply.text, reply.cards);
   return { text: reply.text, cards: reply.cards, messageId: saved.id };

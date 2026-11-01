@@ -1,4 +1,4 @@
-import { ChatModeSchema, type ConciergeEvent, SendMessageSchema } from "@eth/shared";
+import { type Card, ChatModeSchema, type ConciergeEvent, SendMessageSchema } from "@eth/shared";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
@@ -58,6 +58,8 @@ export function chatRoutes(
   onUserMessage: (chatId: string, text: string) => unknown = () => {},
   demo: DemoQuotaCheck | null = null,
   findAgent: FindAgent | null = null,
+  /** After a turn here, e.g. to send it on to Telegram when this is the Telegram chat. */
+  afterTurn?: (chatId: string, reply: { text: string; cards: Card[] }) => unknown,
 ) {
   const store = chatStore(db);
   const app = new Hono<AuthEnv>();
@@ -136,6 +138,7 @@ export function chatRoutes(
           emit: (e) => void send(e),
         });
         await send({ type: "done", messageId: turn.messageId });
+        void Promise.resolve(afterTurn?.(chat.id, turn)).catch(() => {});
       } catch (err) {
         console.error("concierge failed", err);
         await send({ type: "error", message: "The concierge couldn't answer. Try again." });

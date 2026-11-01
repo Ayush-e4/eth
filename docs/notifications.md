@@ -39,9 +39,15 @@ too, with the same limits and agents (`apps/api/src/notify/telegram-chat.ts`, th
 
 - Quotes and choices come back as buttons; tapping one sends its reply, as in the app.
 - "Ask first" approvals get Approve / Decline buttons (or a link when World ID must check it's you).
-- A spending limit needs Face ID, which only a browser can do: the reply has an **Approve with
-  Face ID** button that opens the chat in the app. Once approved, payments under it happen
-  right from Telegram.
+- **The Telegram budget.** Hires in Telegram spend from one limit approved once in the app
+  (Watchers → Get alerts → Telegram budget: 0.10, 0.30 or 1.00 USDC for 7 days, any agent, from
+  the person's own Face ID wallet). Without it, every hire would need a trip to a browser where
+  the passkey may not even be. When there's no budget (or it's used up), the reply's **Approve
+  with Face ID** button is a one-time sign-in link (15 minutes, sent only to that person's
+  Telegram) that opens the app signed in, at the budget; approving there tells the concierge to
+  carry on, and its reply arrives in Telegram.
+- The concierge knows it's on Telegram: it says "tap the button below", not "the card on your
+  screen". Any turn of the Telegram chat that happens in the app is also sent to Telegram.
 - Hires reply with a receipt and the HashScan link; later news (a delivery, a fare drop) arrives
   as an alert, as before.
 - One message at a time per person, with "typing…" while the concierge works. Demo accounts
