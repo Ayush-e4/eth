@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import type { Db } from "../db/client";
 import { notifyChannels as table } from "../db/schema";
 
@@ -122,6 +122,17 @@ export function notifier(db: Db, cfg: NotifyConfig) {
         .set({ address: chatId, linkCode: null })
         .where(and(eq(table.channel, "telegram"), eq(table.linkCode, linkCode)))
         .returning({ userId: table.userId });
+      // One Telegram chat, one account: linking it here unlinks it from any other account.
+      if (row)
+        await db
+          .delete(table)
+          .where(
+            and(
+              eq(table.channel, "telegram"),
+              eq(table.address, chatId),
+              ne(table.userId, row.userId),
+            ),
+          );
       return row?.userId ?? null;
     },
 

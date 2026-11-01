@@ -79,7 +79,19 @@ describe("alerts outside the app", () => {
     expect(sent[0]).toMatchObject({
       body: { chat_id: "42", text: "Goa trip\n\nPriceGuard saved ₹249" },
     });
-    updates.push({ update_id: 3, message: { chat: { id: 42 }, text: "/stop" } });
+    // Linking the same Telegram chat from another account moves it there.
+    const [other] = await db.insert(users).values({ isDemo: true }).returning();
+    const url2 = await n.startTelegram(other?.id ?? "");
+    updates.push({
+      update_id: 3,
+      message: { chat: { id: 42 }, text: `/start ${url2?.split("=")[1]}` },
+    });
+    await vi.waitFor(async () =>
+      expect((await n.channels(other?.id ?? "")).telegram).toEqual({ linked: true }),
+    );
+    expect((await n.channels(userId)).telegram).toBeNull();
+    userId = other?.id ?? "";
+    updates.push({ update_id: 4, message: { chat: { id: 42 }, text: "/stop" } });
     await vi.waitFor(async () => expect((await n.channels(userId)).telegram).toBeNull());
     stop();
   });
